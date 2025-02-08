@@ -1,0 +1,16 @@
+golangci-lint/
+package-lock.json
+*.pem
+interaction
+!interaction/
+api
+!api/
+user
+!user/
+video
+!video/
+message
+!message/
+relation
+!relation/
+*.mp4
