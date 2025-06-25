@@ -34,7 +34,7 @@ func main() {
 
 	// 配置 CORS
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:8870", "http://localhost:8888"}, // 允许的来源
+		AllowOrigins: []string{"http://localhost:3000", "http://localhost:8888"}, // 允许的来源
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},        // 允许的请求方法
 		// AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},      // 允许的请求头
 		// ExposeHeaders:    []string{"Content-Length"},                              // 可暴露的响应头
