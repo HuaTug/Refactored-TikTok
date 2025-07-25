@@ -8,8 +8,8 @@ struct Status {
 struct User {
     1: i64 user_id
     2: string user_name
-    3: string password
-    4: string email
+    3: string email
+    4: string password
     5: i64 sex
     6: string avatar_url
     7: string created_at

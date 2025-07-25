@@ -30,7 +30,6 @@ func (v *UpdateUserService) UpdateUser(req *users.UpdateUserRequest) (err error)
 		user := &base.User{
 			UserId:    req.UserId,
 			UserName:  req.UserName,
-			Password:  req.Password,
 			UpdatedAt: time.Now().Format(constants.DataFormate),
 			AvatarUrl: avatarUrl,
 		}
@@ -44,7 +43,7 @@ func (v *UpdateUserService) UpdateUser(req *users.UpdateUserRequest) (err error)
 func (v *UpdateUserService) uploadAvatarToOss(uid string, fileContent []byte, fileSize int64) (string, error) {
 	fileType := http.DetectContentType(fileContent)
 	switch fileType {
-	case `image/png`, `image/jpg`, `image/jpeg`:
+	case "image/png", "image/jpg", "image/jpeg":
 		{
 			var avatarUrl string
 			var err error

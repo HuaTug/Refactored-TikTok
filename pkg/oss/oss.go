@@ -22,6 +22,19 @@ func UploadAvatar(data *[]byte, dataSize int64, uid string, tag string) (string,
 	// 在上传头像时需要满足 先删除旧的头像后 再上传新的头像
 	deleteAvatar(uid)
 	bucketName := "picture"
+	location := "us-east-1" // MinIO默认区域，根据实际情况修改
+
+	// 检查存储桶是否存在，不存在则创建
+	exists, err := minioClient.BucketExists(context.Background(), bucketName)
+	if err != nil {
+		return "", fmt.Errorf("check bucket error: %w", err)
+	}
+	if !exists {
+		err = minioClient.MakeBucket(context.Background(), bucketName, minio.MakeBucketOptions{Region: location})
+		if err != nil {
+			return "", fmt.Errorf("create bucket error: %w", err)
+		}
+	}
 	var suffix string
 	switch tag {
 	case "image/jpeg", "image/jpg":
@@ -33,9 +46,9 @@ func UploadAvatar(data *[]byte, dataSize int64, uid string, tag string) (string,
 	}
 
 	objectName := "avatar/" + uid + suffix
-
-	_, err := minioClient.PutObject(context.Background(), bucketName, objectName, bytes.NewReader(*data), dataSize, minio.PutObjectOptions{ContentType: tag})
+	_, err = minioClient.PutObject(context.Background(), bucketName, objectName, bytes.NewReader(*data), dataSize, minio.PutObjectOptions{ContentType: tag})
 	if err != nil {
+		log.Fatal("Failed to upload avatar:", err)
 		return "", err
 	}
 
@@ -61,9 +74,22 @@ func UploadVideo(path, vid string) (string, error) {
 	// 这是我上传视频文件的路径
 	objectName := "video/" + vid + "/video.mp4"
 	bucketName := "video"
+	location := "us-east-1" // MinIO默认区域，根据实际情况修改
+
+	// 检查存储桶是否存在，不存在则创建
+	exists, err := minioClient.BucketExists(context.Background(), bucketName)
+	if err != nil {
+		return "", fmt.Errorf("check bucket error: %w", err)
+	}
+	if !exists {
+		err = minioClient.MakeBucket(context.Background(), bucketName, minio.MakeBucketOptions{Region: location})
+		if err != nil {
+			return "", fmt.Errorf("create bucket error: %w", err)
+		}
+	}
 
 	// 上传视频文件到 MinIO
-	_, err := minioClient.FPutObject(context.Background(), bucketName, objectName, path, minio.PutObjectOptions{ContentType: "video/mp4"})
+	_, err = minioClient.FPutObject(context.Background(), bucketName, objectName, path, minio.PutObjectOptions{ContentType: "video/mp4"})
 	if err != nil {
 		hlog.Info(err)
 		return "", err
@@ -73,13 +99,25 @@ func UploadVideo(path, vid string) (string, error) {
 	return fmt.Sprintf("http://%s/%s/%s", "localhost:9091/browser", bucketName, objectName), nil
 }
 
-//ToDo: 上传视频封面时 也可以让用户自定义封面
+// ToDo: 上传视频封面时 也可以让用户自定义封面
 func UploadVideoCover(path, vid string) (string, error) {
 	objectName := "picture/" + vid + "/cover.jpg"
 	bucketName := "picture"
+	location := "us-east-1" // MinIO默认区域，根据实际情况修改
 
+	// 检查存储桶是否存在，不存在则创建
+	exists, err := minioClient.BucketExists(context.Background(), bucketName)
+	if err != nil {
+		return "", fmt.Errorf("check bucket error: %w", err)
+	}
+	if !exists {
+		err = minioClient.MakeBucket(context.Background(), bucketName, minio.MakeBucketOptions{Region: location})
+		if err != nil {
+			return "", fmt.Errorf("create bucket error: %w", err)
+		}
+	}
 	// 上传封面文件到 MinIO
-	_, err := minioClient.FPutObject(context.Background(), bucketName, objectName, path, minio.PutObjectOptions{ContentType: "image/jpeg"})
+	_, err = minioClient.FPutObject(context.Background(), bucketName, objectName, path, minio.PutObjectOptions{ContentType: "image/jpeg"})
 	if err != nil {
 		return "", err
 	}
@@ -96,7 +134,7 @@ func GeneratePreUrl(bucketName, objectName, vid string) (string, error) {
 		return "", err
 	}
 	hlog.Info("Download URL:", presignedURL)
-	
+
 	// 发起 GET 请求下载视频
 	resp, err := http.Get(presignedURL.String())
 	if err != nil {

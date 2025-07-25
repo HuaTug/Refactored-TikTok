@@ -31,8 +31,8 @@ func InitUserRpc() {
 		/* 		client.WithMiddleware(middleware.CommonMiddleware),
 		   		client.WithInstanceMW(middleware.ClientMiddleware), */
 		client.WithMuxConnection(3),                       // mux
-		client.WithRPCTimeout(3*time.Second),              // rpc timeout
-		client.WithConnectTimeout(50*time.Second),         // conn timeout
+		client.WithRPCTimeout(30*time.Second),             // 增加RPC超时到30秒
+		client.WithConnectTimeout(10*time.Second),         // 减少连接超时到10秒，更快发现连接问题
 		client.WithFailureRetry(retry.NewFailurePolicy()), // retry
 		//client.WithSuite(trace.NewDefaultClientSuite()),   // tracer
 		client.WithResolver(r), // resolver

@@ -179,3 +179,15 @@ func DeleteVideoAndAllAbout(videoId int64) error {
 	}
 	return nil
 }
+
+// IncrVideoLikeCount 增加视频点赞数
+func IncrVideoLikeCount(videoId int64) error {
+	_, err := redisDBVideoInfo.Incr(fmt.Sprintf("video_like_count:%d", videoId)).Result()
+	return err
+}
+
+// DecrVideoLikeCount 减少视频点赞数
+func DecrVideoLikeCount(videoId int64) error {
+	_, err := redisDBVideoInfo.Decr(fmt.Sprintf("video_like_count:%d", videoId)).Result()
+	return err
+}

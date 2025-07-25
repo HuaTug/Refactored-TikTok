@@ -1,0 +1,1007 @@
+openapi: 3.0.3
+info:
+  title: Refactored TikTok API
+  description: 抖音克隆项目的完整 API 文档，包含用户、视频、互动、关系、消息等所有业务模块
+  version: 2.0.0
+  contact:
+    name: TikTok Team
+    email: dev@tiktok.com
+
+servers:
+  - url: https://api.tiktok.com
+    description: 生产环境
+  - url: https://test-api.tiktok.com
+    description: 测试环境
+  - url: http://localhost:8080
+    description: 本地开发环境
+
+tags:
+  - name: 用户管理
+    description: 用户注册、登录、个人信息管理
+  - name: 视频管理
+    description: 视频上传、播放、收藏等功能
+  - name: 互动功能
+    description: 点赞、评论、通知等互动功能
+  - name: 关系管理
+    description: 关注、粉丝、好友关系管理
+  - name: 消息功能
+    description: 用户间消息发送和接收
+  - name: 聊天功能
+    description: 实时聊天功能
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ========== 用户管理模块 ==========
+  /v1/user/register:
+    post:
+      tags: [用户管理]
+      summary: 用户注册
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserResponse'
+
+  /v1/user/login:
+    post:
+      tags: [用户管理]
+      summary: 用户登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginUserRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginUserResponse'
+
+  /v1/user/me:
+    get:
+      tags: [用户管理]
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetMyProfileResponse'
+
+  /v1/user/update:
+    post:
+      tags: [用户管理]
+      summary: 更新用户信息
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateUserResponse'
+
+  /v1/user/change-password:
+    post:
+      tags: [用户管理]
+      summary: 修改密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: 修改成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChangePasswordResponse'
+
+  # ========== 视频管理模块 ==========
+  /v1/video/feed:
+    get:
+      tags: [视频管理]
+      summary: 获取视频流
+      parameters:
+        - name: last_time
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedServiceResponse'
+
+  /v1/publish/start:
+    post:
+      tags: [视频管理]
+      summary: 开始视频上传
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoPublishStartRequest'
+      responses:
+        '200':
+          description: 开始上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoPublishStartResponse'
+
+  /v1/publish/uploading:
+    post:
+      tags: [视频管理]
+      summary: 视频分片上传
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VideoPublishUploadingRequest'
+      responses:
+        '200':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoPublishUploadingResponse'
+
+  /v1/publish/complete:
+    post:
+      tags: [视频管理]
+      summary: 完成视频上传
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoPublishCompleteRequest'
+      responses:
+        '200':
+          description: 完成上传
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoPublishCompleteResponse'
+
+  /v1/video/list:
+    get:
+      tags: [视频管理]
+      summary: 获取视频列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoFeedListResponse'
+
+  /v1/video/search:
+    post:
+      tags: [视频管理]
+      summary: 搜索视频
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoSearchRequest'
+      responses:
+        '200':
+          description: 搜索成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSearchResponse'
+
+  # ========== 互动功能模块 ==========
+  /v1/action/like:
+    post:
+      tags: [互动功能]
+      summary: 点赞/取消点赞
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LikeActionRequest'
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeActionResponse'
+
+  /v1/action/list:
+    get:
+      tags: [互动功能]
+      summary: 获取用户点赞列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LikeListResponse'
+
+  /v1/comment/publish:
+    post:
+      tags: [互动功能]
+      summary: 发布评论
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentRequest'
+      responses:
+        '200':
+          description: 评论成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCommentResponse'
+
+  /v1/comment/list:
+    get:
+      tags: [互动功能]
+      summary: 获取评论列表
+      parameters:
+        - name: video_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: comment_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListCommentResponse'
+
+  /v1/notifications:
+    get:
+      tags: [互动功能]
+      summary: 获取通知列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetNotificationsResponse'
+
+  # ========== 关系管理模块 ==========
+  /v1/relation/action:
+    post:
+      tags: [关系管理]
+      summary: 关注/取消关注
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RelationServiceRequest'
+      responses:
+        '200':
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationServiceResponse'
+
+  /v1/following/list:
+    get:
+      tags: [关系管理]
+      summary: 获取关注列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowingListResponse'
+
+  /v1/follower/list:
+    get:
+      tags: [关系管理]
+      summary: 获取粉丝列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FollowerListResponse'
+
+  /v1/friend/list:
+    get:
+      tags: [关系管理]
+      summary: 获取好友列表
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_num
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: page_size
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 获取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FriendListResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ========== 基础数据结构 ==========
+    Status:
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int64
+          description: 状态码
+        msg:
+          type: string
+          description: 状态信息
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        user_name:
+          type: string
+        email:
+          type: string
+        sex:
+          type: integer
+          format: int64
+        avatar_url:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    UserLite:
+      type: object
+      properties:
+        uid:
+          type: integer
+          format: int64
+        user_name:
+          type: string
+        avatar_url:
+          type: string
+
+    Video:
+      type: object
+      properties:
+        video_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        video_url:
+          type: string
+        cover_url:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        visit_count:
+          type: integer
+          format: int64
+        likes_count:
+          type: integer
+          format: int64
+        comment_count:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+
+    Comment:
+      type: object
+      properties:
+        comment_id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        video_id:
+          type: integer
+          format: int64
+        parent_id:
+          type: integer
+          format: int64
+        like_count:
+          type: integer
+          format: int64
+        child_count:
+          type: integer
+          format: int64
+        content:
+          type: string
+        created_at:
+          type: string
+
+    # ========== 用户相关请求响应 ==========
+    CreateUserRequest:
+      type: object
+      required: [user_name, password, email, sex]
+      properties:
+        user_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        password:
+          type: string
+          minLength: 6
+          maxLength: 12
+        email:
+          type: string
+          minLength: 4
+          maxLength: 12
+        sex:
+          type: integer
+          format: int64
+          enum: [0, 1]
+
+    CreateUserResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    LoginUserRequest:
+      type: object
+      required: [user_name, password]
+      properties:
+        user_name:
+          type: string
+          minLength: 4
+          maxLength: 12
+        password:
+          type: string
+          minLength: 6
+          maxLength: 10
+        email:
+          type: string
+          minLength: 4
+          maxLength: 12
+
+    LoginUserResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        token:
+          type: string
+        refresh_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    GetMyProfileResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        user:
+          $ref: '#/components/schemas/User'
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        user_name:
+          type: string
+          maxLength: 100
+        password:
+          type: string
+          minLength: 6
+          maxLength: 12
+        data:
+          type: string
+          format: binary
+        filesize:
+          type: integer
+          format: int64
+
+    UpdateUserResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        data:
+          $ref: '#/components/schemas/User'
+
+    ChangePasswordRequest:
+      type: object
+      required: [old_password, new_password, confirm_password]
+      properties:
+        old_password:
+          type: string
+          minLength: 6
+          maxLength: 20
+        new_password:
+          type: string
+          minLength: 6
+          maxLength: 20
+        confirm_password:
+          type: string
+          minLength: 6
+          maxLength: 20
+
+    ChangePasswordResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    # ========== 视频相关请求响应 ==========
+    FeedServiceResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        video_list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Video'
+
+    VideoPublishStartRequest:
+      type: object
+      required: [user_id, title, chunk_total_number]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        lab_name:
+          type: string
+        category:
+          type: string
+        open:
+          type: integer
+          format: int64
+        chunk_total_number:
+          type: integer
+          format: int64
+          minimum: 1
+
+    VideoPublishStartResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        uuid:
+          type: string
+
+    VideoPublishUploadingRequest:
+      type: object
+      required: [user_id, uuid, data, chunk_number]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+        data:
+          type: string
+          format: binary
+        md5:
+          type: string
+        is_m3u8:
+          type: boolean
+        filename:
+          type: string
+        chunk_number:
+          type: integer
+          format: int64
+
+    VideoPublishUploadingResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    VideoPublishCompleteRequest:
+      type: object
+      required: [user_id, uuid]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        uuid:
+          type: string
+
+    VideoPublishCompleteResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    VideoFeedListResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        video_list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Video'
+        total:
+          type: integer
+          format: int64
+
+    VideoSearchRequest:
+      type: object
+      required: [keyword, page_num, page_size]
+      properties:
+        keyword:
+          type: string
+        page_num:
+          type: integer
+          format: int64
+        page_size:
+          type: integer
+          format: int64
+        from_date:
+          type: string
+        to_date:
+          type: string
+
+    VideoSearchResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        video_search:
+          type: array
+          items:
+            $ref: '#/components/schemas/Video'
+        count:
+          type: integer
+          format: int64
+
+    # ========== 互动相关请求响应 ==========
+    LikeActionRequest:
+      type: object
+      required: [user_id, action_type]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        video_id:
+          type: integer
+          format: int64
+        comment_id:
+          type: integer
+          format: int64
+        action_type:
+          type: string
+          enum: [like, unlike]
+
+    LikeActionResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    LikeListResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Video'
+
+    CreateCommentRequest:
+      type: object
+      required: [user_id, video_id, content]
+      properties:
+        user_id:
+          type: integer
+          format: int64
+        video_id:
+          type: integer
+          format: int64
+        comment_id:
+          type: integer
+          format: int64
+        mode:
+          type: integer
+          format: int64
+        content:
+          type: string
+
+    CreateCommentResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    ListCommentResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+
+    NotificationInfo:
+      type: object
+      properties:
+        notification_id:
+          type: integer
+          format: int64
+        from_user_id:
+          type: integer
+          format: int64
+        from_user_name:
+          type: string
+        from_user_avatar:
+          type: string
+        notification_type:
+          type: string
+        content:
+          type: string
+        target_id:
+          type: integer
+          format: int64
+        is_read:
+          type: boolean
+        created_at:
+          type: string
+
+    GetNotificationsResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationInfo'
+        total_count:
+          type: integer
+          format: int64
+        unread_count:
+          type: integer
+          format: int64
+
+    # ========== 关系相关请求响应 ==========
+    RelationServiceRequest:
+      type: object
+      required: [action_type, from_user_id, to_user_id]
+      properties:
+        action_type:
+          type: integer
+          format: int64
+          description: "1-关注, 2-取消关注"
+        from_user_id:
+          type: integer
+          format: int64
+        to_user_id:
+          type: integer
+          format: int64
+
+    RelationServiceResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+
+    FollowingListResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        total:
+          type: integer
+          format: int64
+
+    FollowerListResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        total:
+          type: integer
+          format: int64
+
+    FriendListResponse:
+      type: object
+      properties:
+        base:
+          $ref: '#/components/schemas/Status'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserLite'
+        total:
+          type: integer
+          format: int64 

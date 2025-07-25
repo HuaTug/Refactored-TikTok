@@ -2,6 +2,7 @@ package main
 
 import (
 	"net"
+	"os"
 
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/infras/client"
@@ -13,6 +14,7 @@ import (
 	"HuaTug.com/pkg/bound"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
+	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/limit"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
@@ -26,8 +28,32 @@ func Init() {
 	dal.Init()
 	redis.Load()
 	client.Init()
+
+	// 初始化消息队列生产者
+	initMessageQueue()
+
 	// go common.NewCommentSync().Run()
 	// go common.NewVideoSyncman().Run()
+}
+
+func initMessageQueue() {
+	// 从环境变量或配置文件获取RabbitMQ连接URL
+	rabbitmqURL := os.Getenv("RABBITMQ_URL")
+	if rabbitmqURL == "" {
+		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
+	}
+
+	// 创建消息队列生产者
+	producer, err := mq.NewProducer(rabbitmqURL)
+	if err != nil {
+		hlog.Fatalf("Failed to initialize message queue producer: %v", err)
+		panic(err)
+	}
+
+	// 设置全局生产者实例
+	SetGlobalProducer(producer)
+
+	hlog.Info("Message queue producer initialized successfully")
 }
 
 func main() {

@@ -22,6 +22,14 @@ func Feedlist(ctx context.Context, req *videos.FeedServiceRequest) ([]*base.Vide
 	return video, nil
 }
 
+func GetAllFeedList(ctx context.Context, req *videos.FeedServiceRequest) ([]*base.Video, error) {
+	var video []*base.Video
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Find(&video); err != nil {
+		return video, errors.Wrapf(err.Error, "GetAllFeedList failed,err:%v", err)
+	}
+	return video, nil
+}
+
 // 获取用户发布的视频
 func Videolist(ctx context.Context, req *videos.VideoFeedListRequest) ([]*base.Video, int64, error) {
 	var video []*base.Video
