@@ -27,6 +27,7 @@ import (
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/oss"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/klog"
 	"github.com/cloudwego/kitex/pkg/limit"
@@ -78,7 +79,7 @@ func main() {
 		//server.WithSuite(trace.NewDefaultServerSuite()),
 		server.WithSuite(suite),                             // tracer
 		server.WithBoundHandler(bound.NewCpuLimitHandler()), // BoundHandler
-		server.WithRegistry(r),                           // registry
+		server.WithRegistry(r),                              // registry
 
 	)
 	err = svr.Run()

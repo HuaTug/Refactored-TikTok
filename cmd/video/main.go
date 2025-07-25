@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"HuaTug.com/config/jaeger"
-	video "HuaTug.com/kitex_gen/videos/videoservice"
+	"HuaTug.com/kitex_gen/videos/videoservice"
 
 	"HuaTug.com/cmd/video/dal"
 	"HuaTug.com/cmd/video/infras/client"
@@ -56,7 +56,7 @@ func main() {
 	//当出现了UserServiceImpl报错时 说明当前该接口的方法没有被完全实现
 
 	//注意 这里的video等等方法在进行服务注册发现时 video此时是kitex生成下的一个service
-	svr := video.NewServer(new(VideoServiceImpl),
+	svr := videoservice.NewServer(new(VideoServiceImpl),
 		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "Video"}), // server name
 		server.WithMiddleware(middleware.CommonMiddleware),                           // middleware
 		server.WithMiddleware(middleware.ServerMiddleware),

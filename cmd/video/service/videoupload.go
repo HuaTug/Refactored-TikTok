@@ -12,10 +12,8 @@ import (
 
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/cmd/video/dal/db"
-	"HuaTug.com/cmd/video/infras/client"
 	"HuaTug.com/cmd/video/infras/redis"
 	"HuaTug.com/kitex_gen/base"
-	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
@@ -174,12 +172,12 @@ func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPubli
 	}
 	var (
 		videoUrl, coverUrl string
-		resp               *users.GetUserInfoResponse
-		wg                 sync.WaitGroup
+		//resp               *users.GetUserInfoResponse
+		wg sync.WaitGroup
 	)
-	errChan := make(chan error, 3)
+	errChan := make(chan error, 1)
 
-	wg.Add(3)
+	wg.Add(1)
 	go func() {
 		videoUrl, err = oss.UploadVideo(videofile, vid)
 		if err != nil {
@@ -187,31 +185,33 @@ func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPubli
 		}
 		wg.Done()
 	}()
-	go func() {
-		//temp := `/home/xuzh/Golang/Work-6/cmd/video/` + fmt.Sprint(req.UserId) + `_` + req.Uuid
-		temp := `../` + fmt.Sprint(req.UserId) + `_` + req.Uuid
-		coverPath, err := utils.GetVideoThumnail(videofile, temp)
-		if err != nil {
-			errChan <- errors.WithMessage(err, "Failed to GetVideoThumnail to minio")
-		}
-		coverUrl, err = oss.UploadVideoCover(coverPath, vid)
-		if err != nil {
-			errChan <- errors.WithMessage(err, "Failed to UploadVideoCover to minio")
-		}
-		wg.Done()
-	}()
-	// ToDo: 用于获取用户信息 完善ElasticSearch索引
-	go func() {
-		resp = new(users.GetUserInfoResponse)
-		resp, err = client.UserClient.GetUserInfo(service.ctx, &users.GetUserInfoRequest{
-			UserId: req.UserId,
-		})
-		if err != nil {
-			errChan <- err
-		}
-		hlog.Info(resp)
-		wg.Done()
-	}()
+	// go func() {
+	// 	//temp := `/home/xuzh/Golang/Work-6/cmd/video/` + fmt.Sprint(req.UserId) + `_` + req.Uuid
+	// 	temp := `../` + fmt.Sprint(req.UserId) + `_` + req.Uuid
+	// 	coverPath, err := utils.GetVideoThumnail(videofile, temp)
+	// 	if err != nil {
+	// 		errChan <- errors.WithMessage(err, "Failed to GetVideoThumnail to minio")
+	// 	}
+	// 	coverUrl, err = oss.UploadVideoCover(coverPath, vid)
+	// 	if err != nil {
+	// 		errChan <- errors.WithMessage(err, "Failed to UploadVideoCover to minio")
+	// 	}
+	// 	wg.Done()
+	// }()
+	// ToDo: 用于获取用户信息 完善ElasticSearch索引 (如果失败不阻塞上传流程)
+	// go func() {
+	// 	defer wg.Done()
+	// 	resp = new(users.GetUserInfoResponse)
+	// 	resp, err = client.UserClient.GetUserInfo(service.ctx, &users.GetUserInfoRequest{
+	// 		UserId: req.UserId,
+	// 	})
+	// 	if err != nil {
+	// 		hlog.Warnf("Failed to get user info for user %d: %v (this won't affect upload)", req.UserId, err)
+	// 		// 不发送错误到errChan，让上传流程继续
+	// 	} else {
+	// 		hlog.Info("User info retrieved successfully:", resp)
+	// 	}
+	// }()
 	wg.Wait()
 	select {
 	case err := <-errChan:
@@ -289,7 +289,7 @@ func (service *VideoUploadService) NewUploadEvent(req *videos.VideoPublishStartR
 	if req.Title == `` || req.ChunkTotalNumber <= 0 {
 		return ``, errno.RequestErr
 	}
-	uuid, err = redis.NewVideoEvent(service.ctx, req.Title, req.Description, uid, fmt.Sprint(req.ChunkTotalNumber), req.LabName, req.Category)
+	uuid, err = redis.NewVideoEvent(service.ctx, req.Title, req.Description, uid,"" ,fmt.Sprint(req.ChunkTotalNumber), req.LabName, req.Category)
 	if err != nil {
 		return ``, errno.RedisErr
 	}

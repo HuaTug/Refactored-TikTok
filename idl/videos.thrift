@@ -1,0 +1,741 @@
+namespace go videos
+
+include "base.thrift"
+
+// ========== 共享数据结构 ==========
+struct VideoResolution {
+    1: i32 width
+    2: i32 height
+}
+
+struct UserStorageQuota {
+    1: i64 total_quota_bytes      // 总配额（字节）
+    2: i64 used_quota_bytes       // 已使用配额（字节）
+    3: i64 video_count           // 视频数量
+    4: string quota_level        // 配额等级：basic, premium, vip
+    5: i64 max_video_size_bytes  // 单个视频最大大小
+    6: i32 max_video_count       // 最大视频数量
+}
+
+// ========== V1版本结构体（保持兼容性） ==========
+struct FeedServiceRequest{
+    1: string last_time
+}
+struct FeedServiceResponse{
+    1: base.Status base
+    2: list<base.Video> video_list
+}
+
+struct VideoPublishStartRequest{
+    1: i64 user_id
+    2: string title (vt.min_size="1")
+    3: string description
+    4: string lab_name                    // 保留兼容性，建议使用V2版本
+    5: string category
+    6: i64 open                          // 保留兼容性，建议使用V2版本
+    7: i64 chunk_total_number (vt.gt="0")
+}
+struct VideoPublishStartResponse{
+    1: base.Status base
+    2: string uuid
+}
+
+struct VideoPublishUploadingRequest{
+    1: i64 user_id
+    2: string uuid
+    3: binary data
+    4: string md5
+    5: bool is_m3u8
+    6: string filename
+    7: i64 chunk_number
+}
+struct VideoPublishUploadingResponse{
+    1: base.Status base
+}
+
+struct VideoPublishCompleteRequest{
+    1: i64 user_id
+    2: string uuid
+}
+struct VideoPublishCompleteResponse{
+    1: base.Status base
+}
+
+struct VideoPublishCancleRequest{
+    1: i64 user_id
+    2: string uuid
+}
+struct VideoPublishCancleResponse{
+    1: base.Status base
+}
+
+// ========== V2版本结构体（推荐使用） ==========
+struct VideoPublishStartRequestV2 {
+    1: i64 user_id
+    2: string title (vt.min_size="1", vt.max_size="200")
+    3: string description (vt.max_size="2000")
+    4: list<string> tags                    // 替换lab_name的规范实现
+    5: string category (vt.min_size="1")
+    6: string privacy                       // 替换open的规范实现：public, private, friends
+    7: i64 total_file_size
+    8: i64 estimated_duration
+    9: VideoResolution estimated_resolution
+    10: i32 chunk_total_number (vt.gt="0")
+    11: i64 chunk_size
+    12: string original_filename
+    13: string content_type
+    14: string upload_session_expire        // 可选
+}
+
+struct VideoPublishStartResponseV2 {
+    1: base.Status base
+    2: string upload_session_uuid
+    3: i64 video_id
+    4: UserStorageQuota user_quota
+    5: string temp_upload_path
+    6: i64 session_expires_at
+    7: list<string> presigned_urls         // 可选
+}
+
+struct VideoPublishUploadingRequestV2 {
+    1: i64 user_id
+    2: string upload_session_uuid
+    3: i32 chunk_number (vt.gt="0")
+    4: string chunk_presigned_url         // 可选，用于前端直传
+    5: binary chunk_data                  // 可选，用于服务端上传
+    6: string chunk_md5
+    7: i64 chunk_size
+    8: i64 chunk_offset
+    9: bool is_compressed
+    10: string compression_algorithm
+}
+
+struct VideoPublishUploadingResponseV2 {
+    1: base.Status base
+    2: i32 uploaded_chunk_number
+    3: string chunk_upload_status
+    4: double upload_progress_percent
+    5: i64 next_chunk_offset
+    6: string upload_speed_mbps
+}
+
+struct VideoPublishCompleteRequestV2 {
+    1: i64 user_id
+    2: string upload_session_uuid
+    3: string final_file_md5
+    4: i64 final_file_size
+    5: bool enable_transcoding
+    6: list<i32> target_resolutions
+    7: bool generate_thumbnails
+    8: bool generate_animated_cover
+    9: map<string, string> custom_metadata
+}
+
+struct VideoPublishCompleteResponseV2 {
+    1: base.Status base
+    2: i64 video_id
+    3: string video_source_url
+    4: map<i32, string> processed_video_urls
+    5: map<string, string> thumbnail_urls
+    6: string animated_cover_url
+    7: string metadata_url
+    8: string processing_status
+    9: i64 processing_job_id
+    10: UserStorageQuota updated_quota
+}
+
+struct VideoPublishCancelRequestV2 {
+    1: i64 user_id
+    2: string upload_session_uuid
+    3: string cancel_reason
+}
+
+struct VideoPublishCancelResponseV2 {
+    1: base.Status base
+    2: string cleanup_status
+    3: i64 storage_recovered_bytes
+    4: UserStorageQuota updated_quota
+}
+
+// ========== V2扩展功能：上传管理 ==========
+struct VideoPublishProgressRequestV2 {
+    1: i64 user_id
+    2: string upload_session_uuid
+}
+
+struct VideoPublishProgressResponseV2 {
+    1: base.Status base
+    2: string session_status
+    3: i32 total_chunks
+    4: i32 uploaded_chunks
+    5: double upload_progress_percent
+    6: double processing_progress_percent
+    7: i64 upload_speed_bytes_per_sec
+    8: i64 eta_seconds
+    9: list<i32> failed_chunks
+    10: string current_stage
+}
+
+struct VideoPublishResumeRequestV2 {
+    1: i64 user_id
+    2: string upload_session_uuid
+    3: string last_chunk_md5
+}
+
+struct VideoPublishResumeResponseV2 {
+    1: base.Status base
+    2: i32 last_uploaded_chunk
+    3: list<i32> missing_chunks
+    4: i64 session_remaining_time
+    5: bool can_resume
+    6: string resume_strategy
+}
+
+// ========== 视频查询和管理（V1功能） ==========
+struct VideoFeedListRequest{
+    1: i64 user_id
+    2: i64 page_num
+    3: i64 page_size
+}
+struct VideoFeedListResponse{
+    1: base.Status base
+    2: list<base.Video> video_list
+    3: i64 total
+}
+
+struct VideoSearchRequest{
+    1: string keyword
+    2: i64 page_num
+    3: i64 page_size
+    4: string from_date
+    5: string to_date
+}
+struct VideoSearchResponse{
+    1: base.Status base
+    2: list<base.Video> video_search
+    3: i64 count
+}
+
+struct VideoPopularRequest{
+    1: i64 page_num
+    2: i64 page_size
+}
+struct VideoPopularResponse{
+    1: base.Status base
+    2: list<base.Video> Popular
+}
+
+struct VideoInfoRequest{
+    1: i64 video_id
+}
+struct VideoInfoResponse{
+    1: base.Status base
+    2: base.Video items
+}
+
+struct VideoDeleteRequest{
+    1: i64 user_id
+    2: i64 video_id
+}
+struct VideoDeleteResponse{
+    1: base.Status base
+}
+
+struct VideoVisitRequest{
+    1: i64 from_id
+    2: i64 video_id
+}
+struct VideoVisitResponse{
+    1: base.Status base
+    2: base.Video item
+}
+
+struct VideoIdListRequest{
+    1: i64 page_num
+    2: i64 page_size
+}
+struct VideoIdListResponse{
+    1: base.Status base
+    2: bool is_end
+    3: list<string> list
+}
+
+// ========== 视频统计功能 ==========
+struct UpdateVisitCountRequest{
+    1: i64 video_id
+    2: i64 visit_count
+}
+struct UpdateVisitCountResponse{
+    1: base.Status base
+}
+
+struct UpdateVideoCommentCountRequest{
+    1: i64 video_id
+    2: i64 comment_count
+}
+struct UpdateVideoCommentCountResponse{
+    1: base.Status base
+}
+
+struct UpdateLikeCountRequest{
+    1: i64 video_id
+    2: i64 like_count
+}
+struct UpdateLikeCountResponse{
+    1: base.Status base
+}
+
+struct UpdateVideoHisLikeCountRequest{
+    1: i64 video_id
+    2: i64 his_like_count
+}
+struct UpdateVideoHisLikeCountResponse{
+    1: base.Status base
+}
+
+struct GetVideoVisitCountRequest{
+    1: i64 video_id
+}
+struct GetVideoVisitCountResponse{
+    1: base.Status base
+    2: i64 visit_count
+}
+
+struct GetVideoVisitCountInRedisRequest{
+    1: i64 video_id
+}
+struct GetVideoVisitCountInRedisResponse{
+    1: i64 visit_count
+    2: base.Status base
+}
+
+// ========== 视频流播放 ==========
+struct StreamVideoRequest{
+    1: string index
+}
+struct StreamVideoResponse{
+    1: base.Status base
+    2: byte data
+}
+
+// ========== 收藏夹功能（V1） ==========
+struct CreateFavoriteRequest{
+    1: i64 user_id
+    2: string name
+    3: string description
+    4: string cover_url
+}
+struct CreateFavoriteResponse{
+    1: base.Status base
+}
+
+struct GetFavoriteListRequest{
+    1: i64 user_id
+    2: i64 page_num
+    3: i64 page_size
+}
+struct GetFavoriteListResponse{
+    1: base.Status base
+    2: list<base.Favorite> favorite_list
+}
+
+struct AddFavoriteVideoRequest{
+    1: i64 favorite_id
+    2: i64 user_id
+    3: i64 video_id
+}
+struct AddFavoriteVideoResponse{
+    1: base.Status base
+}
+
+struct GetFavoriteVideoListRequest{
+    1: i64 user_id
+    2: i64 favorite_id
+    3: i64 page_num
+    4: i64 page_size
+}
+struct GetFavoriteVideoListResponse{
+    1: base.Status base
+    2: list<base.Video> video_list
+}
+
+struct GetVideoFromFavoriteRequest{
+    1: i64 favorite_id
+    2: i64 user_id
+    3: i64 video_id
+    4: i64 page_num
+    5: i64 page_size
+}
+struct GetVideoFromFavoriteResponse{
+    1: base.Status base
+    2: base.Video video
+}
+
+struct DeleteFavoriteRequest{
+    1: i64 user_id
+    2: i64 favorite_id
+}
+struct DeleteFavoriteResponse{
+    1: base.Status base
+}
+
+struct DeleteVideoFromFavoriteRequest{
+    1: i64 favorite_id
+    2: i64 user_id
+    3: i64 video_id
+}
+struct DeleteVideoFromFavoriteResponse{
+    1: base.Status base
+}
+
+// ========== 分享功能（V1） ==========
+struct SharedVideoRequest{
+    1: i64 user_id
+    2: i64 to_user_id
+    3: i64 video_id
+}
+struct SharedVideoResponse{
+    1: base.Status base
+}
+
+struct GetPopularVideoRequest{
+    1: i64 page_num
+    2: i64 page_size
+}
+struct GetPopularVideoResponse{
+    1: base.Status base
+    2: list<base.Video> video_list
+}
+
+struct RecommendVideoRequest{
+    1: i64 user_id
+}
+struct RecommendVideoResponse{
+    1: base.Status base
+    2: list<base.Video> video_list
+}
+
+// ========== V2扩展功能：存储管理 ==========
+struct VideoStorageInfo {
+    1: i64 user_id
+    2: i64 video_id
+    3: string source_path
+    4: map<i32, string> processed_paths
+    5: map<string, string> thumbnail_paths
+    6: string animated_cover_path
+    7: string metadata_path
+    8: string storage_tier           // hot, warm, cold
+    9: string bucket_name
+    10: i64 file_size
+    11: i32 duration_seconds
+    12: VideoResolution resolution
+    13: string format
+}
+
+struct VideoHeatManagementRequest {
+    1: i64 video_id
+    2: string operation             // promote_to_hot, demote_to_warm, archive_to_cold
+    3: string reason
+}
+
+struct VideoHeatManagementResponse {
+    1: base.Status base
+    2: string old_tier
+    3: string new_tier
+    4: i64 operation_cost_bytes
+}
+
+struct UserQuotaManagementRequest {
+    1: i64 user_id
+    2: string operation            // get, update, reset
+    3: UserStorageQuota new_quota  // 仅update时使用
+}
+
+struct UserQuotaManagementResponse {
+    1: base.Status base
+    2: UserStorageQuota current_quota
+    3: list<string> quota_warnings
+    4: bool quota_exceeded
+}
+
+struct BatchVideoOperationRequest {
+    1: i64 user_id
+    2: list<i64> video_ids
+    3: string operation            // delete, change_privacy, move_to_tier
+    4: map<string, string> operation_params
+}
+
+struct BatchVideoOperationResponse {
+    1: base.Status base
+    2: list<i64> success_video_ids
+    3: map<i64, string> failed_video_errors
+    4: UserStorageQuota updated_quota
+}
+
+// ========== V2扩展功能：转码服务 ==========
+struct VideoTranscodingRequest {
+    1: i64 user_id
+    2: i64 video_id
+    3: list<i32> target_qualities   // [240, 360, 480, 720, 1080, 1440, 2160]
+    4: list<string> target_formats  // [mp4, webm, hls]
+    5: bool generate_thumbnails
+    6: i32 thumbnail_count
+}
+
+struct VideoTranscodingResponse {
+    1: base.Status base
+    2: i64 transcoding_job_id
+    3: string job_status
+    4: map<i32, string> transcoded_urls
+    5: list<string> thumbnail_urls
+    6: i64 estimated_completion_time
+}
+
+// ========== V2扩展功能：分析统计 ==========
+struct VideoAnalyticsRequest {
+    1: i64 user_id
+    2: list<i64> video_ids         // 空列表表示查询用户所有视频
+    3: string date_range_start     // YYYY-MM-DD
+    4: string date_range_end       // YYYY-MM-DD
+    5: list<string> metrics        // views, likes, shares, comments, download_bytes
+}
+
+struct VideoAnalyticsResponse {
+    1: base.Status base
+    2: map<i64, map<string, i64>> video_metrics
+    3: map<string, i64> total_metrics
+    4: list<string> top_performing_videos
+    5: string report_generated_at
+}
+
+// ========== 统一视频服务 ==========
+service VideoService {
+    // ========== V1版本API（保持兼容性） ==========
+    FeedServiceResponse FeedService(1: FeedServiceRequest req)(api.get="/v1/video/feed")
+    VideoPublishStartResponse VideoPublishStart(1: VideoPublishStartRequest req)(api.post="/v1/publish/start")
+    VideoPublishUploadingResponse VideoPublishUploading(1: VideoPublishUploadingRequest req)(api.post="/v1/publish/uploading")
+    VideoPublishCompleteResponse VideoPublishComplete(1: VideoPublishCompleteRequest req)(api.post="/v1/publish/complete")
+    VideoPublishCancleResponse VideoPublishCancle(1: VideoPublishCancleRequest req)(api.post="/v1/publish/cancle")
+    
+    VideoDeleteResponse VideoDelete(1: VideoDeleteRequest req)(api.delete="/v1/video/delete")
+    VideoIdListResponse VideoIdList(1: VideoIdListRequest req)
+    VideoFeedListResponse VideoFeedList(1: VideoFeedListRequest req)(api.get="/v1/video/list")
+    VideoSearchResponse VideoSearch(1: VideoSearchRequest req)(api.post="/v1/video/search")
+    VideoPopularResponse VideoPopular(1: VideoPopularRequest req)(api.get="/v1/video/popular")
+    VideoInfoResponse VideoInfo(1: VideoInfoRequest req)
+    VideoVisitResponse VideoVisit(1: VideoVisitRequest req)(api.post="/v1/visit/:id")
+    
+    UpdateVisitCountResponse UpdateVisitCount(1: UpdateVisitCountRequest req)
+    UpdateVideoCommentCountResponse UpdateVideoCommentCount(1: UpdateVideoCommentCountRequest req)
+    UpdateLikeCountResponse UpdateVideoLikeCount(1: UpdateLikeCountRequest req)
+    UpdateVideoHisLikeCountResponse UpdateVideoHisLikeCount(1: UpdateVideoHisLikeCountRequest req)
+    GetVideoVisitCountResponse GetVideoVisitCount(1: GetVideoVisitCountRequest req)
+    GetVideoVisitCountInRedisResponse GetVideoVisitCountInRedis(1: GetVideoVisitCountInRedisRequest req)
+    
+    StreamVideoResponse StreamVideo(1: StreamVideoRequest req)(api.post="/v1/stream")
+    
+    CreateFavoriteResponse CreateFavorite(1: CreateFavoriteRequest req)(api.post="/v1/favorite/create")
+    GetFavoriteVideoListResponse GetFavoriteVideoList(1: GetFavoriteVideoListRequest req)(api.get="/v1/favorite/video/list")
+    GetFavoriteListResponse GetFavoriteList(1: GetFavoriteListRequest req)(api.get="/v1/favorite/list")
+    GetVideoFromFavoriteResponse GetVideoFromFavorite(1: GetVideoFromFavoriteRequest req)(api.get="/v1/favorite/video")
+    AddFavoriteVideoResponse AddFavoriteVideo(1: AddFavoriteVideoRequest req)(api.post="/v1/favorite/video/add")
+    DeleteFavoriteResponse DeleteFavorite(1: DeleteFavoriteRequest req)(api.delete="/v1/favorite/delete")
+    DeleteVideoFromFavoriteResponse DeleteVideoFromFavorite(1: DeleteVideoFromFavoriteRequest req)(api.delete="/v1/favorite/video/delete")
+    
+    SharedVideoResponse SharedVideo(1: SharedVideoRequest req)(api.post="/v1/share/video")
+    RecommendVideoResponse RecommendVideo(1: RecommendVideoRequest req)(api.get="/v1/recommend/video")
+    
+    // ========== V2版本API（推荐使用） ==========
+    // 核心上传流程
+    VideoPublishStartResponseV2 VideoPublishStartV2(1: VideoPublishStartRequestV2 req)(api.post="/v2/publish/start")
+    VideoPublishUploadingResponseV2 VideoPublishUploadingV2(1: VideoPublishUploadingRequestV2 req)(api.post="/v2/publish/uploading")
+    VideoPublishCompleteResponseV2 VideoPublishCompleteV2(1: VideoPublishCompleteRequestV2 req)(api.post="/v2/publish/complete")
+    VideoPublishCancelResponseV2 VideoPublishCancelV2(1: VideoPublishCancelRequestV2 req)(api.post="/v2/publish/cancel")
+    
+    // 上传管理
+    VideoPublishProgressResponseV2 GetUploadProgressV2(1: VideoPublishProgressRequestV2 req)(api.get="/v2/publish/progress")
+    VideoPublishResumeResponseV2 ResumeUploadV2(1: VideoPublishResumeRequestV2 req)(api.post="/v2/publish/resume")
+    
+    // 存储管理
+    VideoHeatManagementResponse ManageVideoHeatV2(1: VideoHeatManagementRequest req)(api.post="/v2/storage/heat/manage")
+    UserQuotaManagementResponse ManageUserQuotaV2(1: UserQuotaManagementRequest req)(api.post="/v2/storage/quota/manage")
+    BatchVideoOperationResponse BatchOperateVideosV2(1: BatchVideoOperationRequest req)(api.post="/v2/videos/batch")
+    
+    // 转码服务
+    VideoTranscodingResponse TranscodeVideoV2(1: VideoTranscodingRequest req)(api.post="/v2/video/transcode")
+    
+    // 分析统计
+    VideoAnalyticsResponse GetVideoAnalyticsV2(1: VideoAnalyticsRequest req)(api.get="/v2/video/analytics")
+    
+    // ========== 以图搜图功能接口 ==========
+    
+    // 图像特征提取
+    ImageFeatureExtractResponse ImageFeatureExtract(1: ImageFeatureExtractRequest req)(api.post="/v1/image/extract-features")
+    
+    // 以图搜图核心功能
+    ImageSearchResponse ImageSearch(1: ImageSearchRequest req)(api.post="/v1/image/search")
+    
+    // 视频关键帧提取
+    VideoKeyFrameExtractResponse VideoKeyFrameExtract(1: VideoKeyFrameExtractRequest req)(api.post="/v1/video/extract-keyframes")
+    
+    // 批量图像处理
+    BatchImageProcessResponse BatchImageProcess(1: BatchImageProcessRequest req)(api.post="/v1/image/batch-process")
+    
+    // 图像索引管理
+    ImageIndexManageResponse ImageIndexManage(1: ImageIndexManageRequest req)(api.post="/v1/image/index/manage")
+    
+    // 相似度分析
+    SimilarityAnalysisResponse SimilarityAnalysis(1: SimilarityAnalysisRequest req)(api.post="/v1/image/similarity-analysis")
+} 
+
+// ========== 以图搜图功能扩展 ==========
+
+// 图像特征提取请求
+struct ImageFeatureExtractRequest {
+    1: i64 user_id
+    2: string image_url           // 图像URL
+    3: binary image_data          // 图像二进制数据（可选）
+    4: string image_format        // 图像格式：jpg, png, webp
+    5: string extract_model       // 特征提取模型：resnet50, clip, vit
+    6: string request_id          // 请求ID用于异步处理
+}
+
+struct ImageFeatureExtractResponse {
+    1: base.Status base
+    2: string feature_id          // 特征向量ID
+    3: list<double> feature_vector // 特征向量
+    4: i32 vector_dimension       // 向量维度
+    5: string model_version       // 模型版本
+    6: double processing_time     // 处理时间(秒)
+}
+
+// 以图搜图请求
+struct ImageSearchRequest {
+    1: i64 user_id
+    2: string query_image_url     // 查询图像URL
+    3: binary query_image_data    // 查询图像二进制数据（可选）
+    4: i32 top_k (vt.gt="0", vt.lte="100")  // 返回结果数量
+    5: double similarity_threshold // 相似度阈值 [0.0, 1.0]
+    6: string search_scope        // 搜索范围：all, user_videos, following
+    7: ImageSearchFilters filters // 搜索过滤条件
+    8: string search_model        // 搜索模型类型
+}
+
+struct ImageSearchFilters {
+    1: list<i64> user_ids         // 指定用户ID列表
+    2: list<string> tags          // 标签过滤
+    3: string start_date          // 开始日期
+    4: string end_date            // 结束日期
+    5: i32 min_duration           // 最小视频时长（秒）
+    6: i32 max_duration           // 最大视频时长（秒）
+    7: string video_quality       // 视频质量：HD, 4K, etc.
+    8: list<string> categories    // 分类过滤
+}
+
+struct ImageSearchResult {
+    1: i64 video_id
+    2: string video_url
+    3: string cover_url
+    4: string title
+    5: string description
+    6: i64 user_id
+    7: string username
+    8: double similarity_score    // 相似度分数 [0.0, 1.0]
+    9: list<string> matched_frames // 匹配的关键帧时间戳
+    10: string thumbnail_url      // 相似区域缩略图
+    11: base.Video video_info     // 完整视频信息
+}
+
+struct ImageSearchResponse {
+    1: base.Status base
+    2: list<ImageSearchResult> results
+    3: i64 total_count           // 总结果数
+    4: double search_time        // 搜索耗时(秒)
+    5: string query_feature_id   // 查询特征ID
+    6: SearchMetadata metadata   // 搜索元数据
+}
+
+struct SearchMetadata {
+    1: string search_id          // 搜索ID
+    2: string model_used         // 使用的模型
+    3: i32 index_version         // 索引版本
+    4: string search_strategy    // 搜索策略
+    5: map<string, string> debug_info // 调试信息
+}
+
+// 视频关键帧提取请求
+struct VideoKeyFrameExtractRequest {
+    1: i64 video_id
+    2: string video_url
+    3: i32 frame_interval         // 提取间隔（秒）
+    4: i32 max_frames            // 最大帧数
+    5: string extract_method     // 提取方法：uniform, scene_change, ai_select
+    6: string quality            // 提取质量：low, medium, high
+}
+
+struct VideoKeyFrameExtractResponse {
+    1: base.Status base
+    2: list<KeyFrame> key_frames
+    3: i64 processing_job_id     // 处理任务ID
+    4: string processing_status  // 处理状态
+}
+
+struct KeyFrame {
+    1: string frame_id
+    2: string frame_url          // 关键帧图像URL
+    3: double timestamp          // 时间戳（秒）
+    4: list<double> feature_vector // 特征向量
+    5: string scene_description  // 场景描述（AI生成）
+    6: list<string> detected_objects // 检测到的物体
+    7: map<string, double> confidence_scores // 置信度分数
+}
+
+// 批量图像处理请求
+struct BatchImageProcessRequest {
+    1: i64 user_id
+    2: list<string> image_urls   // 图像URL列表
+    3: string process_type       // 处理类型：extract_features, create_index
+    4: string callback_url       // 回调URL
+    5: map<string, string> process_params // 处理参数
+}
+
+struct BatchImageProcessResponse {
+    1: base.Status base
+    2: string batch_job_id       // 批处理任务ID
+    3: i64 estimated_time        // 预估处理时间（秒）
+    4: i32 total_images          // 总图像数
+    5: string job_status_url     // 任务状态查询URL
+}
+
+// 图像索引管理
+struct ImageIndexManageRequest {
+    1: i64 user_id
+    2: string operation          // 操作类型：create, update, delete, rebuild
+    3: string index_name         // 索引名称
+    4: list<i64> video_ids       // 视频ID列表（可选）
+    5: map<string, string> index_params // 索引参数
+}
+
+struct ImageIndexManageResponse {
+    1: base.Status base
+    2: string operation_id       // 操作ID
+    3: string index_status       // 索引状态
+    4: i64 indexed_count         // 已索引数量
+    5: string estimated_completion // 预估完成时间
+}
+
+// 相似度分析请求
+struct SimilarityAnalysisRequest {
+    1: string image_url_a
+    2: string image_url_b
+    3: string analysis_type      // 分析类型：structural, semantic, perceptual
+    4: string model_type         // 模型类型
+}
+
+struct SimilarityAnalysisResponse {
+    1: base.Status base
+    2: double similarity_score
+    3: map<string, double> detailed_scores // 详细分数
+    4: string analysis_report    // 分析报告
+    5: list<string> difference_regions // 差异区域
+} 

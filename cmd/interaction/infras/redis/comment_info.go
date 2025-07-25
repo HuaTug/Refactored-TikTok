@@ -29,7 +29,7 @@ func GetCommentLikeCount(commentId int64) (int64, error) {
 	if err != nil {
 		return -1, err
 	}
-	//	
+	//
 	countNew, err := redisDBCommentInfo.ZCount("nl_comment:"+fmt.Sprint(commentId), "1", "1").Result()
 	if err != nil {
 		return -1, err
@@ -122,6 +122,18 @@ func RemoveCommentLikeInfo(commentId, userId int64) error {
 		return err
 	}
 	return nil
+}
+
+// IncrCommentLikeCount 增加评论点赞数
+func IncrCommentLikeCount(commentId int64) error {
+	_, err := redisDBCommentInfo.Incr(fmt.Sprintf("comment_like_count:%d", commentId)).Result()
+	return err
+}
+
+// DecrCommentLikeCount 减少评论点赞数
+func DecrCommentLikeCount(commentId int64) error {
+	_, err := redisDBCommentInfo.Decr(fmt.Sprintf("comment_like_count:%d", commentId)).Result()
+	return err
 }
 
 // 删除所有评论

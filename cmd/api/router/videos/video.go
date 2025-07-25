@@ -62,8 +62,34 @@ func Register(r *server.Hertz) {
 		}
 
 		{
+			// 视频流和资源代理路由
+			_stream := _v1.Group("/stream")
+			_stream.GET("/video", videos.VideoStreamProxy)      // 视频流代理
+			_stream.GET("/thumbnail", videos.VideoThumbnailProxy) // 缩略图代理
+			_stream.GET("/metadata", videos.VideoMetadataProxy)  // 视频元数据
+		}
+
+		{
 			_visit := _v1.Group("/visit", _visitMw()...)
 			_visit.POST("/:id", append(_videoidlistMw(), videos.VideoVisit)...)
+		}
+
+		// ========== 以图搜图功能路由 ==========
+		{
+			_imageSearch := _v1.Group("/image", _authMw()...)
+			
+			// 图像搜索
+			_imageSearch.POST("/search/upload", videos.ImageSearchByUpload)    // 上传图片搜索
+			_imageSearch.POST("/search/url", videos.ImageSearchByURL)          // URL图片搜索
+			
+			// 特征提取
+			_imageSearch.POST("/features/extract", videos.ExtractImageFeatures) // 提取特征
+			
+			// 批量处理
+			_imageSearch.POST("/batch/process", videos.BatchImageProcess)       // 批量处理
+			
+			// 相似度分析
+			_imageSearch.POST("/similarity/analysis", videos.SimilarityAnalysis) // 相似度分析
 		}
 	}
 }

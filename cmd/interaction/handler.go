@@ -6,12 +6,22 @@ import (
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
+	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/pkg/errors"
 )
 
-type InteractionServiceImpl struct{}
+type InteractionServiceImpl struct {
+	producer *mq.Producer
+}
+
+// 全局生产者实例，在main.go中初始化
+var globalProducer *mq.Producer
+
+func SetGlobalProducer(producer *mq.Producer) {
+	globalProducer = producer
+}
 
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
 	resp = new(interactions.LikeActionResponse)
@@ -138,5 +148,62 @@ func (s *InteractionServiceImpl) VideoPopularList(ctx context.Context, req *inte
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Show VideoPopular Successfully"
 	resp.Data = *temp
+	return resp, nil
+}
+
+// ========== V2版本API实现 ==========
+
+func (s *InteractionServiceImpl) LikeActionV2(ctx context.Context, req *interactions.LikeActionRequestV2) (resp *interactions.LikeActionResponseV2, err error) {
+	// 使用全局producer实例
+	likeServiceV2 := service.NewLikeActionServiceV2(ctx, globalProducer)
+
+	resp, err = likeServiceV2.LikeActionV2(ctx, req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.LikeActionV2 failed, original error: %v", errors.Cause(err))
+		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		if resp == nil {
+			resp = &interactions.LikeActionResponseV2{
+				Base: &base.Status{
+					Code: consts.StatusInternalServerError,
+					Msg:  "内部服务错误",
+				},
+			}
+		}
+		return resp, err
+	}
+
+	return resp, nil
+}
+
+// ========== 通知功能实现 ==========
+
+func (s *InteractionServiceImpl) GetNotifications(ctx context.Context, req *interactions.GetNotificationsRequest) (resp *interactions.GetNotificationsResponse, err error) {
+	resp = &interactions.GetNotificationsResponse{
+		Base: &base.Status{},
+	}
+
+	// TODO: 实现获取通知列表的逻辑
+	// 这里需要从数据库或缓存中查询用户的通知
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "获取通知列表成功"
+	resp.Notifications = []*interactions.NotificationInfo{} // 暂时返回空列表
+	resp.TotalCount = 0
+	resp.UnreadCount = 0
+
+	return resp, nil
+}
+
+func (s *InteractionServiceImpl) MarkNotificationRead(ctx context.Context, req *interactions.MarkNotificationReadRequest) (resp *interactions.MarkNotificationReadResponse, err error) {
+	resp = &interactions.MarkNotificationReadResponse{
+		Base: &base.Status{},
+	}
+
+	// TODO: 实现标记通知为已读的逻辑
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "标记通知为已读成功"
+	resp.MarkedCount = int64(len(req.NotificationIds))
+
 	return resp, nil
 }

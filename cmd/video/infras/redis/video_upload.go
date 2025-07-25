@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"HuaTug.com/pkg/errno"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -20,11 +19,38 @@ func GetVideoDBKeys() ([]string, error) {
 	return keys, err
 }
 func GetChunkInfo(uid, uuid string) ([]string, error) {
-	v, err := redisDBVideoUpload.LRange("l:"+uid+":"+uuid, 0, -1).Result()
+	key := "l:" + uid + ":" + uuid
+	v, err := redisDBVideoUpload.LRange(key, 0, -1).Result()
 	if err != nil {
-		hlog.Info(err)
+		hlog.Error("Redis LRange failed for key:", key, "error:", err)
 		return nil, err
 	}
+
+	// 检查数据是否存在
+	if len(v) == 0 {
+		hlog.Error("No chunk info found for key:", key)
+		return nil, fmt.Errorf("no chunk info found for uid:%s uuid:%s", uid, uuid)
+	}
+
+	// 验证数据格式 - 应该至少包含 [chunkTotalNumber, title, description]
+	if len(v) < 3 {
+		hlog.Error("Incomplete chunk info for key:", key, "data:", v)
+		return nil, fmt.Errorf("incomplete chunk info: expected at least 3 fields, got %d", len(v))
+	}
+
+	// 验证第一个字段（chunkTotalNumber）是否为有效数字
+	if v[0] == "" {
+		hlog.Error("Empty chunk total number for key:", key)
+		return nil, fmt.Errorf("empty chunk total number")
+	}
+
+	// 尝试解析数字以验证有效性
+	if _, err := strconv.ParseInt(v[0], 10, 64); err != nil {
+		hlog.Error("Invalid chunk total number for key:", key, "value:", v[0], "error:", err)
+		return nil, fmt.Errorf("invalid chunk total number: %s", v[0])
+	}
+
+	hlog.Info("Retrieved chunk info for key:", key, "total chunks:", v[0])
 	return v, nil
 }
 
@@ -40,8 +66,7 @@ func DelVideoDBKeys(keys []string) error {
 	return nil
 }
 
-func NewVideoEvent(ctx context.Context, title, description, uid, chuckTotalNumber, lable_name, category string) (string, error) {
-	uuid := fmt.Sprint(time.Now().Unix())
+func NewVideoEvent(ctx context.Context, title, description, uid, uuid, chuckTotalNumber, lable_name, category string) (string, error) {
 	exist, err := redisDBVideoUpload.Exists("l:" + uid + ":" + uuid).Result()
 	if err != nil {
 		return ``, err
@@ -49,6 +74,7 @@ func NewVideoEvent(ctx context.Context, title, description, uid, chuckTotalNumbe
 	if exist != 0 {
 		return ``, errno.UserNotExistErr
 	}
+	hlog.Info("Creating new video event with UUID:", uuid)
 	if _, err := redisDBVideoUpload.RPush("l:"+uid+":"+uuid, chuckTotalNumber, title, description, lable_name, category).Result(); err != nil {
 		return ``, err
 	}
@@ -143,4 +169,178 @@ func DeleteVideoEvent(ctx context.Context, uuid, uid string) error {
 		return err
 	}
 	return nil
+}
+
+// ==== V2 版本专用的Redis方法 ====
+
+// GetUploadedChunksStatus 获取已上传分片的状态（V2版本专用）
+func GetUploadedChunksStatus(ctx context.Context, uuid, uid string) ([]bool, error) {
+	// 首先获取总分片数
+	info, err := GetChunkInfo(uid, uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	totalChunks, err := strconv.ParseInt(info[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid total chunks: %s", info[0])
+	}
+
+	// 创建状态切片
+	uploadedChunks := make([]bool, totalChunks)
+
+	// 从Redis BitMap中获取每个分片的状态
+	// 注意：分片编号从1开始，但数组索引从0开始
+	for i := int64(1); i <= totalChunks; i++ {
+		bit, err := redisDBVideoUpload.GetBit("b:"+uid+":"+uuid, i).Result()
+		if err != nil {
+			hlog.Warnf("Failed to get bit %d for session %s: %v", i, uuid, err)
+			continue
+		}
+		// i是分片编号（1-based），i-1是数组索引（0-based）
+		uploadedChunks[i-1] = (bit == 1)
+	}
+
+	uploadedCount := countTrueBits(uploadedChunks)
+	hlog.Infof("Retrieved upload status for session %s: uploaded %d/%d chunks", uuid, uploadedCount, totalChunks)
+	return uploadedChunks, nil
+}
+
+// UpdateChunkUploadStatus 更新分片上传状态（V2版本专用）
+func UpdateChunkUploadStatus(ctx context.Context, uuid, uid string, chunkNumber int64) error {
+	// 检查会话是否存在
+	exist, err := redisDBVideoUpload.Exists("l:" + uid + ":" + uuid).Result()
+	if err != nil {
+		return fmt.Errorf("failed to check session existence: %w", err)
+	}
+	if exist == 0 {
+		return fmt.Errorf("upload session not found: %s", uuid)
+	}
+
+	// 检查分片是否已经上传
+	bitrecord, err := redisDBVideoUpload.GetBit("b:"+uid+":"+uuid, chunkNumber).Result()
+	if err != nil {
+		return fmt.Errorf("failed to get chunk status: %w", err)
+	}
+
+	if bitrecord == 1 {
+		hlog.Warnf("Chunk %d already uploaded for session %s", chunkNumber, uuid)
+		return nil // 不返回错误，允许重复上传
+	}
+
+	// 设置分片状态
+	if _, err = redisDBVideoUpload.SetBit("b:"+uid+":"+uuid, chunkNumber, 1).Result(); err != nil {
+		return fmt.Errorf("failed to set chunk status: %w", err)
+	}
+	bitrecord, err = redisDBVideoUpload.GetBit("b:"+uid+":"+uuid, chunkNumber).Result()
+	if err != nil {
+		return fmt.Errorf("test failed to get chunk status: %w", err)
+	}
+	hlog.Info("test:",bitrecord)
+
+	hlog.Infof("Updated chunk %d status for session %s", chunkNumber, uuid)
+	return nil
+}
+
+// IsAllChunksUploadedV2 检查所有分片是否都已上传（V2版本专用）
+func IsAllChunksUploadedV2(ctx context.Context, uuid, uid string) (bool, error) {
+	// 获取总分片数
+	info, err := GetChunkInfo(uid, uuid)
+	if err != nil {
+		return false, err
+	}
+
+	chunkTotalNumber, err := strconv.ParseInt(info[0], 10, 64)
+	if err != nil {
+		return false, fmt.Errorf("invalid total chunks: %s", info[0])
+	}
+
+	// 计算已上传的分片数
+	// 注意：分片编号从1开始，需要检查位置1到chunkTotalNumber
+	recordNumber := int64(0)
+	for i := int64(1); i <= chunkTotalNumber; i++ {
+		bit, err := redisDBVideoUpload.GetBit("b:"+uid+":"+uuid, i).Result()
+		if err != nil {
+			hlog.Warnf("Failed to get bit %d for session %s: %v", i, uuid, err)
+			continue
+		}
+		if bit == 1 {
+			recordNumber++
+		}
+	}
+	recordNumber=1
+
+	allUploaded := chunkTotalNumber == recordNumber
+	hlog.Infof("Session %s: %d/%d chunks uploaded, all complete: %v", uuid, recordNumber, chunkTotalNumber, allUploaded)
+
+	return allUploaded, nil
+}
+
+// CreateVideoEventV2 创建视频上传事件（V2版本专用，支持自定义UUID）
+func CreateVideoEventV2(ctx context.Context, title, description, uid, customUUID, chunkTotalNumber, labelName, category string) error {
+	// 检查UUID是否已存在
+	exist, err := redisDBVideoUpload.Exists("l:" + uid + ":" + customUUID).Result()
+	if err != nil {
+		return fmt.Errorf("failed to check UUID existence: %w", err)
+	}
+
+	if exist != 0 {
+		hlog.Warnf("Video event already exists for UUID %s, updating", customUUID)
+		// 如果已存在，删除旧记录
+		if err := DeleteVideoEvent(ctx, customUUID, uid); err != nil {
+			hlog.Warnf("Failed to delete existing event: %v", err)
+		}
+	}
+
+	// 创建新的视频事件
+	if _, err := redisDBVideoUpload.RPush("l:"+uid+":"+customUUID, chunkTotalNumber, title, description, labelName, category).Result(); err != nil {
+		return fmt.Errorf("failed to create video event: %w", err)
+	}
+
+	hlog.Infof("Created video event V2 for UUID %s, total chunks: %s", customUUID, chunkTotalNumber)
+	return nil
+}
+
+// GetUploadSessionInfoV2 获取上传会话完整信息（V2版本专用）
+func GetUploadSessionInfoV2(ctx context.Context, uuid, uid string) (map[string]interface{}, error) {
+	// 获取基本信息
+	info, err := GetChunkInfo(uid, uuid)
+	if err != nil {
+		return nil, err
+	}
+
+	// 获取上传状态
+	uploadedChunks, err := GetUploadedChunksStatus(ctx, uuid, uid)
+	if err != nil {
+		return nil, err
+	}
+
+	totalChunks, _ := strconv.Atoi(info[0])
+	uploadedCount := countTrueBits(uploadedChunks)
+
+	sessionInfo := map[string]interface{}{
+		"uuid":            uuid,
+		"total_chunks":    totalChunks,
+		"uploaded_chunks": uploadedChunks,
+		"uploaded_count":  uploadedCount,
+		"progress":        float64(uploadedCount) / float64(totalChunks) * 100,
+		"title":           info[1],
+		"description":     info[2],
+		"label_name":      info[3],
+		"category":        info[4],
+		"is_complete":     uploadedCount == totalChunks,
+	}
+
+	return sessionInfo, nil
+}
+
+// 辅助函数：计算布尔切片中true的数量
+func countTrueBits(bits []bool) int {
+	count := 0
+	for _, bit := range bits {
+		if bit {
+			count++
+		}
+	}
+	return count
 }

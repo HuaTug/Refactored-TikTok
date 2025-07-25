@@ -206,3 +206,20 @@ func AddUserCommentBehavior(ctx context.Context, behavior *model.UserBehavior) e
 	}
 	return nil
 }
+
+// 获取视频信息
+func GetVideoInfo(ctx context.Context, videoID int64) (*model.Video, error) {
+	var video model.Video
+	if err := DB.WithContext(ctx).Model(&model.Video{}).Where("video_id = ?", videoID).First(&video).Error; err != nil {
+		return nil, err
+	}
+	return &video, nil
+}
+
+// 通知相关的数据库操作
+func CreateNotification(ctx context.Context, notification interface{}) error {
+	if err := DB.WithContext(ctx).Create(notification).Error; err != nil {
+		return err
+	}
+	return nil
+}

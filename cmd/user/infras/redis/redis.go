@@ -33,3 +33,35 @@ func DeleteKey(key string) error {
 	}
 	return nil
 }
+
+// DelCode 删除验证码
+func DelCode(email string) error {
+	return DeleteKey(email)
+}
+
+// SetResetToken 设置重置密码令牌
+func SetResetToken(email, token string, expiration time.Duration) error {
+	key := "reset_token:" + email
+	if err := redisDB.Set(key, token, expiration).Err(); err != nil {
+		hlog.Info("Redis set reset token failed : ", err)
+		return err
+	}
+	return nil
+}
+
+// GetResetToken 获取重置密码令牌
+func GetResetToken(email string) (string, error) {
+	key := "reset_token:" + email
+	token, err := redisDB.Get(key).Result()
+	if err != nil {
+		hlog.Info("Redis get reset token failed : ", err)
+		return "", err
+	}
+	return token, nil
+}
+
+// DelResetToken 删除重置密码令牌
+func DelResetToken(email string) error {
+	key := "reset_token:" + email
+	return DeleteKey(key)
+}

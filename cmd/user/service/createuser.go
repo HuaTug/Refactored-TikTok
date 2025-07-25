@@ -33,15 +33,15 @@ func (v *CreateUserService) CreateUser(req *users.CreateUserRequest) error {
 	if err != nil {
 		return errors.WithMessage(err, "Password fail to crypt")
 	}
-  hlog.Info("username:",req.UserName,"password:",req.Password,"email:",req.Email)
+	hlog.Info("username:", req.UserName, "password:", req.Password, "email:", req.Email)
 	err = db.CreateUser(v.ctx, &base.User{
-		Password:  passWord,
 		UserName:  req.UserName,
-		CreatedAt: time.Now().Format(constants.DataFormate),
-		UpdatedAt: time.Now().Format(constants.DataFormate),
 		Email:     req.Email,
 		Sex:       req.Sex,
+		Password:  passWord,
 		AvatarUrl: "HuaTug.com",
+		CreatedAt: time.Now().Format(constants.DataFormate),
+		UpdatedAt: time.Now().Format(constants.DataFormate),
 	})
 	if err != nil {
 		return errors.WithMessage(err, "dao.CreateUser failed")

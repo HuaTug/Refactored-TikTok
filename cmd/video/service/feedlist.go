@@ -34,10 +34,18 @@ func NewFeedListService(ctx context.Context) *FeedListService {
 // }
 
 // FeedList 视频流接口
-func (v *FeedListService) FeedList(req *videos.FeedServiceRequest) ([]*base.Video, error) {
-	res, err := db.Feedlist(v.ctx, req)
-	if err != nil {
-		return nil, err
+func (v *FeedListService) FeedList(req *videos.FeedServiceRequest) (res []*base.Video, err error) {
+	if req.LastTime == "" {
+		res, err = db.GetAllFeedList(v.ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		res, err = db.Feedlist(v.ctx, req)
+		if err != nil {
+			return nil, err
+		}
 	}
 	VideoFiles = res
 	return res, nil
