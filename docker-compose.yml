@@ -7,9 +7,9 @@ services:
       - ./config/mysql/my.cnf:/etc/mysql/my.cnf
     environment:
       - MYSQL_DATABASE=TikTok
-      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_ROOT_PASSWORD=TikTok@MySQL#2025!Secure
     ports:
-      - "3306:3306"
+      - "3307:3306"  # 修改端口避免冲突
     privileged: true
     networks:
       - docker_net
@@ -20,22 +20,33 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./config/cache/redis/redis.conf:/usr/local/etc/redis/redis.conf  
+      - ./config/cache/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./data/redis:/data  # 数据持久化
+      - ./logs/redis:/logs  # 日志目录
     command: redis-server /usr/local/etc/redis/redis.conf
-    networks:
-      - docker_net
-
-  rabbitmq:
-    image: rabbitmq:3.8.5-management
-    container_name: rabbitmq_kitex
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     environment:
-      - RABBITMQ_DEFAULT_USER=guest
-      - RABBITMQ_DEFAULT_PASS=guest
+      - REDIS_PASSWORD=Redis@TikTok#2025!SecurePass
+    # 使用非root用户运行Redis
+    user: "999:999"  # redis用户
+    # 安全限制
+    security_opt:
+      - no-new-privileges:true
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "Redis@TikTok#2025!SecurePass", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - docker_net
+    restart: unless-stopped
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
@@ -45,6 +56,11 @@ services:
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - xpack.security.enabled=false
       - xpack.security.http.ssl.enabled=false
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
     volumes:
       - ./config/Es:/usr/share/elasticsearch/data
     ports:
@@ -52,6 +68,7 @@ services:
       - "9300:9300"
     networks:
       - docker_net
+    user: "1000:1000"  # 解决权限问题
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.9.0
@@ -105,8 +122,8 @@ services:
     container_name: milvus-minio
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: milvus_admin_2025
+      MINIO_SECRET_KEY: MilvusMinIO@TikTok#2025!SecureKey
     ports:
       - "9001:9001"
       - "9000:9000"
@@ -128,8 +145,8 @@ services:
     environment:
       ETCD_ENDPOINTS: milvus-etcd:2379
       MINIO_ADDRESS: milvus-minio:9000
-    volumes:
-      - ./config/milvus/milvus.yaml:/milvus/configs/milvus.yaml
+    # volumes:
+    #   - ./config/milvus/milvus.yaml:/milvus/configs/milvus.yaml  # 暂时注释，配置有问题
     ports:
       - "19530:19530"
       - "9091:9091"
@@ -145,114 +162,90 @@ services:
     networks:
       - docker_net
 
-  # AI模型服务 (图像特征提取)
-  ai-model-service:
-    build: 
-      context: ./cmd/model
-      dockerfile: Dockerfile.ai
-    container_name: ai_model_service
-    environment:
-      - MODEL_PATH=/models
-      - CUDA_VISIBLE_DEVICES=0  # GPU支持
-      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-    volumes:
-      - ./models:/models
-      - ./data/temp:/tmp/processing
-    ports:
-      - "8888:8888"  # AI模型服务端口
-    depends_on:
-      - redis
-      - rabbitmq
-    networks:
-      - docker_net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]  # GPU支持
+  # AI模型服务 (图像特征提取) - 暂时注释，缺少 Dockerfile.ai
+  # ai-model-service:
+  #   build: 
+  #     context: ./cmd/model
+  #     dockerfile: Dockerfile.ai
+  #   container_name: ai_model_service
+  #   environment:
+  #     - MODEL_PATH=/models
+  #     - CUDA_VISIBLE_DEVICES=0  # GPU支持
+  #     - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+  #   volumes:
+  #     - ./models:/models
+  #     - ./data/temp:/tmp/processing
+  #   ports:
+  #     - "8888:8888"  # AI模型服务端口
+  #   depends_on:
+  #     - redis
+  #     - rabbitmq
+  #   networks:
+  #     - docker_net
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]  # GPU支持
 
-  # 图像处理工作队列
-  image-processor:
-    build:
-      context: ./cmd/model
-      dockerfile: Dockerfile.processor
-    container_name: image_processor
-    environment:
-      - WORKER_CONCURRENCY=4
-      - REDIS_URL=redis:6379
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-      - MILVUS_URL=milvus-standalone:19530
-    volumes:
-      - ./data/images:/data/images
-      - ./data/temp:/tmp/processing
-    depends_on:
-      - redis
-      - rabbitmq
-      - milvus-standalone
-      - ai-model-service
-    networks:
-      - docker_net
-    deploy:
-      replicas: 2  # 多个处理实例
-    ports:
-      - "2379:2379"
-      - "2380:2380"
-    networks:
-      - docker_net
+  # 图像处理工作队列 - 暂时注释，缺少 Dockerfile.processor
+  # image-processor:
+  #   build:
+  #     context: ./cmd/model
+  #     dockerfile: Dockerfile.processor
+  #   environment:
+  #     - WORKER_CONCURRENCY=4
+  #     - REDIS_URL=redis:6379
+  #     - RABBITMQ_URL=amqp://tiktok_admin:RabbitMQ@TikTok#2025!Secure@rabbitmq:5672/
+  #     - MILVUS_URL=milvus-standalone:19530
+  #   volumes:
+  #     - ./data/images:/data/images
+  #     - ./data/temp:/tmp/processing
+  #   depends_on:
+  #     - redis
+  #     - rabbitmq
+  #     - milvus-standalone
+  #     - ai-model-service
+  #   deploy:
+  #     replicas: 2  # 多个处理实例
+  #   ports:
+  #     - "2379:2379"
+  #     - "2380:2380"
+  #   networks:
+  #     - docker_net
 
   minio:
     image: minio/minio:latest # 使用最新的 MinIO 版本
     container_name: minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"  # 修改端口避免冲突
+      - "9003:9001"  # 修改端口避免冲突
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: tiktok_minio_admin
+      MINIO_ROOT_PASSWORD: MainMinIO@TikTok#2025!SecurePass
     command: server /data --console-address ":9001"
     volumes:
       - ./config/minio/data:/data
     networks:
       - docker_net
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    hostname: zookeeper
-    container_name: zookeeper
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-      ZOOKEEPER_SERVER_ID: 1
-      ZOOKEEPER_SERVERS: zookeeper:2888:3888
-    networks:
-      - docker_net
-
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: wurstmeister/kafka:latest
     hostname: kafka
     container_name: kafka
     ports:
       - "9092:9092"
-      - "29092:29092"
-      - "9999:9999"
     environment:
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://${DOCKER_HOST_IP:-127.0.0.1}:9092,DOCKER://host.docker.internal:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,DOCKER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
-      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_HOST_NAME: localhost
+      KAFKA_ADVERTISED_PORT: 9092
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_BROKER_ID: 1
-      KAFKA_LOG4J_LOGGERS: "kafka.controller=INFO,kafka.producer.async.DefaultEventHandler=INFO,state.change.logger=INFO"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_JMX_PORT: 9999
-      KAFKA_JMX_HOSTNAME: ${DOCKER_HOST_IP:-127.0.0.1}
-      KAFKA_AUTHORIZER_CLASS_NAME: kafka.security.authorizer.AclAuthorizer
-      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_CREATE_TOPICS: "test-topic:1:1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - zookeeper
     networks:
@@ -268,8 +261,73 @@ services:
     environment:
       DYNAMIC_CONFIG_ENABLED: "TRUE"
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - docker_net
 
+  # ZooKeeper 安全配置 - 支持ACL权限认证
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: secure_zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      # 基础配置
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 10
+      ZOOKEEPER_SYNC_LIMIT: 5
+      ZOOKEEPER_MAX_CLIENT_CNXNS: 60
+      
+      # 安全配置 - 启用SASL认证
+      ZOOKEEPER_AUTH_PROVIDER_SASL: org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+      ZOOKEEPER_REQUIRE_CLIENT_AUTH_SCHEME: sasl
+      ZOOKEEPER_JAAS_LOGIN_RENEW: 3600000
+      
+      # JVM配置
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+      KAFKA_JVM_PERFORMANCE_OPTS: "-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35"
+      
+      # 日志配置
+      ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: INFO
+      ZOOKEEPER_LOG4J_LOGGERS: "org.apache.zookeeper=INFO"
+      
+      # 安全选项
+      KAFKA_OPTS: >-
+        -Djava.security.auth.login.config=/etc/kafka/secrets/zookeeper_jaas.conf
+        -Dzookeeper.authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider
+        -Dzookeeper.requireClientAuthScheme=sasl
+        -Dzookeeper.skipACL=false
+    volumes:
+      # 配置文件挂载 - 移除log4j.properties挂载避免权限问题
+      - ./config/zookeeper/zoo.cfg:/etc/kafka/zoo.cfg
+      - ./config/zookeeper/zookeeper_jaas.conf:/etc/kafka/secrets/zookeeper_jaas.conf
+      - ./config/zookeeper/init-acl.sh:/opt/kafka/bin/init-acl.sh
+      # 数据持久化
+      - ./data/zookeeper/data:/var/lib/zookeeper/data
+      - ./data/zookeeper/logs:/var/lib/zookeeper/log
+      - ./logs/zookeeper:/logs
+    # 安全限制
+    security_opt:
+      - no-new-privileges:true
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo 'ruok' | nc localhost 2181 | grep imok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - docker_net
+    restart: unless-stopped
+    
   work:
     image: work:latest
     container_name: Micro_Server
