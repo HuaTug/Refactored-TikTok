@@ -72,7 +72,6 @@ func AccessTokenJwtInit() {
 			}
 			return jwt.MapClaims{}
 		},
-
 		LoginResponse: func(ctx context.Context, c *app.RequestContext, code int, message string, time time.Time) {
 			hlog.CtxInfof(ctx, "Login Successfully. IP: "+c.ClientIP())
 			c.Set("Access-Token", message)

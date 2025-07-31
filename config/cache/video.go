@@ -144,7 +144,7 @@ func NewVideoEvent(ctx context.Context, title, description, uid, chunkTotalNumbe
 }
 
 func DoneChunkEvent(ctx context.Context, uuid, uid string, chunk int64) error {
-	bitrecord, err := redisDBVideoUpload.GetBit(ctx, "b:"+uuid, chunk).Result()
+	bitrecord, err := redisDBVideoUpload.GetBit(ctx, "b:"+uid+":"+uuid, chunk).Result()
 	if err != nil {
 		return err
 	}

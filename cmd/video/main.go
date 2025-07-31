@@ -25,9 +25,9 @@ import (
 
 func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
-	dal.Init()
+	config.Init() // 首先加载配置
+	dal.Init()    // 然后初始化数据库（需要使用配置）
 	redis.Load()
-	config.Init()
 	oss.InitMinio()
 	client.Init()
 	// common.NewSyncSerivce().Run()

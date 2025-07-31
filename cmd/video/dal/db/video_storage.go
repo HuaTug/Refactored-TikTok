@@ -206,6 +206,36 @@ func GetUserStorageQuota(ctx context.Context, userID int64) (*UserStorageQuota, 
 	var quota UserStorageQuota
 	err := DB.WithContext(ctx).Where("user_id = ?", userID).First(&quota).Error
 	if err != nil {
+		if err.Error() == "record not found" {
+			// 如果没有配额记录，创建默认配额
+			defaultQuota := &UserStorageQuota{
+				UserID:             userID,
+				MaxStorageBytes:    10737418240, // 10GB
+				MaxVideoCount:      1000,
+				MaxVideoDuration:   600,        // 10分钟
+				MaxVideoSize:       1073741824, // 1GB
+				UsedStorageBytes:   0,
+				VideoCount:         0,
+				DraftCount:         0,
+				QuotaExceeded:      false,
+				WarningSent:        false,
+				QuotaLevel:         "basic",
+				TotalUploadBytes:   0,
+				TotalDownloadBytes: 0,
+				LastUploadAt:       nil,
+				CreatedAt:          time.Now(),
+				UpdatedAt:          time.Now(),
+			}
+
+			createErr := DB.WithContext(ctx).Create(defaultQuota).Error
+			if createErr != nil {
+				hlog.Errorf("Failed to create default user storage quota for user %d: %v", userID, createErr)
+				return nil, createErr
+			}
+
+			hlog.Infof("Created default storage quota for user %d", userID)
+			return defaultQuota, nil
+		}
 		hlog.Errorf("Failed to get user storage quota for user %d: %v", userID, err)
 		return nil, err
 	}

@@ -25,7 +25,7 @@ services:
       - ./logs/redis:/logs  # 日志目录
     command: redis-server /usr/local/etc/redis/redis.conf
     environment:
-      - REDIS_PASSWORD=Redis@TikTok#2025!SecurePass
+      - REDIS_PASSWORD=Redis@TikTok#2025_SecurePass
     # 使用非root用户运行Redis
     user: "999:999"  # redis用户
     # 安全限制
@@ -39,7 +39,7 @@ services:
           cpus: '0.5'
     # 健康检查
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "Redis@TikTok#2025!SecurePass", "ping"]
+      test: ["CMD", "redis-cli", "-a", "Redis@TikTok2025_SecurePass", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -86,6 +86,9 @@ services:
   etcd:
     image: bitnami/etcd:3.5.9
     container_name: etcd
+    ports:
+      - "2379:2379"
+      - "2380:2380"
     environment:
       - ALLOW_NONE_AUTHENTICATION=yes
       - ETCD_NAME=etcd01
@@ -95,126 +98,8 @@ services:
       - ETCD_INITIAL_CLUSTER_STATE=new
       - ETCD_INITIAL_CLUSTER_TOKEN=etcd-cluster-1
       - ETCD_INITIAL_CLUSTER=etcd01=http://etcd:2380
-
-  # ========== 以图搜图服务扩展 ==========
-  
-  # Milvus 向量数据库
-  milvus-etcd:
-    container_name: milvus-etcd
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      - ETCD_AUTO_COMPACTION_MODE=revision
-      - ETCD_AUTO_COMPACTION_RETENTION=1000
-      - ETCD_QUOTA_BACKEND_BYTES=4294967296
-      - ETCD_SNAPSHOT_COUNT=50000
-    volumes:
-      - ./config/milvus/etcd:/etcd
-    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-    healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
     networks:
       - docker_net
-
-  milvus-minio:
-    container_name: milvus-minio
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
-    environment:
-      MINIO_ACCESS_KEY: milvus_admin_2025
-      MINIO_SECRET_KEY: MilvusMinIO@TikTok#2025!SecureKey
-    ports:
-      - "9001:9001"
-      - "9000:9000"
-    volumes:
-      - ./config/milvus/minio:/minio_data
-    command: minio server /minio_data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
-    networks:
-      - docker_net
-
-  milvus-standalone:
-    container_name: milvus-standalone
-    image: milvusdb/milvus:v2.3.0
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_ENDPOINTS: milvus-etcd:2379
-      MINIO_ADDRESS: milvus-minio:9000
-    # volumes:
-    #   - ./config/milvus/milvus.yaml:/milvus/configs/milvus.yaml  # 暂时注释，配置有问题
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    depends_on:
-      - "milvus-etcd"
-      - "milvus-minio"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 30s
-      start_period: 90s
-      timeout: 20s
-      retries: 3
-    networks:
-      - docker_net
-
-  # AI模型服务 (图像特征提取) - 暂时注释，缺少 Dockerfile.ai
-  # ai-model-service:
-  #   build: 
-  #     context: ./cmd/model
-  #     dockerfile: Dockerfile.ai
-  #   container_name: ai_model_service
-  #   environment:
-  #     - MODEL_PATH=/models
-  #     - CUDA_VISIBLE_DEVICES=0  # GPU支持
-  #     - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-  #   volumes:
-  #     - ./models:/models
-  #     - ./data/temp:/tmp/processing
-  #   ports:
-  #     - "8888:8888"  # AI模型服务端口
-  #   depends_on:
-  #     - redis
-  #     - rabbitmq
-  #   networks:
-  #     - docker_net
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: [gpu]  # GPU支持
-
-  # 图像处理工作队列 - 暂时注释，缺少 Dockerfile.processor
-  # image-processor:
-  #   build:
-  #     context: ./cmd/model
-  #     dockerfile: Dockerfile.processor
-  #   environment:
-  #     - WORKER_CONCURRENCY=4
-  #     - REDIS_URL=redis:6379
-  #     - RABBITMQ_URL=amqp://tiktok_admin:RabbitMQ@TikTok#2025!Secure@rabbitmq:5672/
-  #     - MILVUS_URL=milvus-standalone:19530
-  #   volumes:
-  #     - ./data/images:/data/images
-  #     - ./data/temp:/tmp/processing
-  #   depends_on:
-  #     - redis
-  #     - rabbitmq
-  #     - milvus-standalone
-  #     - ai-model-service
-  #   deploy:
-  #     replicas: 2  # 多个处理实例
-  #   ports:
-  #     - "2379:2379"
-  #     - "2380:2380"
-  #   networks:
-  #     - docker_net
 
   minio:
     image: minio/minio:latest # 使用最新的 MinIO 版本
@@ -230,6 +115,37 @@ services:
       - ./config/minio/data:/data
     networks:
       - docker_net
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: kitex_rabbitmq
+    hostname: rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+      - ./logs/rabbitmq:/var/log/rabbitmq
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    networks:
+      - docker_net
+    restart: unless-stopped
 
   kafka:
     image: wurstmeister/kafka:latest

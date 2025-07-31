@@ -107,49 +107,36 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequest)
 	return session, nil
 }
 
-// UploadChunk 上传分片（优化版）
+// UploadChunk 上传分片（高性能优化版）
 func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequest) error {
-	// 1. 获取上传会话
-	session, err := s.getUploadSession(req.Uuid, req.UserId)
-	if err != nil {
-		return fmt.Errorf("failed to get upload session: %w", err)
+	hlog.Infof("Starting upload chunk %d for session %s", req.ChunkNumber, req.Uuid)
+
+	// 1. 基本参数验证（无需查询Redis）
+	if req.ChunkNumber <= 0 {
+		return fmt.Errorf("invalid chunk number %d", req.ChunkNumber)
 	}
 
-	// 2. 验证分片编号
-	if req.ChunkNumber < 1 || req.ChunkNumber > int64(session.TotalChunks) {
-		return fmt.Errorf("invalid chunk number %d, should be between 1 and %d", req.ChunkNumber, session.TotalChunks)
-	}
-
-	// 3. 验证分片
+	// 2. 验证分片数据
 	if !s.verifyChunk(req.Data, req.Md5) {
 		return errors.New("chunk verification failed")
 	}
 
+	// 3. 快速构建临时目录路径（避免getUploadSession调用）
+	uid := strconv.FormatInt(req.UserId, 10)
+	tempDir := s.createTempDir(req.UserId, req.Uuid)
+	chunkPath := filepath.Join(tempDir, fmt.Sprintf("chunk_%d.tmp", req.ChunkNumber))
+
 	// 4. 保存分片到临时目录
-	chunkPath := filepath.Join(session.TempDir, fmt.Sprintf("chunk_%d.tmp", req.ChunkNumber))
 	if err := s.saveChunkFile(chunkPath, req.Data); err != nil {
 		return fmt.Errorf("failed to save chunk: %w", err)
 	}
 
-	// 5. 更新Redis中的分片状态（关键修复）
-	uid := strconv.FormatInt(req.UserId, 10)
+	// 5. 更新Redis中的分片状态（这是唯一必需的Redis操作）
 	if err := redis.UpdateChunkUploadStatus(s.ctx, req.Uuid, uid, req.ChunkNumber); err != nil {
 		return fmt.Errorf("failed to update chunk status in Redis: %w", err)
 	}
 
-	// 6. 更新本地session状态
-	session.UploadedChunks[req.ChunkNumber-1] = true
-	session.Status = "uploading"
-
-	// 7. 保存更新后的会话状态
-	if err := s.saveUploadSession(session); err != nil {
-		hlog.Warnf("Failed to save session after chunk upload: %v", err)
-		// 不阻塞主流程，因为Redis中的BitMap已经更新了
-	}
-
-	uploadedCount := s.countUploadedChunks(session.UploadedChunks)
-	hlog.Infof("Uploaded chunk %d/%d for session %s (%d/%d total)",
-		req.ChunkNumber, session.TotalChunks, session.UUID, uploadedCount, session.TotalChunks)
+	hlog.Infof("Successfully uploaded chunk %d for session %s", req.ChunkNumber, req.Uuid)
 	return nil
 }
 
@@ -320,16 +307,7 @@ func (s *VideoUploadServiceV2) CancelUpload(req *videos.VideoPublishCancleReques
 func (s *VideoUploadServiceV2) checkUserStorageQuota(userID int64) error {
 	quota, err := db.GetUserStorageQuota(s.ctx, userID)
 	if err != nil {
-		// 如果没有配额记录，创建默认配额
-		defaultQuota := &db.UserStorageQuota{
-			UserID:          userID,
-			MaxStorageBytes: 10737418240, // 10GB
-			MaxVideoCount:   1000,
-			QuotaLevel:      "basic",
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-		}
-		return db.CreateUserStorageQuota(s.ctx, defaultQuota)
+		return fmt.Errorf("failed to get user storage quota: %w", err)
 	}
 
 	if quota.QuotaExceeded {
@@ -429,7 +407,7 @@ func (s *VideoUploadServiceV2) saveChunkFile(path string, data []byte) error {
 func (s *VideoUploadServiceV2) allChunksUploaded(session *UploadSession) bool {
 	// 使用Redis验证，确保数据一致性
 	uid := strconv.FormatInt(session.UserID, 10)
-	hlog.Info("Sessin.UUID and Uid is",session.UUID,uid)
+	hlog.Info("Sessin.UUID and Uid is", session.UUID, uid)
 	allUploaded, err := redis.IsAllChunksUploadedV2(s.ctx, session.UUID, uid)
 	if err != nil {
 		hlog.Errorf("Failed to check chunks status from Redis for session %s: %v", session.UUID, err)

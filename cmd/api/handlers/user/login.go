@@ -34,8 +34,7 @@ func LoginUser(ctx context.Context, c *app.RequestContext) {
 	RefreshToken := c.GetString("Refresh-Token")
 	// AccessToken := ""
 	// RefreshToken := ""
-	if resp.User != nil {
-		resp.Base.Code = consts.StatusOK
+	if resp.Base.Code == consts.StatusOK {
 		resp.Base.Msg = "Login Success"
 		resp.Token = AccessToken
 		resp.RefreshToken = RefreshToken

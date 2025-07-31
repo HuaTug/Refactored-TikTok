@@ -1,12 +1,13 @@
 mysql:
-  addr: localhost:3306
+  addr: localhost:3307
   username: root
-  password: root
+  password: TikTok@MySQL#2025!Secure
   charset: utf8mb4
   database: TikTok
 
 redis:
   addr: localhost:6379
+  password: Redis@TikTok2025_SecurePass
 
 rabbitmq:
   addr: localhost:5672

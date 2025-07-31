@@ -95,6 +95,10 @@ func NewTikTokStorage() *TikTokStorage {
 
 // 初始化存储桶
 func (ts *TikTokStorage) InitializeBuckets(ctx context.Context) error {
+	if ts.client == nil {
+		return fmt.Errorf("MinIO client is not initialized")
+	}
+
 	buckets := []string{
 		BUCKET_USER_CONTENT,
 		BUCKET_SYSTEM_ASSETS,
@@ -104,23 +108,33 @@ func (ts *TikTokStorage) InitializeBuckets(ctx context.Context) error {
 		BUCKET_ANALYTICS,
 	}
 
-	for _, bucketName := range buckets {
+	hlog.Infof("Starting to initialize %d TikTok storage buckets", len(buckets))
+
+	for i, bucketName := range buckets {
+		hlog.Infof("Checking bucket %d/%d: %s", i+1, len(buckets), bucketName)
+
 		exists, err := ts.client.BucketExists(ctx, bucketName)
 		if err != nil {
+			hlog.Errorf("Failed to check if bucket %s exists: %v", bucketName, err)
 			return fmt.Errorf("check bucket %s error: %w", bucketName, err)
 		}
 
 		if !exists {
+			hlog.Infof("Bucket %s does not exist, creating...", bucketName)
 			err = ts.client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{
 				Region: "us-east-1",
 			})
 			if err != nil {
+				hlog.Errorf("Failed to create bucket %s: %v", bucketName, err)
 				return fmt.Errorf("create bucket %s error: %w", bucketName, err)
 			}
-			hlog.Infof("Created bucket: %s", bucketName)
+			hlog.Infof("Successfully created bucket: %s", bucketName)
+		} else {
+			hlog.Infof("Bucket %s already exists", bucketName)
 		}
 	}
 
+	hlog.Info("All TikTok storage buckets initialized successfully")
 	return nil
 }
 
