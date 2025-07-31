@@ -15,5 +15,16 @@ relation
 !relation/
 *.mp4
 data/
+# 忽略config目录中的运行时数据文件，但保留源码和配置文件
+config/es/_state/
+config/es/snapshot_cache/
+config/es/node.lock
+config/es/write.lock
+config/milvus/etcd/member/
+config/milvus/minio/.minio.sys/
+config/minio/data/.minio.sys/
+config/minio/data/tiktok-*/
+config/minio/data/picture/
+config/minio/data/video/
 logs/
 output/
