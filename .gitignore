@@ -19,6 +19,7 @@ data/
 config/es/_state/
 config/es/snapshot_cache/
 config/es/node.lock
+config/es/nodes
 config/es/write.lock
 config/milvus/etcd/member/
 config/milvus/minio/.minio.sys/
