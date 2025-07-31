@@ -50,12 +50,6 @@ type Client interface {
 	BatchOperateVideosV2(ctx context.Context, req *videos.BatchVideoOperationRequest, callOptions ...callopt.Option) (r *videos.BatchVideoOperationResponse, err error)
 	TranscodeVideoV2(ctx context.Context, req *videos.VideoTranscodingRequest, callOptions ...callopt.Option) (r *videos.VideoTranscodingResponse, err error)
 	GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest, callOptions ...callopt.Option) (r *videos.VideoAnalyticsResponse, err error)
-	ImageFeatureExtract(ctx context.Context, req *videos.ImageFeatureExtractRequest, callOptions ...callopt.Option) (r *videos.ImageFeatureExtractResponse, err error)
-	ImageSearch(ctx context.Context, req *videos.ImageSearchRequest, callOptions ...callopt.Option) (r *videos.ImageSearchResponse, err error)
-	VideoKeyFrameExtract(ctx context.Context, req *videos.VideoKeyFrameExtractRequest, callOptions ...callopt.Option) (r *videos.VideoKeyFrameExtractResponse, err error)
-	BatchImageProcess(ctx context.Context, req *videos.BatchImageProcessRequest, callOptions ...callopt.Option) (r *videos.BatchImageProcessResponse, err error)
-	ImageIndexManage(ctx context.Context, req *videos.ImageIndexManageRequest, callOptions ...callopt.Option) (r *videos.ImageIndexManageResponse, err error)
-	SimilarityAnalysis(ctx context.Context, req *videos.SimilarityAnalysisRequest, callOptions ...callopt.Option) (r *videos.SimilarityAnalysisResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -280,34 +274,4 @@ func (p *kVideoServiceClient) TranscodeVideoV2(ctx context.Context, req *videos.
 func (p *kVideoServiceClient) GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest, callOptions ...callopt.Option) (r *videos.VideoAnalyticsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetVideoAnalyticsV2(ctx, req)
-}
-
-func (p *kVideoServiceClient) ImageFeatureExtract(ctx context.Context, req *videos.ImageFeatureExtractRequest, callOptions ...callopt.Option) (r *videos.ImageFeatureExtractResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.ImageFeatureExtract(ctx, req)
-}
-
-func (p *kVideoServiceClient) ImageSearch(ctx context.Context, req *videos.ImageSearchRequest, callOptions ...callopt.Option) (r *videos.ImageSearchResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.ImageSearch(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoKeyFrameExtract(ctx context.Context, req *videos.VideoKeyFrameExtractRequest, callOptions ...callopt.Option) (r *videos.VideoKeyFrameExtractResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoKeyFrameExtract(ctx, req)
-}
-
-func (p *kVideoServiceClient) BatchImageProcess(ctx context.Context, req *videos.BatchImageProcessRequest, callOptions ...callopt.Option) (r *videos.BatchImageProcessResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.BatchImageProcess(ctx, req)
-}
-
-func (p *kVideoServiceClient) ImageIndexManage(ctx context.Context, req *videos.ImageIndexManageRequest, callOptions ...callopt.Option) (r *videos.ImageIndexManageResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.ImageIndexManage(ctx, req)
-}
-
-func (p *kVideoServiceClient) SimilarityAnalysis(ctx context.Context, req *videos.SimilarityAnalysisRequest, callOptions ...callopt.Option) (r *videos.SimilarityAnalysisResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.SimilarityAnalysis(ctx, req)
 }

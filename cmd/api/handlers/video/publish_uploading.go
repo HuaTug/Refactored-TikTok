@@ -141,8 +141,8 @@ func VideoPublishUploading(ctx context.Context, c *app.RequestContext) {
 	chunkFileName := fmt.Sprintf("%s_part_%d", VideoPublish.FileName, VideoPublish.ChunkNumber)
 	md5hash := utils.GetBytesMD5(buffer[:bytesRead])
 
-	hlog.Info("Processing chunk", VideoPublish.ChunkNumber, "of", chunkTotalNumber,
-		"offset:", offset, "size:", bytesRead, "filename:", chunkFileName)
+	hlog.Info("Processing chunk: ", VideoPublish.ChunkNumber, " of: ", chunkTotalNumber,
+		" offset: ", offset, " size: ", bytesRead, " filename: ", chunkFileName)
 
 	resp, err := rpc.VideoPublishUploading(ctx, &videos.VideoPublishUploadingRequest{
 		UserId:      UserId,

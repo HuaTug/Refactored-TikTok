@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"HuaTug.com/config"
 	"HuaTug.com/config/jaeger"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
@@ -19,22 +20,20 @@ import (
 var VideoClient videoservice.Client
 
 func InitVideoRpc() {
-	r, err := etcd.NewEtcdResolver([]string{"localhost:2379"})
+	config.Init()
+	r, err := etcd.NewEtcdResolver([]string{config.ConfigInfo.Etcd.Addr})
 	if err != nil {
-		panic(err)
+		hlog.Info(err)
 	}
 	suite, closer := jaeger.NewClientTracer().Init("Video")
 	defer closer.Close()
 	c, err := videoservice.NewClient(
 		"Video",
-		/* 		client.WithMiddleware(middleware.CommonMiddleware),
-		   		client.WithInstanceMW(middleware.ClientMiddleware), */
-		client.WithMuxConnection(1),                       // mux
-		client.WithRPCTimeout(30*time.Second),             // rpc timeout
+		client.WithMuxConnection(3),                       // mux
+		client.WithRPCTimeout(60*time.Second),             // rpc timeout increased for video processing
 		client.WithConnectTimeout(50*time.Second),         // conn timeout
 		client.WithFailureRetry(retry.NewFailurePolicy()), // retry
-		//client.WithSuite(trace.NewDefaultClientSuite()),   // tracer
-		client.WithResolver(r), // resolver
+		client.WithResolver(r),                            // resolver
 		client.WithSuite(suite),
 	)
 	if err != nil {

@@ -126,17 +126,17 @@ func (s *VideoServiceImpl) VideoPublishStart(ctx context.Context, req *videos.Vi
 
 		// 如果V2失败，降级到V1
 		hlog.Warnf("Falling back to V1 upload service")
-		// uuid, fallbackErr := service.NewVideoUploadService(ctx).NewUploadEvent(req)
-		// if fallbackErr != nil {
-		// 	resp.Base.Code = consts.StatusBadRequest
-		// 	resp.Base.Msg = "Fail to Start Video Publish (both V2 and V1 failed)!"
-		// 	resp.Uuid = ""
-		// 	return resp, err
-		// }
-		// resp.Base.Code = consts.StatusOK
-		// resp.Base.Msg = "Video Publish Started Successfully (V1 fallback)"
-		// resp.Uuid = uuid
-		// return resp, nil
+		uuid, fallbackErr := service.NewVideoUploadService(ctx).NewUploadEvent(req)
+		if fallbackErr != nil {
+			resp.Base.Code = consts.StatusBadRequest
+			resp.Base.Msg = "Fail to Start Video Publish (both V2 and V1 failed)!"
+			resp.Uuid = ""
+			return resp, err
+		}
+		resp.Base.Code = consts.StatusOK
+		resp.Base.Msg = "Video Publish Started Successfully (V1 fallback)"
+		resp.Uuid = uuid
+		return resp, nil
 	}
 
 	resp.Base.Code = consts.StatusOK
