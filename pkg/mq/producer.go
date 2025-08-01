@@ -15,25 +15,7 @@ type Producer struct {
 	channel *amqp091.Channel
 }
 
-type LikeEvent struct {
-	UserID     int64  `json:"user_id"`
-	VideoID    int64  `json:"video_id"`
-	CommentID  int64  `json:"comment_id"`
-	ActionType string `json:"action_type"` // "like" or "unlike"
-	EventType  string `json:"event_type"`  // "video_like" or "comment_like"
-	Timestamp  int64  `json:"timestamp"`
-	EventID    string `json:"event_id"`
-}
-
-type NotificationEvent struct {
-	UserID           int64  `json:"user_id"`
-	FromUserID       int64  `json:"from_user_id"`
-	NotificationType string `json:"notification_type"` // "like", "comment", "mention"
-	TargetID         int64  `json:"target_id"`
-	Content          string `json:"content"`
-	Timestamp        int64  `json:"timestamp"`
-	EventID          string `json:"event_id"`
-}
+// LikeEvent and NotificationEvent are defined in comment_mq.go
 
 const (
 	LikeEventExchange         = "like_events"

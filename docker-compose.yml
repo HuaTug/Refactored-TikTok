@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:latest
+    image: mysql:8.0.35
     container_name: kitex_mysql    
     volumes:
       - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -8,12 +8,14 @@ services:
     environment:
       - MYSQL_DATABASE=TikTok
       - MYSQL_ROOT_PASSWORD=TikTok@MySQL#2025!Secure
+      # 解决Public Key Retrieval问题
+      - MYSQL_ROOT_HOST=%
+    command: --default-authentication-plugin=mysql_native_password
     ports:
       - "3307:3306"  # 修改端口避免冲突
     privileged: true
     networks:
       - docker_net
-
   redis:
     image: redis:latest
     container_name: kitex_redis
@@ -70,18 +72,18 @@ services:
       - docker_net
     user: "1000:1000"  # 解决权限问题
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.9.0
-    container_name: kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - xpack.security.enabled=false
-    ports:
-      - "5601:5601"
-    networks:
-      - docker_net
-    depends_on:
-      - elasticsearch
+  # kibana:
+  #   image: docker.elastic.co/kibana/kibana:8.9.0
+  #   container_name: kibana
+  #   environment:
+  #     - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+  #     - xpack.security.enabled=false
+  #   ports:
+  #     - "5601:5601"
+  #   networks:
+  #     - docker_net
+  #   depends_on:
+  #     - elasticsearch
 
   etcd:
     image: bitnami/etcd:3.5.9

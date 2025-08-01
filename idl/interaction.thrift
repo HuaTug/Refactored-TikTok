@@ -27,7 +27,8 @@ struct CreateCommentRequest {
     2: i64 video_id 
     3: i64 comment_id
     4: i64 mode
-    5: string content 
+    5: string content
+    6: i64 reply_to_comment_id  // 实际回复目标评论ID，用于记录互动关系
 }
 
 struct CreateCommentResponse {
@@ -38,6 +39,7 @@ struct ListCommentRequest {
     2: i64 comment_id
     3: i64 page_num
     4: i64 page_size
+    5: string sort_type  // "hot" for popular comments (default), "latest" for newest comments
 }
 struct ListCommentResponse {
     1: base.Status base

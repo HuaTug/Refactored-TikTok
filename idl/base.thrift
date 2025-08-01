@@ -56,6 +56,7 @@ struct Comment{
     8: string created_at
     9: string updated_at
     10: string deleted_at
+    11: i64 reply_to_comment_id  // 实际回复目标评论ID，用于记录互动关系
 }
 
 struct Favorite{
