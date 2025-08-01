@@ -3,13 +3,16 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"HuaTug.com/cmd/interaction/dal/db"
+	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
+	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/mq"
@@ -182,6 +185,66 @@ func (service *LikeActionServiceV2) handleCommentLike(ctx context.Context, req *
 	default:
 		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
 	}
+}
+
+// LikeListV2 获取用户点赞的视频列表
+func (service *LikeActionServiceV2) LikeListV2(ctx context.Context, req *interactions.LikeListRequest) (*interactions.LikeListResponse, error) {
+	resp := &interactions.LikeListResponse{
+		Base: &base.Status{},
+	}
+
+	// 参数校验和默认值设置
+	if req.PageNum <= 0 {
+		req.PageNum = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = constants.DefaultLimit
+	}
+
+	// 从数据库获取用户点赞的视频ID列表
+	list, err := db.GetVideoLikeListByUserId(ctx, req.UserId, req.PageNum, req.PageSize)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "Failed to get video like list: %v", err)
+		resp.Base.Code = 500
+		resp.Base.Msg = "获取点赞列表失败"
+		return resp, err
+	}
+
+	hlog.CtxInfof(ctx, "Got like list for user %d: %v", req.UserId, list)
+
+	// 如果没有点赞记录，直接返回空列表
+	if list == nil || len(*list) == 0 {
+		resp.Base.Code = 200
+		resp.Base.Msg = "获取点赞列表成功"
+		resp.Items = []*base.Video{}
+		return resp, nil
+	}
+
+	// 批量获取视频信息
+	res := make([]*base.Video, 0, len(*list))
+	for _, item := range *list {
+		vid, err := strconv.ParseInt(item, 10, 64)
+		if err != nil {
+			hlog.CtxWarnf(ctx, "Invalid video ID: %s", item)
+			continue
+		}
+
+		// 调用视频服务获取视频详情
+		videoResp, err := client.VideoInfo(ctx, &videos.VideoInfoRequest{VideoId: vid})
+		if err != nil {
+			hlog.CtxWarnf(ctx, "Failed to get video info for ID %d: %v", vid, err)
+			continue
+		}
+
+		if videoResp != nil && videoResp.Items != nil {
+			res = append(res, videoResp.Items)
+		}
+	}
+
+	resp.Items = res
+	resp.Base.Code = 200
+	resp.Base.Msg = "获取点赞列表成功"
+	return resp, nil
 }
 
 // 发送点赞通知

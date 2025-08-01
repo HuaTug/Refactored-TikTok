@@ -26,36 +26,60 @@ func SetGlobalProducer(producer *mq.Producer) {
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
 	resp = new(interactions.LikeActionResponse)
 	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	// err = service.NewVideoVisitService(ctx).RecordVisit(req)
-	err = service.NewLikeActionService(ctx).NewLikeActionEvent(ctx, req)
+
+	// 将v1请求转换为v2请求格式
+	reqV2 := &interactions.LikeActionRequestV2{
+		UserId:    req.UserId,
+		VideoId:   req.VideoId,
+		CommentId: req.CommentId,
+	}
+
+	// 转换ActionType格式
+	switch req.ActionType {
+	case "1":
+		reqV2.ActionType = "like"
+	case "2":
+		reqV2.ActionType = "unlike"
+	default:
+		resp.Base.Code = consts.StatusBadRequest
+		resp.Base.Msg = "Invalid action type"
+		return resp, errors.New("invalid action type")
+	}
+
+	// 使用v2服务处理请求
+	likeServiceV2 := service.NewLikeActionServiceV2(ctx, globalProducer)
+	respV2, err := likeServiceV2.LikeActionV2(ctx, reqV2)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.LikeAction failed, original error: %v", errors.Cause(err))
+		hlog.CtxErrorf(ctx, "service.LikeActionV2 failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to Like Video !"
 		return resp, err
 	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Video Liked Successfully"
+
+	// 转换v2响应为v1响应格式
+	resp.Base.Code = respV2.Base.Code
+	resp.Base.Msg = respV2.Base.Msg
 	return resp, nil
 }
 
 func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *interactions.LikeListResponse, err error) {
-	// TODO: Add your implementation logic here
-	// Example:
-	resp = new(interactions.LikeListResponse)
-	resp, err = service.NewLikeActionService(ctx).NewLikeListEvent(ctx, req)
+	// 使用v2服务处理请求
+	likeServiceV2 := service.NewLikeActionServiceV2(ctx, globalProducer)
+	resp, err = likeServiceV2.LikeListV2(ctx, req)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.LikeListEvent failed, original error: %v", errors.Cause(err))
+		hlog.CtxErrorf(ctx, "service.LikeListV2 failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to ListLike_Video!"
+		if resp == nil {
+			resp = &interactions.LikeListResponse{
+				Base: &base.Status{
+					Code: consts.StatusBadRequest,
+					Msg:  "Fail to ListLike_Video!",
+				},
+			}
+		}
 		return resp, err
 	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "ListLike_Video Successfully"
 	return resp, nil
 }
 

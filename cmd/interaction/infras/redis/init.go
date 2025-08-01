@@ -13,13 +13,15 @@ var (
 func Load() {
 
 	redisDBCommentInfo = redis.NewClient(&redis.Options{
-		Addr: CommentInfo.Addr,
-		DB:   CommentInfo.DB,
+		Addr:     CommentInfo.Addr,
+		Password: CommentInfo.PassWord,
+		DB:       CommentInfo.DB,
 	})
 
 	redisDBVideoInfo = redis.NewClient(&redis.Options{
-		Addr: VideoInfo.Addr,
-		DB:   VideoInfo.DB,
+		Addr:     VideoInfo.Addr,
+		Password: VideoInfo.PassWord,
+		DB:       VideoInfo.DB,
 	})
 
 	if _, err := redisDBCommentInfo.Ping().Result(); err != nil {

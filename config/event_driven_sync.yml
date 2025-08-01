@@ -1,0 +1,233 @@
+# 事件驱动同步机制配置
+
+# 数据库配置
+database:
+  host: localhost
+  port: 3307
+  username: root
+  password: "123456"
+  database: TikTok
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 3600s
+
+# Redis配置
+redis:
+  host: localhost
+  port: 6379
+  password: ""
+  database: 0
+  pool_size: 100
+  min_idle_conns: 10
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_timeout: 4s
+  idle_timeout: 300s
+
+# 消息队列配置
+rabbitmq:
+  url: "amqp://guest:guest@localhost:5672/"
+  exchange:
+    like_events: "like_events"
+    notification_events: "notification_events"
+    comment_events: "comment_events"
+  queue:
+    like_event_queue: "like_event_queue"
+    notification_event_queue: "notification_event_queue"
+    comment_event_queue: "comment_event_queue"
+  consumer:
+    prefetch_count: 10
+    auto_ack: false
+  producer:
+    confirm_mode: true
+    mandatory: false
+    immediate: false
+
+# 事件驱动同步配置
+event_driven_sync:
+  # 重试配置
+  retry:
+    max_retries: 3
+    base_delay: 1s
+    max_delay: 60s
+    backoff_factor: 2.0
+  
+  # 事件处理配置
+  event_processing:
+    batch_size: 100
+    processing_timeout: 30s
+    max_concurrent_processors: 10
+  
+  # 幂等性配置
+  idempotency:
+    key_ttl: 3600s # 幂等性键的TTL
+    cleanup_interval: 300s # 清理过期键的间隔
+  
+  # 分布式锁配置
+  distributed_lock:
+    default_timeout: 30s
+    cleanup_interval: 60s
+
+# 缓存管理配置
+cache_management:
+  # 默认过期时间
+  default_expiry: 24h
+  
+  # 版本控制
+  version_control:
+    enabled: true
+    cleanup_interval: 1h
+  
+  # 预热配置
+  warmup:
+    enabled: true
+    hot_video_threshold: 10 # 点赞数超过此值的视频被认为是热门
+    hot_comment_threshold: 5 # 点赞数超过此值的评论被认为是热门
+    warmup_video_count: 100 # 预热的热门视频数量
+    warmup_comment_count: 200 # 预热的热门评论数量
+  
+  # 缓存一致性
+  consistency:
+    check_interval: 5m # 一致性检查间隔
+    hot_data_check_interval: 1m # 热点数据检查间隔
+    auto_fix: true # 是否自动修复不一致数据
+
+# 数据一致性检查配置
+data_consistency:
+  # 检查间隔
+  check_interval: 5m
+  
+  # 热点数据检查
+  hot_data_check:
+    enabled: true
+    interval: 1m
+    video_like_threshold: 100 # 点赞数超过此值的视频被认为是热点
+    comment_like_threshold: 50 # 点赞数超过此值的评论被认为是热点
+    check_count: 20 # 每次检查的热点数据数量
+  
+  # 自动修复
+  auto_fix:
+    enabled: true
+    strategy: "database_first" # 修复策略：database_first, cache_first
+  
+  # 报告配置
+  report:
+    retention_days: 30 # 报告数据保留天数
+    cleanup_interval: 24h # 清理旧数据的间隔
+
+# 限流配置
+rate_limiting:
+  # 用户操作限流
+  user_action:
+    like_per_minute: 60 # 每分钟最多点赞次数
+    comment_per_minute: 30 # 每分钟最多评论次数
+  
+  # 全局限流
+  global:
+    max_qps: 1000 # 最大QPS
+    max_connections: 1000 # 最大连接数
+
+# 监控和告警配置
+monitoring:
+  # 指标收集
+  metrics:
+    enabled: true
+    collection_interval: 60s
+    retention_days: 7
+  
+  # 健康检查
+  health_check:
+    enabled: true
+    interval: 30s
+    timeout: 5s
+  
+  # 告警配置
+  alerts:
+    enabled: true
+    # 一致性告警
+    consistency_rate_threshold: 95.0 # 一致性率低于此值时告警
+    # 错误率告警
+    error_rate_threshold: 5.0 # 错误率超过此值时告警
+    # 延迟告警
+    latency_threshold: 1000ms # 延迟超过此值时告警
+
+# 服务配置
+service:
+  name: "interaction_service"
+  port: 8893
+  
+  # 优雅关闭
+  graceful_shutdown:
+    timeout: 30s
+  
+  # 链路追踪
+  tracing:
+    enabled: true
+    endpoint: "http://localhost:14268/api/traces"
+    service_name: "interaction_service"
+  
+  # 日志配置
+  logging:
+    level: "info"
+    format: "json"
+    output: "stdout"
+
+# 性能优化配置
+performance:
+  # 连接池配置
+  connection_pool:
+    database:
+      max_open: 100
+      max_idle: 10
+      max_lifetime: 3600s
+    redis:
+      pool_size: 100
+      min_idle: 10
+      max_retries: 3
+  
+  # 批处理配置
+  batch_processing:
+    enabled: true
+    batch_size: 100
+    flush_interval: 1s
+    max_wait_time: 5s
+  
+  # 异步处理配置
+  async_processing:
+    worker_count: 10
+    queue_size: 1000
+    timeout: 30s
+
+# 安全配置
+security:
+  # 输入验证
+  input_validation:
+    enabled: true
+    max_content_length: 1000
+    sanitize_input: true
+  
+  # 防重放攻击
+  replay_protection:
+    enabled: true
+    window_size: 300s # 5分钟窗口
+  
+  # IP限流
+  ip_rate_limiting:
+    enabled: true
+    requests_per_minute: 1000
+
+# 开发和调试配置
+development:
+  # 调试模式
+  debug_mode: false
+  
+  # 性能分析
+  profiling:
+    enabled: false
+    port: 6060
+  
+  # 测试配置
+  testing:
+    mock_external_services: false
+    test_data_cleanup: true

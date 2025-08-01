@@ -30,10 +30,11 @@ type CreateCommentParam struct {
 }
 
 type ListCommentParam struct {
-	VideoId   int64 `form:"video_id"`
-	CommentId int64 `form:"comment_id"`
-	PageNum   int64 `form:"page_num"`
-	PageSize  int64 `form:"page_size"`
+	VideoId   int64  `form:"video_id"`
+	CommentId int64  `form:"comment_id"`
+	PageNum   int64  `form:"page_num"`
+	PageSize  int64  `form:"page_size"`
+	SortType  string `form:"sort_type"` // "hot" for popular comments, "latest" for newest comments
 }
 
 type DeleteCommentParam struct {

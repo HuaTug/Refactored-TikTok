@@ -197,11 +197,12 @@ var fieldIDToName_LikeListResponse = map[int16]string{
 }
 
 type CreateCommentRequest struct {
-	UserId    int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
-	VideoId   int64  `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
-	CommentId int64  `thrift:"comment_id,3" frugal:"3,default,i64" json:"comment_id"`
-	Mode      int64  `thrift:"mode,4" frugal:"4,default,i64" json:"mode"`
-	Content   string `thrift:"content,5" frugal:"5,default,string" json:"content"`
+	UserId           int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	VideoId          int64  `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
+	CommentId        int64  `thrift:"comment_id,3" frugal:"3,default,i64" json:"comment_id"`
+	Mode             int64  `thrift:"mode,4" frugal:"4,default,i64" json:"mode"`
+	Content          string `thrift:"content,5" frugal:"5,default,string" json:"content"`
+	ReplyToCommentId int64  `thrift:"reply_to_comment_id,6" frugal:"6,default,i64" json:"reply_to_comment_id"`
 }
 
 func NewCreateCommentRequest() *CreateCommentRequest {
@@ -230,6 +231,10 @@ func (p *CreateCommentRequest) GetMode() (v int64) {
 func (p *CreateCommentRequest) GetContent() (v string) {
 	return p.Content
 }
+
+func (p *CreateCommentRequest) GetReplyToCommentId() (v int64) {
+	return p.ReplyToCommentId
+}
 func (p *CreateCommentRequest) SetUserId(val int64) {
 	p.UserId = val
 }
@@ -245,6 +250,9 @@ func (p *CreateCommentRequest) SetMode(val int64) {
 func (p *CreateCommentRequest) SetContent(val string) {
 	p.Content = val
 }
+func (p *CreateCommentRequest) SetReplyToCommentId(val int64) {
+	p.ReplyToCommentId = val
+}
 
 func (p *CreateCommentRequest) String() string {
 	if p == nil {
@@ -259,6 +267,7 @@ var fieldIDToName_CreateCommentRequest = map[int16]string{
 	3: "comment_id",
 	4: "mode",
 	5: "content",
+	6: "reply_to_comment_id",
 }
 
 type CreateCommentResponse struct {
@@ -300,10 +309,11 @@ var fieldIDToName_CreateCommentResponse = map[int16]string{
 }
 
 type ListCommentRequest struct {
-	VideoId   int64 `thrift:"video_id,1" frugal:"1,default,i64" json:"video_id"`
-	CommentId int64 `thrift:"comment_id,2" frugal:"2,default,i64" json:"comment_id"`
-	PageNum   int64 `thrift:"page_num,3" frugal:"3,default,i64" json:"page_num"`
-	PageSize  int64 `thrift:"page_size,4" frugal:"4,default,i64" json:"page_size"`
+	VideoId   int64  `thrift:"video_id,1" frugal:"1,default,i64" json:"video_id"`
+	CommentId int64  `thrift:"comment_id,2" frugal:"2,default,i64" json:"comment_id"`
+	PageNum   int64  `thrift:"page_num,3" frugal:"3,default,i64" json:"page_num"`
+	PageSize  int64  `thrift:"page_size,4" frugal:"4,default,i64" json:"page_size"`
+	SortType  string `thrift:"sort_type,5" frugal:"5,default,string" json:"sort_type"`
 }
 
 func NewListCommentRequest() *ListCommentRequest {
@@ -328,6 +338,10 @@ func (p *ListCommentRequest) GetPageNum() (v int64) {
 func (p *ListCommentRequest) GetPageSize() (v int64) {
 	return p.PageSize
 }
+
+func (p *ListCommentRequest) GetSortType() (v string) {
+	return p.SortType
+}
 func (p *ListCommentRequest) SetVideoId(val int64) {
 	p.VideoId = val
 }
@@ -339,6 +353,9 @@ func (p *ListCommentRequest) SetPageNum(val int64) {
 }
 func (p *ListCommentRequest) SetPageSize(val int64) {
 	p.PageSize = val
+}
+func (p *ListCommentRequest) SetSortType(val string) {
+	p.SortType = val
 }
 
 func (p *ListCommentRequest) String() string {
@@ -353,6 +370,7 @@ var fieldIDToName_ListCommentRequest = map[int16]string{
 	2: "comment_id",
 	3: "page_num",
 	4: "page_size",
+	5: "sort_type",
 }
 
 type ListCommentResponse struct {

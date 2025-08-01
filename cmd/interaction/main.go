@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 
+	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
@@ -25,9 +26,13 @@ import (
 
 func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
+	config.Init()
 	dal.Init()
 	redis.Load()
 	client.Init()
+
+	// 初始化RPC客户端，确保VideoClient被正确初始化
+	rpc.InitVideoRpc()
 
 	// 初始化消息队列生产者
 	initMessageQueue()

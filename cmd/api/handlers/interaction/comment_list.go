@@ -21,11 +21,18 @@ func ListComment(ctx context.Context, c *app.RequestContext) {
 	if err := c.Bind(&Comment); err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
+
+	// Set default sort type to "hot" if not specified
+	if Comment.SortType == "" {
+		Comment.SortType = "hot"
+	}
+
 	resp, err := rpc.ListComment(ctx, &interactions.ListCommentRequest{
 		VideoId:   Comment.VideoId,
 		CommentId: Comment.CommentId,
 		PageNum:   Comment.PageNum,
 		PageSize:  Comment.PageSize,
+		SortType:  Comment.SortType, // Pass sort type to service layer
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
