@@ -7,31 +7,92 @@ import (
 
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/redis"
+	"HuaTug.com/cmd/model"
+	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
 // LikeEventHandler 处理点赞事件
-type LikeEventHandler struct{}
+type LikeEventHandler struct {
+	syncService *EventDrivenSyncService
+}
 
 func NewLikeEventHandler() *LikeEventHandler {
 	return &LikeEventHandler{}
+}
+
+// NewLikeEventHandlerWithSync 创建带同步服务的事件处理器
+func NewLikeEventHandlerWithSync(syncService *EventDrivenSyncService) *LikeEventHandler {
+	return &LikeEventHandler{
+		syncService: syncService,
+	}
 }
 
 // HandleLikeEvent 处理点赞事件
 func (h *LikeEventHandler) HandleLikeEvent(ctx context.Context, event *mq.LikeEvent) error {
 	hlog.CtxInfof(ctx, "Processing like event: %+v", event)
 
+	// 1. 先处理原有的Redis更新逻辑（保持向后兼容）
+	var err error
 	if event.EventType == "video_like" {
-		return h.handleVideoLikeEvent(ctx, event)
+		err = h.handleVideoLikeEvent(ctx, event)
 	} else if event.EventType == "comment_like" {
-		return h.handleCommentLikeEvent(ctx, event)
+		err = h.handleCommentLikeEvent(ctx, event)
+	} else {
+		return fmt.Errorf("unknown event type: %s", event.EventType)
 	}
 
-	return fmt.Errorf("unknown event type: %s", event.EventType)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "Failed to handle like event: %v", err)
+		return err
+	}
+
+	// 2. 如果配置了同步服务，则同步数据到video_likes表
+	if h.syncService != nil {
+		syncEvent := &SyncEvent{
+			EventID:      event.EventID,
+			EventType:    event.EventType,
+			ResourceType: getResourceType(event.EventType),
+			ResourceID:   getResourceID(event),
+			UserID:       event.UserID,
+			ActionType:   event.ActionType,
+			Timestamp:    event.Timestamp,
+			MaxRetries:   3,
+			Priority:     1, // 中等优先级
+		}
+
+		if err := h.syncService.PublishSyncEvent(ctx, syncEvent); err != nil {
+			hlog.CtxWarnf(ctx, "Failed to publish sync event: %v", err)
+			// 不返回错误，避免影响主流程
+		} else {
+			hlog.CtxInfof(ctx, "Successfully published sync event for %s", event.EventType)
+		}
+	}
+
+	return nil
 }
 
-// 处理视频点赞事件
+// 获取资源类型
+func getResourceType(eventType string) string {
+	switch eventType {
+	case "video_like":
+		return "video"
+	case "comment_like":
+		return "comment"
+	default:
+		return "unknown"
+	}
+}
+
+// 获取资源ID
+func getResourceID(event *mq.LikeEvent) int64 {
+	if event.VideoID != 0 {
+		return event.VideoID
+	}
+	return event.CommentID
+}
+
 func (h *LikeEventHandler) handleVideoLikeEvent(ctx context.Context, event *mq.LikeEvent) error {
 	// 1. 更新Redis中的计数器
 	var err error
@@ -48,8 +109,24 @@ func (h *LikeEventHandler) handleVideoLikeEvent(ctx context.Context, event *mq.L
 		return err
 	}
 
-	// 2. 可选：批量写回到主数据库（这里简化，直接更新）
-	// 在生产环境中，可能会使用定时任务来批量同步Redis数据到数据库
+	// 2. 异步更新user_behaviors表（保持原有逻辑）
+	go func() {
+		if event.ActionType == "like" {
+			like := &model.UserBehavior{
+				UserId:       event.UserID,
+				VideoId:      event.VideoID,
+				BehaviorType: "like",
+				BehaviorTime: time.Now().Format(constants.DataFormate),
+			}
+			if err := db.AddUserLikeBehavior(context.Background(), like); err != nil {
+				hlog.Errorf("Failed to save like behavior to DB: %v", err)
+			}
+		} else if event.ActionType == "unlike" {
+			if err := db.DeleteUserLikeBehavior(context.Background(), event.UserID, event.VideoID, "like"); err != nil {
+				hlog.Errorf("Failed to delete like behavior from DB: %v", err)
+			}
+		}
+	}()
 
 	return nil
 }
