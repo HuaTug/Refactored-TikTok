@@ -315,15 +315,54 @@ func (s *EventDrivenSyncService) processCommentUnlike(ctx context.Context, tx *g
 
 // processEvents 处理事件的主循环
 func (s *EventDrivenSyncService) processEvents() {
+	// 创建一个定时器来处理待处理的同步事件
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-s.ctx.Done():
 			hlog.Info("Event processing stopped")
 			return
-		default:
-			// 这里应该从消息队列消费事件
-			// 由于当前架构限制，这里只是示例
-			time.Sleep(time.Second)
+		case <-ticker.C:
+			// 定期检查并处理待处理的同步事件
+			s.processPendingEvents()
+		}
+	}
+}
+
+// processPendingEvents 处理待处理的同步事件
+func (s *EventDrivenSyncService) processPendingEvents() {
+	// 从事件存储中获取待处理的事件
+	pendingEvents, err := s.eventStore.GetPendingEvents(s.ctx, 50)
+	if err != nil {
+		hlog.Errorf("Failed to get pending events: %v", err)
+		return
+	}
+
+	if len(pendingEvents) == 0 {
+		return
+	}
+
+	hlog.Infof("Processing %d pending sync events", len(pendingEvents))
+
+	for _, event := range pendingEvents {
+		// 更新事件状态为处理中
+		if err := s.eventStore.UpdateEventStatus(s.ctx, event.EventID, "processing"); err != nil {
+			hlog.Errorf("Failed to update event status: %v", err)
+			continue
+		}
+
+		// 处理事件
+		if err := s.processEvent(s.ctx, event); err != nil {
+			hlog.Errorf("Failed to process event %s: %v", event.EventID, err)
+			s.eventStore.UpdateEventStatus(s.ctx, event.EventID, "failed")
+			s.metrics.mu.Lock()
+			s.metrics.FailedEvents++
+			s.metrics.mu.Unlock()
+		} else {
+			s.eventStore.UpdateEventStatus(s.ctx, event.EventID, "completed")
+			hlog.Infof("Successfully processed sync event: %s", event.EventID)
 		}
 	}
 }
@@ -519,6 +558,40 @@ func (es *EventStore) GetFailedEvents(ctx context.Context, limit int) ([]*SyncEv
 	for _, record := range records {
 		var event SyncEvent
 		if err := json.Unmarshal([]byte(record.Data), &event); err != nil {
+			continue
+		}
+		events = append(events, &event)
+	}
+
+	return events, nil
+}
+
+// GetPendingEvents 获取待处理的事件
+func (es *EventStore) GetPendingEvents(ctx context.Context, limit int) ([]*SyncEvent, error) {
+	var records []struct {
+		ID        string
+		EventType string
+		Status    string
+		Data      string
+		CreatedAt time.Time
+		UpdatedAt time.Time
+	}
+
+	err := es.db.Table("sync_events").
+		Where("status = ?", "pending").
+		Order("created_at ASC").
+		Limit(limit).
+		Find(&records).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	var events []*SyncEvent
+	for _, record := range records {
+		var event SyncEvent
+		if err := json.Unmarshal([]byte(record.Data), &event); err != nil {
+			hlog.Warnf("Failed to unmarshal event data: %v", err)
 			continue
 		}
 		events = append(events, &event)

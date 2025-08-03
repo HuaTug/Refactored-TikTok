@@ -23,6 +23,10 @@ func SetGlobalProducer(producer *mq.Producer) {
 	globalProducer = producer
 }
 
+func GetGlobalProducer() *mq.Producer {
+	return globalProducer
+}
+
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
 	resp = new(interactions.LikeActionResponse)
 	resp.Base = &base.Status{}

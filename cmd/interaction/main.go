@@ -8,6 +8,7 @@ import (
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
+	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config/jaeger"
 
 	"HuaTug.com/config"
@@ -24,6 +25,9 @@ import (
 	//trace "github.com/kitex-contrib/tracer-opentracing"
 )
 
+// 全局变量
+var globalEventDrivenSyncService *service.EventDrivenSyncService
+
 func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
 	config.Init()
@@ -36,6 +40,9 @@ func Init() {
 
 	// 初始化消息队列生产者
 	initMessageQueue()
+
+	// 启用事件驱动同步服务
+	initEventDrivenSyncService()
 
 	// go common.NewCommentSync().Run()
 	// go common.NewVideoSyncman().Run()
@@ -59,6 +66,29 @@ func initMessageQueue() {
 	SetGlobalProducer(producer)
 
 	hlog.Info("Message queue producer initialized successfully")
+}
+
+// 初始化事件驱动同步服务
+func initEventDrivenSyncService() {
+	// 获取全局生产者和数据库实例
+	producer := GetGlobalProducer()
+	database := dal.DB
+
+	// 创建事件驱动同步服务
+	globalEventDrivenSyncService = service.NewEventDrivenSyncService(producer, database)
+
+	// 启动同步服务
+	if err := globalEventDrivenSyncService.Start(); err != nil {
+		hlog.Fatalf("Failed to start event-driven sync service: %v", err)
+		panic(err)
+	}
+
+	hlog.Info("Event-driven sync service initialized and started successfully")
+}
+
+// 获取全局事件驱动同步服务
+func GetGlobalEventDrivenSyncService() *service.EventDrivenSyncService {
+	return globalEventDrivenSyncService
 }
 
 func main() {

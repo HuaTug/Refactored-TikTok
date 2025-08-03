@@ -25,17 +25,56 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 type RsaService struct {
-	ServerRsaKey *rsa.PrivateKey
-	ClientRsaKey *rsa.PublicKey
+	ServerRsaKey    *rsa.PrivateKey
+	ClientRsaKey    *rsa.PublicKey
+	keyVersion      int
+	keyRotationTime time.Time
+}
+
+// EnhancedRsaService 增强的RSA服务
+type EnhancedRsaService struct {
+	*RsaService
+	aesKey        []byte // 用于混合加密的AES密钥
+	keyDerivation *KeyDerivation
+}
+
+// KeyDerivation 密钥派生服务
+type KeyDerivation struct {
+	salt       []byte
+	iterations int
 }
 
 func NewRsaService() *RsaService {
-	return &RsaService{}
+	return &RsaService{
+		keyVersion:      1,
+		keyRotationTime: time.Now(),
+	}
+}
+
+// NewEnhancedRsaService 创建增强的RSA服务
+func NewEnhancedRsaService() *EnhancedRsaService {
+	// 生成AES密钥
+	aesKey := make([]byte, 32) // AES-256
+	rand.Read(aesKey)
+
+	// 生成盐值
+	salt := make([]byte, 16)
+	rand.Read(salt)
+
+	return &EnhancedRsaService{
+		RsaService: NewRsaService(),
+		aesKey:     aesKey,
+		keyDerivation: &KeyDerivation{
+			salt:       salt,
+			iterations: 100000, // PBKDF2迭代次数
+		},
+	}
 }
 
 // 1. 生成密钥对

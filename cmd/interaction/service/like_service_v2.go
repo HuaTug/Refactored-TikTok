@@ -43,6 +43,7 @@ func (service *LikeActionServiceV2) LikeActionV2(ctx context.Context, req *inter
 	var isLiked bool
 
 	if req.VideoId != 0 {
+		hlog.Info("Processing video like action :", req)
 		// 视频点赞
 		isLiked, err = service.handleVideoLike(ctx, req)
 		if err != nil {
@@ -51,6 +52,8 @@ func (service *LikeActionServiceV2) LikeActionV2(ctx context.Context, req *inter
 			resp.Base.Msg = "处理点赞失败"
 			return resp, err
 		}
+
+		hlog.Info("Video like action processed successfully")
 
 		// 2. 异步发送点赞事件到消息队列
 		likeEvent := &mq.LikeEvent{
