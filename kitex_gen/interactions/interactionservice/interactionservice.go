@@ -62,13 +62,6 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
-	"LikeActionV2": kitex.NewMethodInfo(
-		likeActionV2Handler,
-		newInteractionServiceLikeActionV2Args,
-		newInteractionServiceLikeActionV2Result,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
 	"GetNotifications": kitex.NewMethodInfo(
 		getNotificationsHandler,
 		newInteractionServiceGetNotificationsArgs,
@@ -275,24 +268,6 @@ func newInteractionServiceDeleteVideoInfoResult() interface{} {
 	return interactions.NewInteractionServiceDeleteVideoInfoResult()
 }
 
-func likeActionV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*interactions.InteractionServiceLikeActionV2Args)
-	realResult := result.(*interactions.InteractionServiceLikeActionV2Result)
-	success, err := handler.(interactions.InteractionService).LikeActionV2(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newInteractionServiceLikeActionV2Args() interface{} {
-	return interactions.NewInteractionServiceLikeActionV2Args()
-}
-
-func newInteractionServiceLikeActionV2Result() interface{} {
-	return interactions.NewInteractionServiceLikeActionV2Result()
-}
-
 func getNotificationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*interactions.InteractionServiceGetNotificationsArgs)
 	realResult := result.(*interactions.InteractionServiceGetNotificationsResult)
@@ -404,16 +379,6 @@ func (p *kClient) DeleteVideoInfo(ctx context.Context, req *interactions.DeleteV
 	_args.Req = req
 	var _result interactions.InteractionServiceDeleteVideoInfoResult
 	if err = p.c.Call(ctx, "DeleteVideoInfo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) LikeActionV2(ctx context.Context, req *interactions.LikeActionRequestV2) (r *interactions.LikeActionResponseV2, err error) {
-	var _args interactions.InteractionServiceLikeActionV2Args
-	_args.Req = req
-	var _result interactions.InteractionServiceLikeActionV2Result
-	if err = p.c.Call(ctx, "LikeActionV2", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

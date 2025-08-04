@@ -6,10 +6,13 @@ struct LikeActionRequest {
     1: i64 user_id
     2: i64 video_id
     3: i64 comment_id
-    4: string action_type
+    4: string action_type          // "like" or "unlike"
 }
+
 struct LikeActionResponse {
     1: base.Status base
+    2: bool is_liked              // 当前点赞状态
+    3: i64 like_count             // 最新点赞数 (从Redis读取)
 }
 
 struct LikeListRequest {
@@ -93,20 +96,6 @@ struct NotificationEvent {
     7: string event_id
 }
 
-// ========== V2版本API - 优化后的点赞接口 ==========
-struct LikeActionRequestV2 {
-    1: i64 user_id
-    2: i64 video_id
-    3: i64 comment_id
-    4: string action_type          // "like" or "unlike"
-}
-
-struct LikeActionResponseV2 {
-    1: base.Status base
-    2: bool is_liked              // 当前点赞状态
-    3: i64 like_count             // 最新点赞数 (从Redis读取)
-}
-
 // ========== 通知功能 ==========
 struct GetNotificationsRequest {
     1: i64 user_id
@@ -145,7 +134,6 @@ struct MarkNotificationReadResponse {
 }
 
 service InteractionService {
-    // ========== V1版本API（保持兼容性） ==========
     LikeActionResponse LikeAction(1: LikeActionRequest req)(api.post="/v1/action/like")
     LikeListResponse LikeList(1: LikeListRequest req)(api.get="/v1/action/list")
     CreateCommentResponse CreateComment(1:CreateCommentRequest req)(api.post="/v1/comment/publish")
@@ -153,11 +141,7 @@ service InteractionService {
     CommentDeleteResponse DeleteComment(1:CommentDeleteRequest req)(api.delete="/v1/comment/delete")
     VideoPopularListResponse VideoPopularList(1: VideoPopularListRequest req)
     DeleteVideoInfoResponse DeleteVideoInfo(1: DeleteVideoInfoRequest req)
-    
-    // ========== V2版本API（推荐使用） ==========
-    LikeActionResponseV2 LikeActionV2(1: LikeActionRequestV2 req)(api.post="/v2/action/like")
-    
-    // ========== 通知功能 ==========
+    // 消息队列事件处理
     GetNotificationsResponse GetNotifications(1: GetNotificationsRequest req)(api.get="/v1/notifications")
     MarkNotificationReadResponse MarkNotificationRead(1: MarkNotificationReadRequest req)(api.post="/v1/notifications/read")
 }    
