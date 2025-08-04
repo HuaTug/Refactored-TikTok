@@ -15,15 +15,6 @@ type Producer struct {
 	channel *amqp091.Channel
 }
 
-// LikeEvent and NotificationEvent are defined in comment_mq.go
-
-const (
-	LikeEventExchange         = "like_events"
-	NotificationEventExchange = "notification_events"
-	LikeEventQueue            = "like_event_queue"
-	NotificationEventQueue    = "notification_event_queue"
-)
-
 func NewProducer(rabbitmqURL string) (*Producer, error) {
 	conn, err := amqp091.Dial(rabbitmqURL)
 	if err != nil {
@@ -52,78 +43,66 @@ func NewProducer(rabbitmqURL string) (*Producer, error) {
 
 func (p *Producer) setupTopology() error {
 	// 声明交换机
-	err := p.channel.ExchangeDeclare(
+	exchanges := []string{
 		LikeEventExchange,
-		"direct",
-		true,  // durable
-		false, // auto-delete
-		false, // internal
-		false, // no-wait
-		nil,   // arguments
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare like event exchange: %w", err)
+		CommentEventExchange,
+		NotificationEventExchange,
 	}
 
-	err = p.channel.ExchangeDeclare(
-		NotificationEventExchange,
-		"direct",
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare notification event exchange: %w", err)
+	for _, exchange := range exchanges {
+		err := p.channel.ExchangeDeclare(
+			exchange,
+			"direct",
+			true,  // durable
+			false, // auto-delete
+			false, // internal
+			false, // no-wait
+			nil,   // arguments
+		)
+		if err != nil {
+			return fmt.Errorf("failed to declare exchange %s: %w", exchange, err)
+		}
 	}
 
 	// 声明队列
-	_, err = p.channel.QueueDeclare(
+	queues := []string{
 		LikeEventQueue,
-		true,  // durable
-		false, // delete when unused
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare like event queue: %w", err)
+		CommentEventQueue,
+		NotificationEventQueue,
 	}
 
-	_, err = p.channel.QueueDeclare(
-		NotificationEventQueue,
-		true,
-		false,
-		false,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to declare notification event queue: %w", err)
+	for _, queue := range queues {
+		_, err := p.channel.QueueDeclare(
+			queue,
+			true,  // durable
+			false, // delete when unused
+			false, // exclusive
+			false, // no-wait
+			nil,   // arguments
+		)
+		if err != nil {
+			return fmt.Errorf("failed to declare queue %s: %w", queue, err)
+		}
 	}
 
 	// 绑定队列到交换机
-	err = p.channel.QueueBind(
-		LikeEventQueue,
-		"",
-		LikeEventExchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to bind like event queue: %w", err)
+	bindings := map[string]string{
+		LikeEventQueue:         LikeEventExchange,
+		CommentEventQueue:      CommentEventExchange,
+		NotificationEventQueue: NotificationEventExchange,
 	}
 
-	err = p.channel.QueueBind(
-		NotificationEventQueue,
-		"",
-		NotificationEventExchange,
-		false,
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to bind notification event queue: %w", err)
+	for queue, exchange := range bindings {
+		err := p.channel.QueueBind(
+			queue,
+			"",
+			exchange,
+			false,
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to bind queue %s to exchange %s: %w", queue, exchange, err)
+		}
 	}
 
 	return nil
@@ -153,6 +132,33 @@ func (p *Producer) PublishLikeEvent(ctx context.Context, event *LikeEvent) error
 	}
 
 	hlog.CtxInfof(ctx, "Published like event: %+v", event)
+	return nil
+}
+
+func (p *Producer) PublishCommentEvent(ctx context.Context, event *CommentEvent) error {
+	body, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal comment event: %w", err)
+	}
+
+	err = p.channel.PublishWithContext(
+		ctx,
+		CommentEventExchange,
+		"",
+		false, // mandatory
+		false, // immediate
+		amqp091.Publishing{
+			ContentType:  "application/json",
+			DeliveryMode: amqp091.Persistent,
+			Timestamp:    time.Now(),
+			Body:         body,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to publish comment event: %w", err)
+	}
+
+	hlog.CtxInfof(ctx, "Published comment event: %+v", event)
 	return nil
 }
 

@@ -257,7 +257,7 @@ func (lcm *LikeCacheManager) IncrementDislikeCount(ctx context.Context, business
 
 // === 用户点赞列表相关操作 ===
 
-// AddUserLike 添加用户点赞记录
+// AddUserLike 添加用户点赞记录（不包含计数，计数由事件处理器统一处理）
 func (lcm *LikeCacheManager) AddUserLike(ctx context.Context, userID, businessID, messageID int64) error {
 	userLikesKey := fmt.Sprintf(UserLikesKeyTemplate, userID, businessID)
 	contentLikesKey := fmt.Sprintf(ContentLikesKeyTemplate, businessID, messageID)
@@ -279,10 +279,8 @@ func (lcm *LikeCacheManager) AddUserLike(ctx context.Context, userID, businessID
 	})
 	pipe.Expire(contentLikesKey, lcm.defaultTTL)
 
-	// 增加点赞计数
-	countKey := fmt.Sprintf(CountCacheKeyTemplate, businessID, messageID)
-	pipe.HIncrBy(countKey, "like_count", 1)
-	pipe.Expire(countKey, lcm.defaultTTL)
+	// 注意：不在这里增加计数，避免重复计数
+	// 计数统一由消息队列的事件处理器处理，确保一致性
 
 	_, err := pipe.Exec()
 	if err != nil {
@@ -292,7 +290,7 @@ func (lcm *LikeCacheManager) AddUserLike(ctx context.Context, userID, businessID
 	return nil
 }
 
-// RemoveUserLike 移除用户点赞记录
+// RemoveUserLike 移除用户点赞记录（不包含计数，计数由事件处理器统一处理）
 func (lcm *LikeCacheManager) RemoveUserLike(ctx context.Context, userID, businessID, messageID int64) error {
 	userLikesKey := fmt.Sprintf(UserLikesKeyTemplate, userID, businessID)
 	contentLikesKey := fmt.Sprintf(ContentLikesKeyTemplate, businessID, messageID)
@@ -305,9 +303,8 @@ func (lcm *LikeCacheManager) RemoveUserLike(ctx context.Context, userID, busines
 	// 从内容点赞用户列表移除
 	pipe.ZRem(contentLikesKey, userID)
 
-	// 减少点赞计数
-	countKey := fmt.Sprintf(CountCacheKeyTemplate, businessID, messageID)
-	pipe.HIncrBy(countKey, "like_count", -1)
+	// 注意：不在这里减少计数，避免重复计数
+	// 计数统一由消息队列的事件处理器处理，确保一致性
 
 	_, err := pipe.Exec()
 	if err != nil {

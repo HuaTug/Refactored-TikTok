@@ -61,7 +61,7 @@ func initMessageQueue() {
 		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	// 创建消息队列生产者
+	// 创建统一的消息队列管理器（兼容旧的Producer接口）
 	producer, err := mq.NewProducer(rabbitmqURL)
 	if err != nil {
 		hlog.Fatalf("Failed to initialize message queue producer: %v", err)

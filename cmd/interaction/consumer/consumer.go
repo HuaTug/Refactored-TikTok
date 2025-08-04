@@ -67,25 +67,19 @@ func Init() {
 		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
 	}
 
-	// 创建消息队列生产者（用于EventDrivenSyncService）
-	producer, err := mq.NewProducer(rabbitmqURL)
+	// 创建统一的消息队列管理器
+	mqManager, err := mq.NewUnifiedMQManager(rabbitmqURL)
 	if err != nil {
-		log.Fatalf("Failed to create producer: %v", err)
+		log.Fatalf("Failed to create unified MQ manager: %v", err)
 	}
+	defer mqManager.Close()
 
-	// 创建事件驱动同步服务
-	syncService := common.NewEventDrivenSyncService(producer, db.DB)
+	// 创建事件驱动同步服务 - 现在使用mqManager作为生产者
+	syncService := common.NewEventDrivenSyncService(mqManager, db.DB)
 	if err := syncService.Start(); err != nil {
 		log.Fatalf("Failed to start sync service: %v", err)
 	}
 	hlog.Info("Event-driven sync service started")
-
-	// 创建消费者
-	consumer, err := mq.NewConsumer(rabbitmqURL)
-	if err != nil {
-		log.Fatalf("Failed to create consumer: %v", err)
-	}
-	defer consumer.Close()
 
 	// 创建上下文
 	ctx, cancel := context.WithCancel(context.Background())
@@ -93,35 +87,19 @@ func Init() {
 
 	// 创建带同步服务的事件处理器
 	likeHandler := service.NewLikeEventHandlerWithSync(syncService)
-	//notificationHandler := service.NewNotificationEventHandler()
-
-	// 创建评论事件消费者和处理器
-	commentMQManager, err := mq.NewCommentMQManager(rabbitmqURL)
-	if err != nil {
-		log.Fatalf("Failed to create comment MQ manager: %v", err)
-	}
-	defer commentMQManager.Close()
-
-	// 这里需要创建评论事件处理器，但目前缺少依赖
-	// commentEventProcessor := service.NewCommentEventProcessor(shardedDB, cacheManager, commentMQManager)
 
 	// 启动点赞事件消费者
-	if err := consumer.ConsumeLikeEvents(ctx, likeHandler); err != nil {
+	if err := mqManager.ConsumeLikeEvents(ctx, likeHandler); err != nil {
 		log.Fatalf("Failed to start like event consumer: %v", err)
 	}
 	hlog.Info("Like event consumer started")
 
-	// 启动评论事件消费者 (暂时注释，等待依赖完善)
-	// if err := commentMQManager.ConsumeCommentEvents(ctx, commentEventProcessor); err != nil {
+	// 启动评论事件消费者 (如果需要的话)
+	// commentHandler := service.NewCommentEventHandler()
+	// if err := mqManager.ConsumeCommentEvents(ctx, commentHandler); err != nil {
 	// 	log.Fatalf("Failed to start comment event consumer: %v", err)
 	// }
 	// hlog.Info("Comment event consumer started")
-
-	// // 启动通知事件消费者
-	// if err := consumer.ConsumeNotificationEvents(ctx, notificationHandler); err != nil {
-	// 	log.Fatalf("Failed to start notification event consumer: %v", err)
-	// }
-	// hlog.Info("Notification event consumer started")
 
 	hlog.Info("Event consumer started successfully, waiting for messages...")
 

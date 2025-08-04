@@ -20,7 +20,7 @@ import (
 type EventDrivenSyncService struct {
 	ctx          context.Context
 	cancel       context.CancelFunc
-	producer     *mq.Producer
+	producer     mq.MessageProducer
 	db           *gorm.DB
 	retryManager *RetryManager
 	lockManager  *DistributedLockManager
@@ -76,7 +76,7 @@ type SyncMetrics struct {
 }
 
 // NewEventDrivenSyncService 创建事件驱动同步服务
-func NewEventDrivenSyncService(producer *mq.Producer, database *gorm.DB) *EventDrivenSyncService {
+func NewEventDrivenSyncService(producer mq.MessageProducer, database *gorm.DB) *EventDrivenSyncService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &EventDrivenSyncService{
@@ -137,7 +137,7 @@ func (s *EventDrivenSyncService) Stop() error {
 	return nil
 }
 
-// PublishSyncEvent 发布同步事件
+// PublishSyncEvent 发布同步事件（直接处理，不再发布到MQ避免循环）
 func (s *EventDrivenSyncService) PublishSyncEvent(ctx context.Context, event *SyncEvent) error {
 	// 设置事件ID和时间戳
 	if event.EventID == "" {
@@ -161,11 +161,11 @@ func (s *EventDrivenSyncService) PublishSyncEvent(ctx context.Context, event *Sy
 	// 存储事件到事件存储
 	if err := s.eventStore.StoreEvent(ctx, event); err != nil {
 		hlog.Errorf("Failed to store event: %v", err)
-		// 不阻塞主流程，继续发送到消息队列
+		// 不阻塞主流程，继续处理
 	}
 
-	// 发送到消息队列
-	return s.publishToMQ(ctx, event)
+	// 直接处理事件，不再发布到MQ避免事件循环
+	return s.processEvent(ctx, event)
 }
 
 // ProcessVideoLikeEvent 处理视频点赞事件
@@ -214,12 +214,22 @@ func (s *EventDrivenSyncService) ProcessCommentLikeEvent(ctx context.Context, ev
 
 // processVideoLike 处理视频点赞
 func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.DB, event *SyncEvent) error {
+	// 处理时间戳：如果时间戳为0或无效，使用当前时间
+	var eventTime time.Time
+	if event.Timestamp > 0 {
+		eventTime = time.Unix(event.Timestamp, 0)
+	} else {
+		eventTime = time.Now()
+		hlog.CtxWarnf(ctx, "Event timestamp is invalid (%d), using current time for event %s",
+			event.Timestamp, event.EventID)
+	}
+
 	// 1. 创建用户行为记录
 	behavior := &model.UserBehavior{
 		UserId:       event.UserID,
 		VideoId:      event.ResourceID,
 		BehaviorType: "like",
-		BehaviorTime: time.Unix(event.Timestamp, 0).Format("2006-01-02 15:04:05"),
+		BehaviorTime: eventTime.Format("2006-01-02 15:04:05"),
 	}
 
 	if err := tx.Create(behavior).Error; err != nil {
@@ -227,22 +237,22 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 	}
 
 	// 2. 创建或更新video_likes记录
+	uuid := uuid.New().ID()
+
 	videoLike := &model.VideoLike{
-		UserId:    event.UserID,
-		VideoId:   event.ResourceID,
-		CreatedAt: time.Unix(event.Timestamp, 0).Format("2006-01-02 15:04:05"),
+		VideoLikesId: int64(uuid),
+		UserId:       event.UserID,
+		VideoId:      event.ResourceID,
+		CreatedAt:    eventTime.Format("2006-01-02 15:04:05"),
+		DeletedAt:    "", // 空字符串表示未删除
 	}
 
 	if err := tx.Create(videoLike).Error; err != nil {
 		return fmt.Errorf("failed to create video like: %w", err)
 	}
 
-	// 3. 异步更新Redis缓存
-	go func() {
-		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.ResourceID, 1); err != nil {
-			hlog.Errorf("Failed to update Redis like count: %v", err)
-		}
-	}()
+	// 注意：不在这里更新Redis缓存，避免重复计数
+	// Redis缓存已经在EventHandler中更新过了
 
 	hlog.Infof("Successfully processed video like: user=%d, video=%d", event.UserID, event.ResourceID)
 	return nil
@@ -262,12 +272,8 @@ func (s *EventDrivenSyncService) processVideoUnlike(ctx context.Context, tx *gor
 		return fmt.Errorf("failed to delete video like: %w", err)
 	}
 
-	// 3. 异步更新Redis缓存
-	go func() {
-		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.ResourceID, -1); err != nil {
-			hlog.Errorf("Failed to update Redis like count: %v", err)
-		}
-	}()
+	// 注意：不在这里更新Redis缓存，避免重复计数
+	// Redis缓存已经在EventHandler中更新过了
 
 	hlog.Infof("Successfully processed video unlike: user=%d, video=%d", event.UserID, event.ResourceID)
 	return nil
@@ -286,12 +292,8 @@ func (s *EventDrivenSyncService) processCommentLike(ctx context.Context, tx *gor
 		return fmt.Errorf("failed to create comment like: %w", err)
 	}
 
-	// 异步更新Redis缓存
-	go func() {
-		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.ResourceID, 1); err != nil {
-			hlog.Errorf("Failed to update Redis comment like count: %v", err)
-		}
-	}()
+	// 注意：不在这里更新Redis缓存，避免重复计数
+	// Redis缓存已经在EventHandler中更新过了
 
 	return nil
 }
@@ -304,12 +306,8 @@ func (s *EventDrivenSyncService) processCommentUnlike(ctx context.Context, tx *g
 		return fmt.Errorf("failed to delete comment like: %w", err)
 	}
 
-	// 异步更新Redis缓存
-	go func() {
-		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.ResourceID, -1); err != nil {
-			hlog.Errorf("Failed to update Redis comment like count: %v", err)
-		}
-	}()
+	// 注意：不在这里更新Redis缓存，避免重复计数
+	// Redis缓存已经在EventHandler中更新过了
 
 	return nil
 }
@@ -424,12 +422,24 @@ func (s *EventDrivenSyncService) processEvent(ctx context.Context, event *SyncEv
 		s.metrics.mu.Unlock()
 	}()
 
+	// 添加详细的调试日志
+	hlog.CtxInfof(ctx, "Processing event: ID=%s, Type=%s, ResourceType=%s, ResourceID=%d, UserID=%d, ActionType=%s",
+		event.EventID, event.EventType, event.ResourceType, event.ResourceID, event.UserID, event.ActionType)
+
+	// 检查EventType是否为空
+	if event.EventType == "" {
+		hlog.CtxErrorf(ctx, "Event has empty EventType! Event details: %+v", event)
+		return fmt.Errorf("event has empty EventType: event_id=%s", event.EventID)
+	}
+
 	switch event.EventType {
 	case "video_like":
 		return s.ProcessVideoLikeEvent(ctx, event)
 	case "comment_like":
 		return s.ProcessCommentLikeEvent(ctx, event)
 	default:
+		hlog.CtxErrorf(ctx, "Unknown event type '%s' for event %s. Event details: %+v",
+			event.EventType, event.EventID, event)
 		return fmt.Errorf("unknown event type: %s", event.EventType)
 	}
 }
@@ -481,23 +491,12 @@ func (s *EventDrivenSyncService) checkIdempotency(ctx context.Context, key strin
 	return count > 0, nil
 }
 
+// publishToMQ 已弃用 - 避免事件循环
+// 原来的逻辑会导致 LikeEvent -> SyncEvent -> LikeEvent 的循环处理
+// 现在直接在 PublishSyncEvent 中处理，避免重复计数
 func (s *EventDrivenSyncService) publishToMQ(ctx context.Context, event *SyncEvent) error {
-	// 根据事件类型发布到不同的队列
-	switch event.EventType {
-	case "video_like", "comment_like":
-		likeEvent := &mq.LikeEvent{
-			UserID:     event.UserID,
-			VideoID:    event.ResourceID,
-			CommentID:  event.ResourceID,
-			ActionType: event.ActionType,
-			EventType:  event.EventType,
-			Timestamp:  event.Timestamp,
-			EventID:    event.EventID,
-		}
-		return s.producer.PublishLikeEvent(ctx, likeEvent)
-	default:
-		return fmt.Errorf("unsupported event type for MQ: %s", event.EventType)
-	}
+	hlog.Warnf("publishToMQ called but deprecated to avoid event loops: %s", event.EventType)
+	return nil
 }
 
 // RetryManager 方法
@@ -521,8 +520,25 @@ func (dlm *DistributedLockManager) ReleaseLock(ctx context.Context, key string) 
 
 // EventStore 方法
 func (es *EventStore) StoreEvent(ctx context.Context, event *SyncEvent) error {
+	// 验证必要字段
+	if event.EventID == "" {
+		return fmt.Errorf("event ID is required")
+	}
+	if event.EventType == "" {
+		return fmt.Errorf("event type is required")
+	}
+	if event.UserID == 0 {
+		return fmt.Errorf("user ID is required")
+	}
+
+	hlog.CtxInfof(ctx, "Storing event: ID=%s, Type=%s, ResourceType=%s, ResourceID=%d, UserID=%d, ActionType=%s",
+		event.EventID, event.EventType, event.ResourceType, event.ResourceID, event.UserID, event.ActionType)
+
 	// 将业务SyncEvent转换为数据库模型
-	eventData, _ := json.Marshal(event.Data)
+	eventData, err := json.Marshal(event.Data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event data: %w", err)
+	}
 
 	dbEvent := &model.SyncEvent{
 		ID:             event.EventID,
@@ -541,18 +557,31 @@ func (es *EventStore) StoreEvent(ctx context.Context, event *SyncEvent) error {
 		UpdatedAt:      time.Now(),
 	}
 
-	return es.db.Create(dbEvent).Error
+	if err := es.db.Create(dbEvent).Error; err != nil {
+		return fmt.Errorf("failed to store event: %w", err)
+	}
+
+	hlog.CtxInfof(ctx, "Successfully stored event %s with type %s", event.EventID, event.EventType)
+	return nil
 }
 
 func (es *EventStore) GetFailedEvents(ctx context.Context, limit int) ([]*SyncEvent, error) {
 	// 获取失败的事件
 	var records []struct {
-		ID        string
-		EventType string
-		Status    string
-		Data      string
-		CreatedAt time.Time
-		UpdatedAt time.Time
+		ID             string
+		EventType      string
+		ResourceType   string
+		ResourceID     int64
+		UserID         int64
+		ActionType     string
+		Status         string
+		Data           string
+		RetryCount     int
+		MaxRetries     int
+		Priority       int
+		IdempotencyKey string
+		CreatedAt      time.Time
+		UpdatedAt      time.Time
 	}
 
 	err := es.db.Table("sync_events").
@@ -566,11 +595,39 @@ func (es *EventStore) GetFailedEvents(ctx context.Context, limit int) ([]*SyncEv
 
 	var events []*SyncEvent
 	for _, record := range records {
-		var event SyncEvent
-		if err := json.Unmarshal([]byte(record.Data), &event); err != nil {
-			continue
+		var dataMap map[string]interface{}
+		if record.Data != "" {
+			if err := json.Unmarshal([]byte(record.Data), &dataMap); err != nil {
+				hlog.Warnf("Failed to unmarshal failed event data: %v", err)
+				dataMap = make(map[string]interface{})
+			}
+		} else {
+			dataMap = make(map[string]interface{})
 		}
-		events = append(events, &event)
+
+		// 从数据库记录重建SyncEvent
+		event := &SyncEvent{
+			EventID:        record.ID,
+			EventType:      record.EventType,    // 从数据库字段设置
+			ResourceType:   record.ResourceType, // 从数据库字段设置
+			ResourceID:     record.ResourceID,   // 从数据库字段设置
+			UserID:         record.UserID,       // 从数据库字段设置
+			ActionType:     record.ActionType,   // 从数据库字段设置
+			Data:           dataMap,
+			RetryCount:     record.RetryCount,
+			MaxRetries:     record.MaxRetries,
+			Priority:       record.Priority,
+			IdempotencyKey: record.IdempotencyKey,
+		}
+
+		// 从Data中获取Timestamp（如果存在）
+		if timestamp, ok := dataMap["timestamp"]; ok {
+			if ts, ok := timestamp.(float64); ok {
+				event.Timestamp = int64(ts)
+			}
+		}
+
+		events = append(events, event)
 	}
 
 	return events, nil
@@ -579,12 +636,20 @@ func (es *EventStore) GetFailedEvents(ctx context.Context, limit int) ([]*SyncEv
 // GetPendingEvents 获取待处理的事件
 func (es *EventStore) GetPendingEvents(ctx context.Context, limit int) ([]*SyncEvent, error) {
 	var records []struct {
-		ID        string
-		EventType string
-		Status    string
-		Data      string
-		CreatedAt time.Time
-		UpdatedAt time.Time
+		ID             string
+		EventType      string
+		ResourceType   string
+		ResourceID     int64
+		UserID         int64
+		ActionType     string
+		Status         string
+		Data           string
+		RetryCount     int
+		MaxRetries     int
+		Priority       int
+		IdempotencyKey string
+		CreatedAt      time.Time
+		UpdatedAt      time.Time
 	}
 
 	err := es.db.Table("sync_events").
@@ -599,12 +664,40 @@ func (es *EventStore) GetPendingEvents(ctx context.Context, limit int) ([]*SyncE
 
 	var events []*SyncEvent
 	for _, record := range records {
-		var event SyncEvent
-		if err := json.Unmarshal([]byte(record.Data), &event); err != nil {
-			hlog.Warnf("Failed to unmarshal event data: %v", err)
-			continue
+		var dataMap map[string]interface{}
+		if record.Data != "" {
+			if err := json.Unmarshal([]byte(record.Data), &dataMap); err != nil {
+				hlog.Warnf("Failed to unmarshal event data: %v", err)
+				// 如果JSON解析失败，使用空map
+				dataMap = make(map[string]interface{})
+			}
+		} else {
+			dataMap = make(map[string]interface{})
 		}
-		events = append(events, &event)
+
+		// 从数据库记录重建SyncEvent
+		event := &SyncEvent{
+			EventID:        record.ID,
+			EventType:      record.EventType,    // 从数据库字段设置
+			ResourceType:   record.ResourceType, // 从数据库字段设置
+			ResourceID:     record.ResourceID,   // 从数据库字段设置
+			UserID:         record.UserID,       // 从数据库字段设置
+			ActionType:     record.ActionType,   // 从数据库字段设置
+			Data:           dataMap,
+			RetryCount:     record.RetryCount,
+			MaxRetries:     record.MaxRetries,
+			Priority:       record.Priority,
+			IdempotencyKey: record.IdempotencyKey,
+		}
+
+		// 从Data中获取Timestamp（如果存在）
+		if timestamp, ok := dataMap["timestamp"]; ok {
+			if ts, ok := timestamp.(float64); ok {
+				event.Timestamp = int64(ts)
+			}
+		}
+
+		events = append(events, event)
 	}
 
 	return events, nil

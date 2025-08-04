@@ -598,12 +598,30 @@ func GetVideoLikeListByUserId(ctx context.Context, userId, pageNum, pageSize int
 	return &list, nil
 }
 
-// 记录用户的点赞行为
+// 记录用户的点赞行为（幂等性保证）
 func AddUserLikeBehavior(ctx context.Context, behavior *model.UserBehavior) error {
-	if err := DB.WithContext(ctx).Create(behavior).Error; err != nil {
-		return err
-	}
-	return nil
+	// 使用 ON DUPLICATE KEY UPDATE 或 UPSERT 来避免重复插入
+	// 根据 user_id, video_id, behavior_type 组合作为唯一性约束
+	return DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existingBehavior model.UserBehavior
+
+		// 先查询是否已存在相同的记录
+		err := tx.Where("user_id = ? AND video_id = ? AND behavior_type = ?",
+			behavior.UserId, behavior.VideoId, behavior.BehaviorType).
+			First(&existingBehavior).Error
+
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				// 记录不存在，可以插入
+				return tx.Create(behavior).Error
+			}
+			return err
+		}
+
+		// 记录已存在，更新时间戳
+		return tx.Model(&existingBehavior).
+			Update("behavior_time", behavior.BehaviorTime).Error
+	})
 }
 
 func DeleteUserLikeBehavior(ctx context.Context, userId, videoId int64, behavior string) error {
