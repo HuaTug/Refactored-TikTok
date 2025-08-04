@@ -65,7 +65,9 @@ var fieldIDToName_LikeActionRequest = map[int16]string{
 }
 
 type LikeActionResponse struct {
-	Base *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	Base      *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	IsLiked   bool         `thrift:"is_liked,2" frugal:"2,default,bool" json:"is_liked"`
+	LikeCount int64        `thrift:"like_count,3" frugal:"3,default,i64" json:"like_count"`
 }
 
 func NewLikeActionResponse() *LikeActionResponse {
@@ -83,8 +85,22 @@ func (p *LikeActionResponse) GetBase() (v *base.Status) {
 	}
 	return p.Base
 }
+
+func (p *LikeActionResponse) GetIsLiked() (v bool) {
+	return p.IsLiked
+}
+
+func (p *LikeActionResponse) GetLikeCount() (v int64) {
+	return p.LikeCount
+}
 func (p *LikeActionResponse) SetBase(val *base.Status) {
 	p.Base = val
+}
+func (p *LikeActionResponse) SetIsLiked(val bool) {
+	p.IsLiked = val
+}
+func (p *LikeActionResponse) SetLikeCount(val int64) {
+	p.LikeCount = val
 }
 
 func (p *LikeActionResponse) IsSetBase() bool {
@@ -100,6 +116,8 @@ func (p *LikeActionResponse) String() string {
 
 var fieldIDToName_LikeActionResponse = map[int16]string{
 	1: "base",
+	2: "is_liked",
+	3: "like_count",
 }
 
 type LikeListRequest struct {
@@ -823,118 +841,6 @@ var fieldIDToName_NotificationEvent = map[int16]string{
 	7: "event_id",
 }
 
-type LikeActionRequestV2 struct {
-	UserId     int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
-	VideoId    int64  `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
-	CommentId  int64  `thrift:"comment_id,3" frugal:"3,default,i64" json:"comment_id"`
-	ActionType string `thrift:"action_type,4" frugal:"4,default,string" json:"action_type"`
-}
-
-func NewLikeActionRequestV2() *LikeActionRequestV2 {
-	return &LikeActionRequestV2{}
-}
-
-func (p *LikeActionRequestV2) InitDefault() {
-}
-
-func (p *LikeActionRequestV2) GetUserId() (v int64) {
-	return p.UserId
-}
-
-func (p *LikeActionRequestV2) GetVideoId() (v int64) {
-	return p.VideoId
-}
-
-func (p *LikeActionRequestV2) GetCommentId() (v int64) {
-	return p.CommentId
-}
-
-func (p *LikeActionRequestV2) GetActionType() (v string) {
-	return p.ActionType
-}
-func (p *LikeActionRequestV2) SetUserId(val int64) {
-	p.UserId = val
-}
-func (p *LikeActionRequestV2) SetVideoId(val int64) {
-	p.VideoId = val
-}
-func (p *LikeActionRequestV2) SetCommentId(val int64) {
-	p.CommentId = val
-}
-func (p *LikeActionRequestV2) SetActionType(val string) {
-	p.ActionType = val
-}
-
-func (p *LikeActionRequestV2) String() string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("LikeActionRequestV2(%+v)", *p)
-}
-
-var fieldIDToName_LikeActionRequestV2 = map[int16]string{
-	1: "user_id",
-	2: "video_id",
-	3: "comment_id",
-	4: "action_type",
-}
-
-type LikeActionResponseV2 struct {
-	Base      *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
-	IsLiked   bool         `thrift:"is_liked,2" frugal:"2,default,bool" json:"is_liked"`
-	LikeCount int64        `thrift:"like_count,3" frugal:"3,default,i64" json:"like_count"`
-}
-
-func NewLikeActionResponseV2() *LikeActionResponseV2 {
-	return &LikeActionResponseV2{}
-}
-
-func (p *LikeActionResponseV2) InitDefault() {
-}
-
-var LikeActionResponseV2_Base_DEFAULT *base.Status
-
-func (p *LikeActionResponseV2) GetBase() (v *base.Status) {
-	if !p.IsSetBase() {
-		return LikeActionResponseV2_Base_DEFAULT
-	}
-	return p.Base
-}
-
-func (p *LikeActionResponseV2) GetIsLiked() (v bool) {
-	return p.IsLiked
-}
-
-func (p *LikeActionResponseV2) GetLikeCount() (v int64) {
-	return p.LikeCount
-}
-func (p *LikeActionResponseV2) SetBase(val *base.Status) {
-	p.Base = val
-}
-func (p *LikeActionResponseV2) SetIsLiked(val bool) {
-	p.IsLiked = val
-}
-func (p *LikeActionResponseV2) SetLikeCount(val int64) {
-	p.LikeCount = val
-}
-
-func (p *LikeActionResponseV2) IsSetBase() bool {
-	return p.Base != nil
-}
-
-func (p *LikeActionResponseV2) String() string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("LikeActionResponseV2(%+v)", *p)
-}
-
-var fieldIDToName_LikeActionResponseV2 = map[int16]string{
-	1: "base",
-	2: "is_liked",
-	3: "like_count",
-}
-
 type GetNotificationsRequest struct {
 	UserId           int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
 	PageNum          int64  `thrift:"page_num,2" frugal:"2,default,i64" json:"page_num"`
@@ -1256,8 +1162,6 @@ type InteractionService interface {
 	VideoPopularList(ctx context.Context, req *VideoPopularListRequest) (r *VideoPopularListResponse, err error)
 
 	DeleteVideoInfo(ctx context.Context, req *DeleteVideoInfoRequest) (r *DeleteVideoInfoResponse, err error)
-
-	LikeActionV2(ctx context.Context, req *LikeActionRequestV2) (r *LikeActionResponseV2, err error)
 
 	GetNotifications(ctx context.Context, req *GetNotificationsRequest) (r *GetNotificationsResponse, err error)
 
@@ -1793,82 +1697,6 @@ func (p *InteractionServiceDeleteVideoInfoResult) String() string {
 }
 
 var fieldIDToName_InteractionServiceDeleteVideoInfoResult = map[int16]string{
-	0: "success",
-}
-
-type InteractionServiceLikeActionV2Args struct {
-	Req *LikeActionRequestV2 `thrift:"req,1" frugal:"1,default,LikeActionRequestV2" json:"req"`
-}
-
-func NewInteractionServiceLikeActionV2Args() *InteractionServiceLikeActionV2Args {
-	return &InteractionServiceLikeActionV2Args{}
-}
-
-func (p *InteractionServiceLikeActionV2Args) InitDefault() {
-}
-
-var InteractionServiceLikeActionV2Args_Req_DEFAULT *LikeActionRequestV2
-
-func (p *InteractionServiceLikeActionV2Args) GetReq() (v *LikeActionRequestV2) {
-	if !p.IsSetReq() {
-		return InteractionServiceLikeActionV2Args_Req_DEFAULT
-	}
-	return p.Req
-}
-func (p *InteractionServiceLikeActionV2Args) SetReq(val *LikeActionRequestV2) {
-	p.Req = val
-}
-
-func (p *InteractionServiceLikeActionV2Args) IsSetReq() bool {
-	return p.Req != nil
-}
-
-func (p *InteractionServiceLikeActionV2Args) String() string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("InteractionServiceLikeActionV2Args(%+v)", *p)
-}
-
-var fieldIDToName_InteractionServiceLikeActionV2Args = map[int16]string{
-	1: "req",
-}
-
-type InteractionServiceLikeActionV2Result struct {
-	Success *LikeActionResponseV2 `thrift:"success,0,optional" frugal:"0,optional,LikeActionResponseV2" json:"success,omitempty"`
-}
-
-func NewInteractionServiceLikeActionV2Result() *InteractionServiceLikeActionV2Result {
-	return &InteractionServiceLikeActionV2Result{}
-}
-
-func (p *InteractionServiceLikeActionV2Result) InitDefault() {
-}
-
-var InteractionServiceLikeActionV2Result_Success_DEFAULT *LikeActionResponseV2
-
-func (p *InteractionServiceLikeActionV2Result) GetSuccess() (v *LikeActionResponseV2) {
-	if !p.IsSetSuccess() {
-		return InteractionServiceLikeActionV2Result_Success_DEFAULT
-	}
-	return p.Success
-}
-func (p *InteractionServiceLikeActionV2Result) SetSuccess(x interface{}) {
-	p.Success = x.(*LikeActionResponseV2)
-}
-
-func (p *InteractionServiceLikeActionV2Result) IsSetSuccess() bool {
-	return p.Success != nil
-}
-
-func (p *InteractionServiceLikeActionV2Result) String() string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("InteractionServiceLikeActionV2Result(%+v)", *p)
-}
-
-var fieldIDToName_InteractionServiceLikeActionV2Result = map[int16]string{
 	0: "success",
 }
 

@@ -5,10 +5,12 @@ import (
 	"os"
 
 	"HuaTug.com/cmd/api/rpc"
+	"HuaTug.com/cmd/interaction/common"
+	"HuaTug.com/cmd/interaction/consumer"
 	"HuaTug.com/cmd/interaction/dal"
+	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config/jaeger"
 
 	"HuaTug.com/config"
@@ -26,7 +28,7 @@ import (
 )
 
 // 全局变量
-var globalEventDrivenSyncService *service.EventDrivenSyncService
+var globalEventDrivenSyncService *common.EventDrivenSyncService
 
 func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
@@ -34,6 +36,10 @@ func Init() {
 	dal.Init()
 	redis.Load()
 	client.Init()
+
+	go func() {
+		consumer.Init()
+	}()
 
 	// 初始化RPC客户端，确保VideoClient被正确初始化
 	rpc.InitVideoRpc()
@@ -72,10 +78,10 @@ func initMessageQueue() {
 func initEventDrivenSyncService() {
 	// 获取全局生产者和数据库实例
 	producer := GetGlobalProducer()
-	database := dal.DB
+	database := db.DB
 
 	// 创建事件驱动同步服务
-	globalEventDrivenSyncService = service.NewEventDrivenSyncService(producer, database)
+	globalEventDrivenSyncService = common.NewEventDrivenSyncService(producer, database)
 
 	// 启动同步服务
 	if err := globalEventDrivenSyncService.Start(); err != nil {
@@ -87,7 +93,7 @@ func initEventDrivenSyncService() {
 }
 
 // 获取全局事件驱动同步服务
-func GetGlobalEventDrivenSyncService() *service.EventDrivenSyncService {
+func GetGlobalEventDrivenSyncService() *common.EventDrivenSyncService {
 	return globalEventDrivenSyncService
 }
 

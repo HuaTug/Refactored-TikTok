@@ -8,7 +8,7 @@ build:
 	cd cmd/video && go build -o video
 	cd cmd/relation && go build -o relation	
 	cd cmd/interaction && go build -o interaction
-	cd cmd/message && go build -o message 
+# 	cd cmd/message && go build -o message 
 api:
 	cd cmd/api && ./api
 user:	
@@ -19,8 +19,8 @@ interaction:
 	cd cmd/interaction && ./interaction
 relation:
 	cd cmd/relation && ./relation		
-message:
-	cd cmd/message && ./message
+# message:
+# 	cd cmd/message && ./message
 
 go:env build
 

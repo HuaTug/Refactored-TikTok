@@ -27,18 +27,7 @@ services:
       - ./logs/redis:/logs  # 日志目录
     command: redis-server /usr/local/etc/redis/redis.conf
     environment:
-      - REDIS_PASSWORD=Redis@TikTok#2025_SecurePass
-    # 使用非root用户运行Redis
-    user: "999:999"  # redis用户
-    # 安全限制
-    security_opt:
-      - no-new-privileges:true
-    # 资源限制
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
+      - REDIS_PASSWORD=Redis@TikTok2025_SecurePass
     # 健康检查
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "Redis@TikTok2025_SecurePass", "ping"]

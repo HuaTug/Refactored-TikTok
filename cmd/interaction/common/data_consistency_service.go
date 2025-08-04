@@ -1,4 +1,4 @@
-package service
+package common
 
 import (
 	"context"
@@ -17,7 +17,7 @@ type DataConsistencyService struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
 	db            *gorm.DB
-	cacheManager  *redis.ImprovedCacheManager
+	cacheManager  *redis.LikeCacheManager
 	checkInterval time.Duration
 	isRunning     bool
 }
@@ -34,7 +34,7 @@ type ConsistencyCheckResult struct {
 }
 
 // NewDataConsistencyService 创建数据一致性检查服务
-func NewDataConsistencyService(db *gorm.DB, cacheManager *redis.ImprovedCacheManager) *DataConsistencyService {
+func NewDataConsistencyService(db *gorm.DB, cacheManager *redis.LikeCacheManager) *DataConsistencyService {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &DataConsistencyService{
@@ -186,7 +186,7 @@ func (dcs *DataConsistencyService) checkSingleVideoConsistency(videoID int64) Co
 	}
 
 	// 从缓存获取点赞数
-	cacheCount, _, err := dcs.cacheManager.GetVideoLikeCountWithConsistency(dcs.ctx, videoID)
+	cacheCount, err := dcs.cacheManager.GetVideoLikeCount(dcs.ctx, videoID)
 	if err != nil {
 		hlog.Errorf("Failed to get video like count from cache: %v", err)
 		cacheCount = -1 // 标记为缓存获取失败
@@ -226,7 +226,7 @@ func (dcs *DataConsistencyService) checkSingleCommentConsistency(commentID int64
 	}
 
 	// 从缓存获取点赞数
-	cacheCount, _, err := dcs.cacheManager.GetCommentLikeCountWithConsistency(dcs.ctx, commentID)
+	cacheCount, err := dcs.cacheManager.GetCommentLikeCount(dcs.ctx, commentID)
 	if err != nil {
 		hlog.Errorf("Failed to get comment like count from cache: %v", err)
 		cacheCount = -1
@@ -271,13 +271,17 @@ func (dcs *DataConsistencyService) handleInconsistency(result *ConsistencyCheckR
 	}
 }
 
+//ToDo: 补充点踩的计数
 // fixVideoLikeConsistency 修复视频点赞数据一致性
 func (dcs *DataConsistencyService) fixVideoLikeConsistency(videoID int64, correctCount int64) {
 	if correctCount < 0 {
 		return // 数据库查询失败，不进行修复
 	}
-
-	err := dcs.cacheManager.SetVideoLikeCountWithConsistency(dcs.ctx, videoID, correctCount, time.Now().UnixNano())
+	Count := &redis.CountCache{
+		LikeCount:    correctCount,
+		DislikeCount: 0,
+	}
+	err := dcs.cacheManager.SetCountCache(dcs.ctx, redis.BusinessTypeVideo, videoID, Count)
 	if err != nil {
 		hlog.Errorf("Failed to fix video like consistency: %v", err)
 		return
@@ -292,7 +296,12 @@ func (dcs *DataConsistencyService) fixCommentLikeConsistency(commentID int64, co
 		return
 	}
 
-	err := dcs.cacheManager.SetCommentLikeCountWithConsistency(dcs.ctx, commentID, correctCount, time.Now().UnixNano())
+	Count := &redis.CountCache{
+		LikeCount:    correctCount,
+		DislikeCount: 0,
+	}
+
+	err := dcs.cacheManager.SetCountCache(dcs.ctx, redis.BusinessTypeComment, commentID, Count)
 	if err != nil {
 		hlog.Errorf("Failed to fix comment like consistency: %v", err)
 		return

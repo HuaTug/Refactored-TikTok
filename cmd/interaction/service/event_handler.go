@@ -5,17 +5,20 @@ import (
 	"fmt"
 	"time"
 
+	"HuaTug.com/cmd/interaction/common"
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/google/uuid" // 添加这一行
 )
 
 // LikeEventHandler 处理点赞事件
 type LikeEventHandler struct {
-	syncService *EventDrivenSyncService
+	syncService  *common.EventDrivenSyncService
+	cacheManager *redis.LikeCacheManager
 }
 
 func NewLikeEventHandler() *LikeEventHandler {
@@ -23,9 +26,10 @@ func NewLikeEventHandler() *LikeEventHandler {
 }
 
 // NewLikeEventHandlerWithSync 创建带同步服务的事件处理器
-func NewLikeEventHandlerWithSync(syncService *EventDrivenSyncService) *LikeEventHandler {
+func NewLikeEventHandlerWithSync(syncService *common.EventDrivenSyncService) *LikeEventHandler {
 	return &LikeEventHandler{
-		syncService: syncService,
+		syncService:  syncService,
+		cacheManager: redis.NewLikeCacheManager(redis.RedisDBInteraction),
 	}
 }
 
@@ -50,8 +54,8 @@ func (h *LikeEventHandler) HandleLikeEvent(ctx context.Context, event *mq.LikeEv
 
 	// 2. 如果配置了同步服务，则同步数据到video_likes表
 	if h.syncService != nil {
-		syncEvent := &SyncEvent{
-			EventID:      event.EventID,
+		syncEvent := &common.SyncEvent{
+			EventID:      uuid.New().String(), // 生成新的唯一事件ID
 			EventType:    event.EventType,
 			ResourceType: getResourceType(event.EventType),
 			ResourceID:   getResourceID(event),
@@ -98,10 +102,10 @@ func (h *LikeEventHandler) handleVideoLikeEvent(ctx context.Context, event *mq.L
 	var err error
 	if event.ActionType == "like" {
 		// 增加点赞数
-		err = redis.IncrVideoLikeCount(event.VideoID)
+		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.VideoID, 1)
 	} else if event.ActionType == "unlike" {
 		// 减少点赞数
-		err = redis.DecrVideoLikeCount(event.VideoID)
+		err = h.cacheManager.IncrementDislikeCount(ctx, redis.BusinessTypeVideo, event.VideoID, 1)
 	}
 
 	if err != nil {
@@ -136,9 +140,9 @@ func (h *LikeEventHandler) handleCommentLikeEvent(ctx context.Context, event *mq
 	// 1. 更新Redis中的评论点赞计数器
 	var err error
 	if event.ActionType == "like" {
-		err = redis.IncrCommentLikeCount(event.CommentID)
+		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.CommentID, 1)
 	} else if event.ActionType == "unlike" {
-		err = redis.DecrCommentLikeCount(event.CommentID)
+		err = h.cacheManager.IncrementDislikeCount(ctx, redis.BusinessTypeComment, event.CommentID, 1)
 	}
 
 	if err != nil {

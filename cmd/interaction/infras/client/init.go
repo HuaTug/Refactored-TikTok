@@ -1,5 +1,6 @@
 package client
 
-func Init(){
+func Init() {
 	InitVideoRpc()
+	InitUserRpc()
 }

@@ -1,4 +1,4 @@
-package service
+package common
 
 import (
 	"context"
@@ -24,6 +24,7 @@ type EventDrivenSyncService struct {
 	db           *gorm.DB
 	retryManager *RetryManager
 	lockManager  *DistributedLockManager
+	cacheManager *redis.LikeCacheManager
 	eventStore   *EventStore
 	metrics      *SyncMetrics
 	mu           sync.RWMutex
@@ -238,7 +239,7 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 
 	// 3. 异步更新Redis缓存
 	go func() {
-		if err := redis.IncrVideoLikeCount(event.ResourceID); err != nil {
+		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.ResourceID, 1); err != nil {
 			hlog.Errorf("Failed to update Redis like count: %v", err)
 		}
 	}()
@@ -263,7 +264,7 @@ func (s *EventDrivenSyncService) processVideoUnlike(ctx context.Context, tx *gor
 
 	// 3. 异步更新Redis缓存
 	go func() {
-		if err := redis.DecrVideoLikeCount(event.ResourceID); err != nil {
+		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.ResourceID, -1); err != nil {
 			hlog.Errorf("Failed to update Redis like count: %v", err)
 		}
 	}()
@@ -287,7 +288,7 @@ func (s *EventDrivenSyncService) processCommentLike(ctx context.Context, tx *gor
 
 	// 异步更新Redis缓存
 	go func() {
-		if err := redis.IncrCommentLikeCount(event.ResourceID); err != nil {
+		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.ResourceID, 1); err != nil {
 			hlog.Errorf("Failed to update Redis comment like count: %v", err)
 		}
 	}()
@@ -305,7 +306,7 @@ func (s *EventDrivenSyncService) processCommentUnlike(ctx context.Context, tx *g
 
 	// 异步更新Redis缓存
 	go func() {
-		if err := redis.DecrCommentLikeCount(event.ResourceID); err != nil {
+		if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.ResourceID, -1); err != nil {
 			hlog.Errorf("Failed to update Redis comment like count: %v", err)
 		}
 	}()
@@ -467,9 +468,17 @@ func (s *EventDrivenSyncService) generateIdempotencyKey(event *SyncEvent) string
 }
 
 func (s *EventDrivenSyncService) checkIdempotency(ctx context.Context, key string) (bool, error) {
-	// 这里应该检查Redis或数据库中是否存在该幂等性键
-	// 简化实现
-	return false, nil
+	// 使用数据库检查幂等性键是否已存在
+	var count int64
+	err := s.db.WithContext(ctx).Model(&model.SyncEvent{}).
+		Where("idempotency_key = ?", key).
+		Count(&count).Error
+
+	if err != nil {
+		return false, fmt.Errorf("failed to check idempotency: %w", err)
+	}
+
+	return count > 0, nil
 }
 
 func (s *EventDrivenSyncService) publishToMQ(ctx context.Context, event *SyncEvent) error {
@@ -512,26 +521,27 @@ func (dlm *DistributedLockManager) ReleaseLock(ctx context.Context, key string) 
 
 // EventStore 方法
 func (es *EventStore) StoreEvent(ctx context.Context, event *SyncEvent) error {
-	// 存储事件到数据库
-	eventData, _ := json.Marshal(event)
+	// 将业务SyncEvent转换为数据库模型
+	eventData, _ := json.Marshal(event.Data)
 
-	eventRecord := struct {
-		ID        string `gorm:"primaryKey"`
-		EventType string
-		Status    string
-		Data      string
-		CreatedAt time.Time
-		UpdatedAt time.Time
-	}{
-		ID:        event.EventID,
-		EventType: event.EventType,
-		Status:    "pending",
-		Data:      string(eventData),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	dbEvent := &model.SyncEvent{
+		ID:             event.EventID,
+		EventType:      event.EventType,
+		ResourceType:   event.ResourceType,
+		ResourceID:     event.ResourceID,
+		UserID:         event.UserID,
+		ActionType:     event.ActionType,
+		Status:         "pending",
+		Data:           string(eventData),
+		RetryCount:     event.RetryCount,
+		MaxRetries:     event.MaxRetries,
+		Priority:       event.Priority,
+		IdempotencyKey: event.IdempotencyKey,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
-	return es.db.Table("sync_events").Create(&eventRecord).Error
+	return es.db.Create(dbEvent).Error
 }
 
 func (es *EventStore) GetFailedEvents(ctx context.Context, limit int) ([]*SyncEvent, error) {

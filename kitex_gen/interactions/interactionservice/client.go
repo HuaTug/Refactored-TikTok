@@ -18,7 +18,6 @@ type Client interface {
 	DeleteComment(ctx context.Context, req *interactions.CommentDeleteRequest, callOptions ...callopt.Option) (r *interactions.CommentDeleteResponse, err error)
 	VideoPopularList(ctx context.Context, req *interactions.VideoPopularListRequest, callOptions ...callopt.Option) (r *interactions.VideoPopularListResponse, err error)
 	DeleteVideoInfo(ctx context.Context, req *interactions.DeleteVideoInfoRequest, callOptions ...callopt.Option) (r *interactions.DeleteVideoInfoResponse, err error)
-	LikeActionV2(ctx context.Context, req *interactions.LikeActionRequestV2, callOptions ...callopt.Option) (r *interactions.LikeActionResponseV2, err error)
 	GetNotifications(ctx context.Context, req *interactions.GetNotificationsRequest, callOptions ...callopt.Option) (r *interactions.GetNotificationsResponse, err error)
 	MarkNotificationRead(ctx context.Context, req *interactions.MarkNotificationReadRequest, callOptions ...callopt.Option) (r *interactions.MarkNotificationReadResponse, err error)
 }
@@ -85,11 +84,6 @@ func (p *kInteractionServiceClient) VideoPopularList(ctx context.Context, req *i
 func (p *kInteractionServiceClient) DeleteVideoInfo(ctx context.Context, req *interactions.DeleteVideoInfoRequest, callOptions ...callopt.Option) (r *interactions.DeleteVideoInfoResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.DeleteVideoInfo(ctx, req)
-}
-
-func (p *kInteractionServiceClient) LikeActionV2(ctx context.Context, req *interactions.LikeActionRequestV2, callOptions ...callopt.Option) (r *interactions.LikeActionResponseV2, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.LikeActionV2(ctx, req)
 }
 
 func (p *kInteractionServiceClient) GetNotifications(ctx context.Context, req *interactions.GetNotificationsRequest, callOptions ...callopt.Option) (r *interactions.GetNotificationsResponse, err error) {

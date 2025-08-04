@@ -1,4 +1,4 @@
-package main
+package consumer
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"HuaTug.com/cmd/interaction/common"
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/redis"
@@ -50,7 +51,7 @@ func initConfig() {
 	config.Init()
 }
 
-func main() {
+func Init() {
 	// 初始化日志
 	hlog.SetLevel(hlog.LevelInfo)
 
@@ -73,7 +74,7 @@ func main() {
 	}
 
 	// 创建事件驱动同步服务
-	syncService := service.NewEventDrivenSyncService(producer, db.DB)
+	syncService := common.NewEventDrivenSyncService(producer, db.DB)
 	if err := syncService.Start(); err != nil {
 		log.Fatalf("Failed to start sync service: %v", err)
 	}
@@ -92,7 +93,17 @@ func main() {
 
 	// 创建带同步服务的事件处理器
 	likeHandler := service.NewLikeEventHandlerWithSync(syncService)
-	notificationHandler := service.NewNotificationEventHandler()
+	//notificationHandler := service.NewNotificationEventHandler()
+
+	// 创建评论事件消费者和处理器
+	commentMQManager, err := mq.NewCommentMQManager(rabbitmqURL)
+	if err != nil {
+		log.Fatalf("Failed to create comment MQ manager: %v", err)
+	}
+	defer commentMQManager.Close()
+
+	// 这里需要创建评论事件处理器，但目前缺少依赖
+	// commentEventProcessor := service.NewCommentEventProcessor(shardedDB, cacheManager, commentMQManager)
 
 	// 启动点赞事件消费者
 	if err := consumer.ConsumeLikeEvents(ctx, likeHandler); err != nil {
@@ -100,11 +111,17 @@ func main() {
 	}
 	hlog.Info("Like event consumer started")
 
-	// 启动通知事件消费者
-	if err := consumer.ConsumeNotificationEvents(ctx, notificationHandler); err != nil {
-		log.Fatalf("Failed to start notification event consumer: %v", err)
-	}
-	hlog.Info("Notification event consumer started")
+	// 启动评论事件消费者 (暂时注释，等待依赖完善)
+	// if err := commentMQManager.ConsumeCommentEvents(ctx, commentEventProcessor); err != nil {
+	// 	log.Fatalf("Failed to start comment event consumer: %v", err)
+	// }
+	// hlog.Info("Comment event consumer started")
+
+	// // 启动通知事件消费者
+	// if err := consumer.ConsumeNotificationEvents(ctx, notificationHandler); err != nil {
+	// 	log.Fatalf("Failed to start notification event consumer: %v", err)
+	// }
+	// hlog.Info("Notification event consumer started")
 
 	hlog.Info("Event consumer started successfully, waiting for messages...")
 
