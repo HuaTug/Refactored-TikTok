@@ -8,8 +8,6 @@ import (
 	"HuaTug.com/cmd/interaction/common"
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/cmd/model"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/google/uuid" // 添加这一行
@@ -104,8 +102,8 @@ func (h *LikeEventHandler) handleVideoLikeEvent(ctx context.Context, event *mq.L
 		// 增加点赞数
 		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.VideoID, 1)
 	} else if event.ActionType == "unlike" {
-		// 减少点赞数
-		err = h.cacheManager.IncrementDislikeCount(ctx, redis.BusinessTypeVideo, event.VideoID, 1)
+		// 减少点赞数（注意：unlike是减少点赞数，不是增加点踩数）
+		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, event.VideoID, -1)
 	}
 
 	if err != nil {
@@ -113,24 +111,10 @@ func (h *LikeEventHandler) handleVideoLikeEvent(ctx context.Context, event *mq.L
 		return err
 	}
 
-	// 2. 异步更新user_behaviors表（保持原有逻辑）
-	go func() {
-		if event.ActionType == "like" {
-			like := &model.UserBehavior{
-				UserId:       event.UserID,
-				VideoId:      event.VideoID,
-				BehaviorType: "like",
-				BehaviorTime: time.Now().Format(constants.DataFormate),
-			}
-			if err := db.AddUserLikeBehavior(context.Background(), like); err != nil {
-				hlog.Errorf("Failed to save like behavior to DB: %v", err)
-			}
-		} else if event.ActionType == "unlike" {
-			if err := db.DeleteUserLikeBehavior(context.Background(), event.UserID, event.VideoID, "like"); err != nil {
-				hlog.Errorf("Failed to delete like behavior from DB: %v", err)
-			}
-		}
-	}()
+	// 注意：不再在这里插入user_behaviors表，避免重复插入
+	// 用户行为记录由event_driven_sync.go统一处理
+	hlog.CtxInfof(ctx, "Video like event processed successfully, user_id: %d, video_id: %d, action: %s",
+		event.UserID, event.VideoID, event.ActionType)
 
 	return nil
 }
@@ -142,7 +126,8 @@ func (h *LikeEventHandler) handleCommentLikeEvent(ctx context.Context, event *mq
 	if event.ActionType == "like" {
 		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.CommentID, 1)
 	} else if event.ActionType == "unlike" {
-		err = h.cacheManager.IncrementDislikeCount(ctx, redis.BusinessTypeComment, event.CommentID, 1)
+		// 减少点赞数（注意：unlike是减少点赞数，不是增加点踩数）
+		err = h.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, event.CommentID, -1)
 	}
 
 	if err != nil {

@@ -736,6 +736,63 @@ INSERT INTO `storage_bucket_config` (`bucket_name`, `bucket_type`, `lifecycle_co
 ('tiktok-analytics', 'analytics', '{"hot_days": 30, "warm_days": 90, "cold_days": 365, "archive_days": 2190}', 30, 90, 365, 2190)
 ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
 
+CREATE TABLE IF NOT EXISTS `sync_events` (
+    `id` VARCHAR(36) NOT NULL PRIMARY KEY,
+    `event_type` VARCHAR(50) NOT NULL,
+    `resource_type` VARCHAR(20) NOT NULL,
+    `resource_id` BIGINT NOT NULL,
+    `user_id` BIGINT NOT NULL,
+    `action_type` VARCHAR(20) NOT NULL,
+    `status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `data` TEXT,
+    `retry_count` INT DEFAULT 0,
+    `max_retries` INT DEFAULT 3,
+    `priority` INT DEFAULT 0,
+    `idempotency_key` VARCHAR(255),
+    `error_message` TEXT,
+    `processed_at` TIMESTAMP NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- 索引
+    INDEX `idx_event_type` (`event_type`),
+    INDEX `idx_resource_id` (`resource_id`),
+    INDEX `idx_user_id` (`user_id`),
+    INDEX `idx_status` (`status`),
+    INDEX `idx_priority` (`priority`),
+    UNIQUE INDEX `idx_idempotency_key` (`idempotency_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建其他相关表（如果需要的话）
+
+CREATE TABLE IF NOT EXISTS `sync_metrics` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `metric_type` VARCHAR(50) NOT NULL,
+    `metric_name` VARCHAR(100) NOT NULL,
+    `metric_value` DOUBLE NOT NULL,
+    `tags` TEXT,
+    `timestamp` TIMESTAMP NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    INDEX `idx_metric_type` (`metric_type`),
+    INDEX `idx_timestamp` (`timestamp`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `idempotency_records` (
+    `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
+    `idempotency_key` VARCHAR(255) NOT NULL,
+    `event_id` VARCHAR(36) NOT NULL,
+    `status` VARCHAR(20) NOT NULL,
+    `result` TEXT,
+    `expires_at` TIMESTAMP NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE INDEX `idx_idempotency_key` (`idempotency_key`),
+    INDEX `idx_event_id` (`event_id`),
+    INDEX `idx_expires_at` (`expires_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
 -- ========================================
 -- 千万级评论系统真正的分库分表初始化脚本
 -- 创建4个分库，每个分库4张分表，总共16张表

@@ -8,7 +8,6 @@ import (
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/cmd/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/users"
@@ -83,9 +82,6 @@ func (service *LikeActionService) handleVideoLike(ctx context.Context, req *inte
 			return false, fmt.Errorf("failed to add like to cache: %w", err)
 		}
 
-		// 异步保存到数据库
-		go service.saveLikeToDB(req.UserId, req.VideoId, "like")
-
 		event := &mq.LikeEvent{
 			UserID:     req.UserId,
 			VideoID:    req.VideoId,
@@ -113,9 +109,6 @@ func (service *LikeActionService) handleVideoLike(ctx context.Context, req *inte
 		if err := service.cacheManager.RemoveUserLike(ctx, req.UserId, redis.BusinessTypeVideo, req.VideoId); err != nil {
 			return false, fmt.Errorf("failed to remove like from cache: %w", err)
 		}
-
-		// 异步从数据库删除
-		go service.deleteLikeFromDB(req.UserId, req.VideoId, "like")
 
 		event := &mq.LikeEvent{
 			UserID:     req.UserId,
@@ -152,8 +145,7 @@ func (service *LikeActionService) handleCommentLike(ctx context.Context, req *in
 			return false, fmt.Errorf("failed to add like to cache: %w", err)
 		}
 
-		// 异步保存到数据库（评论点赞可能需要不同的数据库操作）
-		go service.saveCommentLikeToDB(req.UserId, req.CommentId, "like")
+		// 发布评论点赞事件，由事件驱动同步服务处理数据库操作
 		event := &mq.LikeEvent{
 			UserID:     req.UserId,
 			VideoID:    req.VideoId,
@@ -182,9 +174,7 @@ func (service *LikeActionService) handleCommentLike(ctx context.Context, req *in
 			return false, fmt.Errorf("failed to remove like from cache: %w", err)
 		}
 
-		// 异步从数据库删除
-		go service.deleteCommentLikeFromDB(req.UserId, req.CommentId, "like")
-
+		// 发布评论取消点赞事件，由事件驱动同步服务处理数据库操作
 		event := &mq.LikeEvent{
 			UserID:     req.UserId,
 			VideoID:    req.VideoId,
@@ -195,7 +185,7 @@ func (service *LikeActionService) handleCommentLike(ctx context.Context, req *in
 			EventID:    uuid.New().String(),
 		}
 		service.producer.PublishLikeEvent(ctx, event)
-		return false, nil
+		return true, nil
 
 	default:
 		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
@@ -302,49 +292,36 @@ func (service *LikeActionService) BatchCheckUserLikes(ctx context.Context, userI
 
 // === 异步数据库操作 ===
 
-// saveLikeToDB 异步保存点赞记录到数据库
+// saveLikeToDB 异步保存点赞记录到数据库（已弃用 - 由事件驱动同步处理）
 func (service *LikeActionService) saveLikeToDB(userID, videoID int64, behaviorType string) {
-	like := &model.UserBehavior{
-		UserId:       userID,
-		VideoId:      videoID,
-		BehaviorType: behaviorType,
-		BehaviorTime: time.Now().Format(constants.DataFormate),
-	}
-
-	if err := db.AddUserLikeBehavior(context.Background(), like); err != nil {
-		hlog.Errorf("Failed to save like behavior to DB: %v", err)
-	}
+	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的插入
+	// 避免重复插入问题
+	hlog.Infof("saveLikeToDB called but handled by EventDrivenSyncService - user_id: %d, video_id: %d, type: %s",
+		userID, videoID, behaviorType)
 }
 
-// deleteLikeFromDB 异步从数据库删除点赞记录
+// deleteLikeFromDB 异步从数据库删除点赞记录（已弃用 - 由事件驱动同步处理）
 func (service *LikeActionService) deleteLikeFromDB(userID, videoID int64, behaviorType string) {
-	if err := db.DeleteUserLikeBehavior(context.Background(), userID, videoID, behaviorType); err != nil {
-		hlog.Errorf("Failed to delete like behavior from DB: %v", err)
-	}
+	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的删除
+	// 避免重复操作问题
+	hlog.Infof("deleteLikeFromDB called but handled by EventDrivenSyncService - user_id: %d, video_id: %d, type: %s",
+		userID, videoID, behaviorType)
 }
 
-// saveCommentLikeToDB 异步保存评论点赞记录到数据库
+// saveCommentLikeToDB 异步保存评论点赞记录到数据库（已弃用 - 由事件驱动同步处理）
 func (service *LikeActionService) saveCommentLikeToDB(userID, commentID int64, behaviorType string) {
-	// 这里可能需要不同的数据库操作，根据实际需求调整
-	// 目前使用相同的逻辑，但可以扩展为专门的评论点赞表
-	like := &model.UserBehavior{
-		UserId:       userID,
-		VideoId:      commentID, // 临时使用VideoId字段存储commentID，实际应该扩展model
-		BehaviorType: behaviorType,
-		BehaviorTime: time.Now().Format(constants.DataFormate),
-	}
-
-	if err := db.AddUserLikeBehavior(context.Background(), like); err != nil {
-		hlog.Errorf("Failed to save comment like behavior to DB: %v", err)
-	}
+	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的插入
+	// 避免重复插入问题
+	hlog.Infof("saveCommentLikeToDB called but handled by EventDrivenSyncService - user_id: %d, comment_id: %d, type: %s",
+		userID, commentID, behaviorType)
 }
 
-// deleteCommentLikeFromDB 异步从数据库删除评论点赞记录
+// deleteCommentLikeFromDB 异步从数据库删除评论点赞记录（已弃用 - 由事件驱动同步处理）
 func (service *LikeActionService) deleteCommentLikeFromDB(userID, commentID int64, behaviorType string) {
-	// 根据实际需求调整删除逻辑
-	if err := db.DeleteUserLikeBehavior(context.Background(), userID, commentID, behaviorType); err != nil {
-		hlog.Errorf("Failed to delete comment like behavior from DB: %v", err)
-	}
+	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的删除
+	// 避免重复操作问题
+	hlog.Infof("deleteCommentLikeFromDB called but handled by EventDrivenSyncService - user_id: %d, comment_id: %d, type: %s",
+		userID, commentID, behaviorType)
 }
 
 // SyncCacheWithDB 同步缓存与数据库数据
