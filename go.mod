@@ -31,7 +31,6 @@ require (
 	github.com/u2takey/ffmpeg-go v0.5.0
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	golang.org/x/crypto v0.39.0
-	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.30.0
 	gorm.io/plugin/opentracing v0.0.0-20211220013347-7d2b2af23560
@@ -137,5 +136,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241223144023-3abc09e42ca8 // indirect
 	google.golang.org/grpc v1.67.3 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

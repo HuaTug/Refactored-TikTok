@@ -37,7 +37,6 @@ func (s *ShardedCommentDB) getShardingManager() (*ShardingManager, error) {
 	return s.shardingManager, nil
 }
 
-
 // CreateCommentWithTransaction 在事务中创建评论
 func (s *ShardedCommentDB) CreateCommentWithTransaction(ctx context.Context, comment *model.Comment) error {
 	if comment == nil {
@@ -646,5 +645,3 @@ func GetVideoInfo(ctx context.Context, videoID int64) (interface{}, error) {
 	// TODO: 实现获取视频信息逻辑
 	return nil, nil
 }
-
-

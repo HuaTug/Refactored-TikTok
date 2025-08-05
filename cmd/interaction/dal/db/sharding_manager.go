@@ -44,7 +44,6 @@ func GetShardingManager() *ShardingManager {
 	return globalShardingManager
 }
 
-
 // NewShardingManager 创建分片管理器
 func NewShardingManager(config *ShardingConfig) (*ShardingManager, error) {
 	if config == nil {
@@ -156,4 +155,3 @@ func (sm *ShardingManager) HealthCheck(ctx context.Context) error {
 
 	return nil
 }
-
