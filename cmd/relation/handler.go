@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"HuaTug.com/cmd/relation/dal"
 	"HuaTug.com/cmd/relation/service"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/relations"
@@ -16,7 +17,8 @@ type RelationServiceImpl struct{}
 func (v *RelationServiceImpl) RelationService(ctx context.Context, req *relations.RelationServiceRequest) (resp *relations.RelationServiceResponse, err error) {
 	resp = new(relations.RelationServiceResponse)
 	resp.Base = &base.Status{}
-	err = service.NewRelationService(ctx).RelationService(ctx, req)
+
+	err = service.NewRelationService(ctx, dal.ShardedFollowDBInstance).RelationService(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.RelationService failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
@@ -31,7 +33,7 @@ func (v *RelationServiceImpl) RelationService(ctx context.Context, req *relation
 
 func (v *RelationServiceImpl) FollowingList(ctx context.Context, req *relations.FollowingListRequest) (resp *relations.FollowingListResponse, err error) {
 	resp = new(relations.FollowingListResponse)
-	resp, err = service.NewFollowingListService(ctx).FollowingList(ctx, req)
+	resp, err = service.NewFollowingListService(ctx, dal.ShardedFollowDBInstance).FollowingList(ctx, req)
 	resp.Base = &base.Status{}
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FollowingList failed, original error: %v", errors.Cause(err))
@@ -47,7 +49,7 @@ func (v *RelationServiceImpl) FollowingList(ctx context.Context, req *relations.
 
 func (v *RelationServiceImpl) FollowerList(ctx context.Context, req *relations.FollowerListRequest) (resp *relations.FollowerListResponse, err error) {
 	resp = new(relations.FollowerListResponse)
-	resp, err = service.NewFollowerListService(ctx).FollowerList(ctx, req)
+	resp, err = service.NewFollowerListService(ctx, dal.ShardedFollowDBInstance).FollowerList(ctx, req)
 	resp.Base = &base.Status{}
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FollowerList failed, original error: %v", errors.Cause(err))
@@ -63,7 +65,7 @@ func (v *RelationServiceImpl) FollowerList(ctx context.Context, req *relations.F
 
 func (v *RelationServiceImpl) FriendList(ctx context.Context, req *relations.FriendListRequest) (resp *relations.FriendListResponse, err error) {
 	resp = new(relations.FriendListResponse)
-	resp, err = service.NewFriendListService(ctx).FriendList(ctx, req)
+	resp, err = service.NewFriendListService(ctx, dal.ShardedFollowDBInstance).FriendList(ctx, req)
 	resp.Base = &base.Status{}
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FriendList failed, original error: %v", errors.Cause(err))

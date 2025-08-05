@@ -35,6 +35,8 @@ func initConfig() {
 	viper.AddConfigPath("../config")
 	viper.AddConfigPath("./config")
 	viper.AddConfigPath(".")
+	viper.AddConfigPath("../../../cmd/interaction/config")
+	viper.AddConfigPath("../../cmd/interaction/config")
 
 	// 尝试读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
@@ -52,6 +54,8 @@ func initConfig() {
 }
 
 func Init() {
+	db := db.DB
+
 	// 初始化日志
 	hlog.SetLevel(hlog.LevelInfo)
 
@@ -74,8 +78,7 @@ func Init() {
 	}
 	defer mqManager.Close()
 
-	// 创建事件驱动同步服务 - 现在使用mqManager作为生产者
-	syncService := common.NewEventDrivenSyncService(mqManager, db.DB)
+	syncService := common.NewEventDrivenSyncService(mqManager, db)
 	if err := syncService.Start(); err != nil {
 		log.Fatalf("Failed to start sync service: %v", err)
 	}

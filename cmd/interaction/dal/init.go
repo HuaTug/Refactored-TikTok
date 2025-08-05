@@ -6,13 +6,15 @@ import (
 
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/config"
-	"HuaTug.com/pkg/database"
+	"HuaTug.com/pkg/cache"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
-func Init() {
-	db.Init() // mysql init
+// ShardedCommentDBInstance 全局分片评论数据库实例
+var ShardedCommentDBInstance *db.ShardedCommentDB
 
+func Init() {
+	db.Init()
 	// 初始化分片管理器
 	if err := initShardingManager(); err != nil {
 		hlog.Errorf("Failed to initialize sharding manager: %v", err)
@@ -32,58 +34,39 @@ func initShardingManager() error {
 	}
 
 	// 从配置中获取分片配置
-	shardingConfig := &database.ShardingConfig{
+	// 处理SlaveDSNs类型转换 - 将[][]string转换为[]string
+	var slaveDSNs []string
+	for _, dsns := range config.ConfigInfo.CommentSharding.SlaveDSNs {
+		slaveDSNs = append(slaveDSNs, dsns...)
+	}
+
+	shardingConfig := &db.ShardingConfig{
 		DatabaseCount:   config.ConfigInfo.CommentSharding.DatabaseCount,
 		TableCount:      config.ConfigInfo.CommentSharding.TableCount,
 		MasterDSNs:      config.ConfigInfo.CommentSharding.MasterDSNs,
-		SlaveDSNs:       config.ConfigInfo.CommentSharding.SlaveDSNs,
+		SlaveDSNs:       slaveDSNs,
 		MaxOpenConns:    config.ConfigInfo.CommentSharding.MaxOpenConns,
 		MaxIdleConns:    config.ConfigInfo.CommentSharding.MaxIdleConns,
 		ConnMaxLifetime: connMaxLifetime,
 	}
 
-	// 打印配置信息用于调试
-	hlog.Infof("Sharding config - DatabaseCount: %d, TableCount: %d",
-		shardingConfig.DatabaseCount, shardingConfig.TableCount)
-	hlog.Infof("Master DSNs count: %d", len(shardingConfig.MasterDSNs))
-	for i, dsn := range shardingConfig.MasterDSNs {
-		// 隐藏密码信息
-		hlog.Infof("Master DSN[%d]: %s", i, maskPassword(dsn))
-	}
-
-	// 如果没有配置分片DSN，则不初始化分片管理器
-	if len(shardingConfig.MasterDSNs) == 0 {
-		hlog.Warn("No sharding DSNs configured, this will cause comment operations to fail")
-		return nil
-	}
-
-	// 验证配置
-	if shardingConfig.DatabaseCount <= 0 || shardingConfig.TableCount <= 0 {
-		return fmt.Errorf("invalid sharding config: DatabaseCount=%d, TableCount=%d",
-			shardingConfig.DatabaseCount, shardingConfig.TableCount)
-	}
-
-	if len(shardingConfig.MasterDSNs) != shardingConfig.DatabaseCount {
-		return fmt.Errorf("master DSNs count (%d) doesn't match database count (%d)",
-			len(shardingConfig.MasterDSNs), shardingConfig.DatabaseCount)
-	}
-
-	// 初始化分片管理器
-	hlog.Info("Initializing sharding manager...")
+	// 使用全局的InitShardingManager初始化分片管理器
 	if err := db.InitShardingManager(shardingConfig); err != nil {
-		hlog.Errorf("Sharding manager initialization failed: %v", err)
-		return err
+		return fmt.Errorf("failed to initialize sharding manager: %w", err)
 	}
 
-	hlog.Info("Sharding manager initialized successfully")
+	// 验证分片管理器是否成功初始化
+	shardingManager := db.GetShardingManager()
+	if shardingManager == nil {
+		return fmt.Errorf("sharding manager is nil after initialization")
+	}
+
+	// 初始化缓存管理器
+	var cacheManager *cache.CommentCacheManager
+	// TODO: 这里应该根据实际情况初始化缓存管理器
+
+	// 创建分片评论数据库实例
+	ShardedCommentDBInstance = db.NewShardedCommentDB(shardingManager, cacheManager)
+	hlog.Info("ShardedCommentDBInstance created successfully: ", ShardedCommentDBInstance)
 	return nil
-}
-
-// maskPassword 隐藏DSN中的密码信息
-func maskPassword(dsn string) string {
-	// 简单的密码隐藏逻辑
-	if len(dsn) > 50 {
-		return dsn[:20] + "***" + dsn[len(dsn)-20:]
-	}
-	return dsn[:10] + "***"
 }

@@ -16,22 +16,21 @@
 package constants
 
 const (
-	NoteTableName           = "note"
-	UserTableName           = "user"
-	SecretKey               = "secret key"
-	IdentityKey             = "id"
-	Total                   = "total"
-	Notes                   = "notes"
-	NoteID                  = "note_id"
-	ApiServiceName          = "demoapi"
-	NoteServiceName         = "demonote"
-	UserServiceName         = "demouser"
-	ESNoKeywordsFlag       = ``
-	ESNoTimeFilterFlag     = -1
-	ESNoUsernameFilterFlag = ``
-	ESNoPageParamFlag      = -1
-	CPURateLimit    float64 = 80.0
-
+	NoteTableName                  = "note"
+	UserTableName                  = "user"
+	SecretKey                      = "secret key"
+	IdentityKey                    = "id"
+	Total                          = "total"
+	Notes                          = "notes"
+	NoteID                         = "note_id"
+	ApiServiceName                 = "demoapi"
+	NoteServiceName                = "demonote"
+	UserServiceName                = "demouser"
+	ESNoKeywordsFlag               = ``
+	ESNoTimeFilterFlag             = -1
+	ESNoUsernameFilterFlag         = ``
+	ESNoPageParamFlag              = -1
+	CPURateLimit           float64 = 80.0
 )
 
 var (
@@ -42,3 +41,4 @@ var (
 const DataFormate = "2006-01-02"
 const DefaultPageSize = 10
 const DefaultLimit = 10
+const MaxLimit = 100

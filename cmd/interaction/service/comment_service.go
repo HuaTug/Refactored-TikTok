@@ -19,6 +19,7 @@ import (
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
+	"HuaTug.com/pkg/utils"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 )
@@ -204,8 +205,12 @@ func (service *CommentService) CreateComment(ctx context.Context, req *interacti
 		}
 	}
 
+	// 使用雪花算法生成唯一的CommentID
+	commentId := utils.GenerateCommentID()
+
 	// Create comment with enhanced structure
 	comment := &model.Comment{
+		CommentId:        commentId,
 		VideoId:          videoId,
 		ParentId:         parentId,
 		UserId:           uid,

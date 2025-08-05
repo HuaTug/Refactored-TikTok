@@ -5,9 +5,9 @@ linters:
     - ineffassign     # 无效赋值
     - errcheck        #检查在Go代码中是否有忽略错误的语句
     - goconst
-    - gofmt #可以自动修正代码格式
-    - gosec #专门用来检查安全问题
-    - goimports #用于管理import语句
+    - gofmt           #可以自动修正代码格式
+    - gosec           #专门用来检查安全问题
+    - goimports       #用于管理import语句
     - unparam
     - unused
     - lll
