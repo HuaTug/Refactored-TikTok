@@ -75,6 +75,31 @@ func Init() {
 		}
 	}
 
+	// 添加follows_sharding配置加载
+	ConfigInfo.FollowsSharding.DatabaseCount = viper.GetInt("follows_sharding.database_count")
+	ConfigInfo.FollowsSharding.TableCount = viper.GetInt("follows_sharding.table_count")
+	ConfigInfo.FollowsSharding.MaxOpenConns = viper.GetInt("follows_sharding.max_open_conns")
+	ConfigInfo.FollowsSharding.MaxIdleConns = viper.GetInt("follows_sharding.max_idle_conns")
+	ConfigInfo.FollowsSharding.ConnMaxLifetime = viper.GetString("follows_sharding.conn_max_lifetime")
+	ConfigInfo.FollowsSharding.MasterDSNs = viper.GetStringSlice("follows_sharding.master_dsns")
+
+	// 获取follows_sharding的slave_dsns (二维数组)
+	if slaveDSNsInterface := viper.Get("follows_sharding.slave_dsns"); slaveDSNsInterface != nil {
+		if slaveDSNsSlice, ok := slaveDSNsInterface.([]interface{}); ok {
+			ConfigInfo.FollowsSharding.SlaveDSNs = make([][]string, len(slaveDSNsSlice))
+			for i, item := range slaveDSNsSlice {
+				if itemSlice, ok := item.([]interface{}); ok {
+					ConfigInfo.FollowsSharding.SlaveDSNs[i] = make([]string, len(itemSlice))
+					for j, dsn := range itemSlice {
+						if dsnStr, ok := dsn.(string); ok {
+							ConfigInfo.FollowsSharding.SlaveDSNs[i][j] = dsnStr
+						}
+					}
+				}
+			}
+		}
+	}
+
 	ConfigInfo.Redis.Addr = viper.GetString("redis.addr")
 	ConfigInfo.Redis.Password = viper.GetString("redis.password")
 
@@ -91,8 +116,15 @@ func Init() {
 		ConfigInfo.CommentSharding.DatabaseCount,
 		ConfigInfo.CommentSharding.TableCount,
 		len(ConfigInfo.CommentSharding.MasterDSNs))
+	logrus.Infof("Follows sharding - DatabaseCount: %d, TableCount: %d, MasterDSNs count: %d",
+		ConfigInfo.FollowsSharding.DatabaseCount,
+		ConfigInfo.FollowsSharding.TableCount,
+		len(ConfigInfo.FollowsSharding.MasterDSNs))
 
 	if len(ConfigInfo.CommentSharding.MasterDSNs) == 0 {
 		logrus.Warn("No comment sharding DSNs configured!")
+	}
+	if len(ConfigInfo.FollowsSharding.MasterDSNs) == 0 {
+		logrus.Warn("No follows sharding DSNs configured!")
 	}
 }

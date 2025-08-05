@@ -76,12 +76,13 @@ func initMessageQueue() {
 
 // 初始化事件驱动同步服务
 func initEventDrivenSyncService() {
-	// 获取全局生产者和数据库实例
+	// 获取全局生产者
 	producer := GetGlobalProducer()
-	database := db.DB
+	db := db.DB
+	
 
 	// 创建事件驱动同步服务
-	globalEventDrivenSyncService = common.NewEventDrivenSyncService(producer, database)
+	globalEventDrivenSyncService = common.NewEventDrivenSyncService(producer, db)
 
 	// 启动同步服务
 	if err := globalEventDrivenSyncService.Start(); err != nil {

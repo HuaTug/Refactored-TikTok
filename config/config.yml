@@ -23,6 +23,23 @@ comment_sharding:
     - []  # No slaves for db_2
     - []  # No slaves for db_3
 
+follows_sharding:
+  database_count: 4
+  table_count: 4
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: "3600s"
+  master_dsns:
+    - "root:TikTok@MySQL#2025!Secure@tcp(localhost:3307)/relation_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:TikTok@MySQL#2025!Secure@tcp(localhost:3307)/relation_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:TikTok@MySQL#2025!Secure@tcp(localhost:3307)/relation_db_2?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:TikTok@MySQL#2025!Secure@tcp(localhost:3307)/relation_db_3?charset=utf8mb4&parseTime=True&loc=Local"
+  slave_dsns:
+    - []  # No slaves for db_0
+    - []  # No slaves for db_1
+    - []  # No slaves for db_2
+    - []  # No slaves for db_3
+
 redis:
   addr: localhost:6379
   password: Redis@TikTok2025_SecurePass

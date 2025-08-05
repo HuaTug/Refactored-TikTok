@@ -26,7 +26,4 @@ func Init() {
 	if err = DB.Use(gormopentracing.New()); err != nil {
 		panic(err)
 	}
-	// if err = DB.Use(sharding.NewSharding("user_id", 4, "users")); err != nil {
-	// 	panic(err)
-	// }
 }
