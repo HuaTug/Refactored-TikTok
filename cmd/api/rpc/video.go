@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"HuaTug.com/config"
@@ -42,13 +43,15 @@ func InitVideoRpc() {
 	VideoClient = c
 }
 
-func FeedList(ctx context.Context, req *videos.FeedServiceRequest) (resp *videos.FeedServiceResponse, err error) {
-	resp, err = VideoClient.FeedService(ctx, req)
-	resp.Base = &base.Status{}
+func FeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
+	resp, err = VideoClient.VideoFeedListV2(ctx, req)
+	if resp == nil {
+		resp = &videos.VideoFeedListResponseV2{}
+	}
+	if resp.Base == nil {
+		resp.Base = &base.Status{}
+	}
 	if err != nil {
-		if resp == nil {
-			return
-		}
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to provide FeedService!"
 		return resp, err
@@ -56,9 +59,14 @@ func FeedList(ctx context.Context, req *videos.FeedServiceRequest) (resp *videos
 	return resp, nil
 }
 
-func VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequest) (resp *videos.VideoFeedListResponse, err error) {
-	resp, err = VideoClient.VideoFeedList(ctx, req)
-	resp.Base = &base.Status{}
+func VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
+	resp, err = VideoClient.VideoFeedListV2(ctx, req)
+	if resp == nil {
+		resp = &videos.VideoFeedListResponseV2{}
+	}
+	if resp.Base == nil {
+		resp.Base = &base.Status{}
+	}
 	if err != nil {
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to provide VideoFeedList Service!"
@@ -67,9 +75,14 @@ func VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequest) (resp 
 	return resp, err
 }
 
-func VideoSearch(ctx context.Context, req *videos.VideoSearchRequest) (resp *videos.VideoSearchResponse, err error) {
-	resp, err = VideoClient.VideoSearch(ctx, req)
-	resp.Base = &base.Status{}
+func VideoSearch(ctx context.Context, req *videos.VideoSearchRequestV2) (resp *videos.VideoSearchResponseV2, err error) {
+	resp, err = VideoClient.VideoSearchV2(ctx, req)
+	if resp == nil {
+		resp = &videos.VideoSearchResponseV2{}
+	}
+	if resp.Base == nil {
+		resp.Base = &base.Status{}
+	}
 	if err != nil {
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to provide VideoSearch Service!"
@@ -78,204 +91,284 @@ func VideoSearch(ctx context.Context, req *videos.VideoSearchRequest) (resp *vid
 	return resp, err
 }
 
-func VideoPublishStart(ctx context.Context, req *videos.VideoPublishStartRequest) (resp *videos.VideoPublishStartResponse, err error) {
-	resp = new(videos.VideoPublishStartResponse)
-	resp, err = VideoClient.VideoPublishStart(ctx, req)
+func VideoVisit(ctx context.Context, req *videos.VideoVisitRequestV2) (resp *videos.VideoVisitResponseV2, err error) {
+	resp, err = VideoClient.VideoVisitV2(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start video publish: %v", err)
+		return resp, err
+	}
+	return resp, err
+}
+
+func VideoPopular(ctx context.Context, req *videos.VideoPopularRequestV2) (resp *videos.VideoPopularResponseV2, err error) {
+	resp, err = VideoClient.VideoPopularV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func VideoDelete(ctx context.Context, req *videos.VideoDeleteRequestV2) (resp *videos.VideoDeleteResponseV2, err error) {
+	resp, err = VideoClient.VideoDeleteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func VideoInfo(ctx context.Context, req *videos.VideoInfoRequestV2) (resp *videos.VideoInfoResponseV2, err error) {
+	resp, err = VideoClient.VideoInfoV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func VideoIdList(ctx context.Context, pageNum, pageSize int64) (resp *videos.VideoFeedListResponseV2, err error) {
+	req := &videos.VideoFeedListRequestV2{
+		PageNum:  pageNum,
+		PageSize: pageSize,
+	}
+	resp, err = VideoClient.VideoFeedListV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func UpdateVideoVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequestV2) (resp *videos.UpdateVisitCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVisitCountV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2) (resp *videos.UpdateVideoCommentCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVideoCommentCountV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (resp *videos.UpdateLikeCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVideoLikeCountV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func UpdateVideoHisLikeCount(ctx context.Context, videoId, hisLikeCount int64) error {
+	// V2版本中这个功能可能被合并到其他接口中，这里暂时保留一个简化版本
+	req := &videos.UpdateLikeCountRequestV2{
+		VideoId:   videoId,
+		LikeCount: hisLikeCount,
+	}
+	_, err := VideoClient.UpdateVideoLikeCountV2(ctx, req)
+	return err
+}
+
+func GetVideoVisitCount(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (resp *videos.GetVideoVisitCountResponseV2, err error) {
+	resp, err = VideoClient.GetVideoVisitCountV2(ctx, req)
+	if err != nil {
+		return resp, nil
+	}
+	return resp, err
+}
+
+func GetVideoVisitCountInRedis(ctx context.Context, videoId string) (int64, error) {
+	// 将string类型的videoId转换为int64
+	videoIdInt, err := strconv.ParseInt(videoId, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid video ID format: %v", err)
 	}
 
+	req := &videos.GetVideoVisitCountRequestV2{
+		VideoId:   videoIdInt,
+		CountType: "redis",
+	}
+	resp, err := VideoClient.GetVideoVisitCountV2(ctx, req)
+	if err != nil {
+		return 0, err
+	}
+	return resp.VisitCount, nil
+}
+
+func VideoStream(ctx context.Context, req *videos.StreamVideoRequestV2) (resp *videos.StreamVideoResponseV2, err error) {
+	resp, err = VideoClient.StreamVideoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequestV2) (resp *videos.CreateFavoriteResponseV2, err error) {
+	resp, err = VideoClient.CreateFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetFavoroteList(ctx context.Context, req *videos.GetFavoriteListRequestV2) (resp *videos.GetFavoriteListResponseV2, err error) {
+	resp, err = VideoClient.GetFavoriteListV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (resp *videos.GetFavoriteVideoListResponseV2, err error) {
+	resp, err = VideoClient.GetFavoriteVideoListV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetVideoFromFavorite(ctx context.Context, userId, videoId int64) (*videos.VideoInfoResponseV2, error) {
+	req := &videos.VideoInfoRequestV2{
+		VideoId:          videoId,
+		RequestingUserId: userId,
+		IncludeAnalytics: false,
+	}
+	resp, err := VideoClient.VideoInfoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func AddFavoriteVideo(ctx context.Context, req *videos.AddFavoriteVideoRequestV2) (resp *videos.AddFavoriteVideoResponseV2, err error) {
+	resp, err = VideoClient.AddFavoriteVideoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func SharedVideo(ctx context.Context, req *videos.SharedVideoRequestV2) (resp *videos.SharedVideoResponseV2, err error) {
+	resp, err = VideoClient.SharedVideoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequestV2) (resp *videos.DeleteFavoriteResponseV2, err error) {
+	resp, err = VideoClient.DeleteFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func DeleteVideoFromFavortie(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) (resp *videos.DeleteVideoFromFavoriteResponseV2, err error) {
+	resp, err = VideoClient.DeleteVideoFromFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func RecommendVideo(ctx context.Context, req *videos.RecommendVideoRequestV2) (resp *videos.RecommendVideoResponseV2, err error) {
+	resp, err = VideoClient.RecommendVideoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+// ========== V2版本RPC方法 ==========
+
+func VideoPublishStartV2(ctx context.Context, req *videos.VideoPublishStartRequestV2) (resp *videos.VideoPublishStartResponseV2, err error) {
+	resp = new(videos.VideoPublishStartResponseV2)
+	resp, err = VideoClient.VideoPublishStartV2(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start video publish V2: %v", err)
+	}
 	if resp == nil {
-		return nil, fmt.Errorf("received nil response from VideoPublishStart")
+		return nil, fmt.Errorf("received nil response from VideoPublishStartV2")
 	}
 	return resp, err
 }
 
-func VideoPublishUploading(ctx context.Context, req *videos.VideoPublishUploadingRequest) (resp *videos.VideoPublishUploadingResponse, err error) {
-	resp = new(videos.VideoPublishUploadingResponse)
-	resp, err = VideoClient.VideoPublishUploading(ctx, req)
+func VideoPublishUploadingV2(ctx context.Context, req *videos.VideoPublishUploadingRequestV2) (resp *videos.VideoPublishUploadingResponseV2, err error) {
+	resp = new(videos.VideoPublishUploadingResponseV2)
+	resp, err = VideoClient.VideoPublishUploadingV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoPublishCancle(ctx context.Context, req *videos.VideoPublishCancleRequest) (resp *videos.VideoPublishCancleResponse, err error) {
-	resp, err = VideoClient.VideoPublishCancle(ctx, req)
+func VideoPublishCompleteV2(ctx context.Context, req *videos.VideoPublishCompleteRequestV2) (resp *videos.VideoPublishCompleteResponseV2, err error) {
+	resp, err = VideoClient.VideoPublishCompleteV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoPublishComplete(ctx context.Context, req *videos.VideoPublishCompleteRequest) (resp *videos.VideoPublishCompleteResponse, err error) {
-	resp, err = VideoClient.VideoPublishComplete(ctx, req)
+func VideoPublishCancelV2(ctx context.Context, req *videos.VideoPublishCancelRequestV2) (resp *videos.VideoPublishCancelResponseV2, err error) {
+	resp, err = VideoClient.VideoPublishCancelV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoVisit(ctx context.Context, req *videos.VideoVisitRequest) (resp *videos.VideoVisitResponse, err error) {
-	resp, err = VideoClient.VideoVisit(ctx, req)
+func GetUploadProgressV2(ctx context.Context, req *videos.VideoPublishProgressRequestV2) (resp *videos.VideoPublishProgressResponseV2, err error) {
+	resp, err = VideoClient.GetUploadProgressV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoPopular(ctx context.Context, req *videos.VideoPopularRequest) (resp *videos.VideoPopularResponse, err error) {
-	resp, err = VideoClient.VideoPopular(ctx, req)
+func ResumeUploadV2(ctx context.Context, req *videos.VideoPublishResumeRequestV2) (resp *videos.VideoPublishResumeResponseV2, err error) {
+	resp, err = VideoClient.ResumeUploadV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoDelete(ctx context.Context, req *videos.VideoDeleteRequest) (resp *videos.VideoDeleteResponse, err error) {
-	resp, err = VideoClient.VideoDelete(ctx, req)
+func ManageVideoHeatV2(ctx context.Context, req *videos.VideoHeatManagementRequest) (resp *videos.VideoHeatManagementResponse, err error) {
+	resp, err = VideoClient.ManageVideoHeatV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func VideoInfo(ctx context.Context, req *videos.VideoInfoRequest) (resp *videos.VideoInfoResponse, err error) {
-	resp, err = VideoClient.VideoInfo(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func VideoIdList(ctx context.Context, req *videos.VideoIdListRequest) (resp *videos.VideoIdListResponse, err error) {
-	resp, err = VideoClient.VideoIdList(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func UpdateVideoVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequest) (resp *videos.UpdateVisitCountResponse, err error) {
-	resp, err = VideoClient.UpdateVisitCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequest) (resp *videos.UpdateVideoCommentCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoCommentCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequest) (resp *videos.UpdateLikeCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoLikeCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest) (resp *videos.UpdateVideoHisLikeCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoHisLikeCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-func GetVideoVisitCount(ctx context.Context, req *videos.GetVideoVisitCountRequest) (resp *videos.GetVideoVisitCountResponse, err error) {
-	resp, err = VideoClient.GetVideoVisitCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest) (resp *videos.GetVideoVisitCountInRedisResponse, err error) {
-	resp, err = VideoClient.GetVideoVisitCountInRedis(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
-
-func VideoStream(ctx context.Context, req *videos.StreamVideoRequest) (resp *videos.StreamVideoResponse, err error) {
-	resp, err = VideoClient.StreamVideo(ctx, req)
+func ManageUserQuotaV2(ctx context.Context, req *videos.UserQuotaManagementRequest) (resp *videos.UserQuotaManagementResponse, err error) {
+	resp, err = VideoClient.ManageUserQuotaV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest) (resp *videos.CreateFavoriteResponse, err error) {
-	resp, err = VideoClient.CreateFavorite(ctx, req)
+func BatchOperateVideosV2(ctx context.Context, req *videos.BatchVideoOperationRequest) (resp *videos.BatchVideoOperationResponse, err error) {
+	resp, err = VideoClient.BatchOperateVideosV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func GetFavoroteList(ctx context.Context, req *videos.GetFavoriteListRequest) (resp *videos.GetFavoriteListResponse, err error) {
-	resp, err = VideoClient.GetFavoriteList(ctx, req)
+func TranscodeVideoV2(ctx context.Context, req *videos.VideoTranscodingRequest) (resp *videos.VideoTranscodingResponse, err error) {
+	resp, err = VideoClient.TranscodeVideoV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}
 	return resp, err
 }
 
-func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequest) (resp *videos.GetFavoriteVideoListResponse, err error) {
-	resp, err = VideoClient.GetFavoriteVideoList(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-
-func GetVideoFromFavorite(ctx context.Context, req *videos.GetVideoFromFavoriteRequest) (resp *videos.GetVideoFromFavoriteResponse, err error) {
-	resp, err = VideoClient.GetVideoFromFavorite(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-func AddFavoriteVideo(ctx context.Context, req *videos.AddFavoriteVideoRequest) (resp *videos.AddFavoriteVideoResponse, err error) {
-	resp, err = VideoClient.AddFavoriteVideo(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-
-func SharedVideo(ctx context.Context, req *videos.SharedVideoRequest) (resp *videos.SharedVideoResponse, err error) {
-	resp, err = VideoClient.SharedVideo(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-
-func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest) (resp *videos.DeleteFavoriteResponse, err error) {
-	resp, err = VideoClient.DeleteFavorite(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-
-func DeleteVideoFromFavortie(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequest) (resp *videos.DeleteVideoFromFavoriteResponse, err error) {
-	resp, err = VideoClient.DeleteVideoFromFavorite(ctx, req)
-	if err != nil {
-		return resp, err
-	}
-	return resp, err
-}
-
-func RecommendVideo(ctx context.Context, req *videos.RecommendVideoRequest) (resp *videos.RecommendVideoResponse, err error) {
-	resp, err = VideoClient.RecommendVideo(ctx, req)
+func GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest) (resp *videos.VideoAnalyticsResponse, err error) {
+	resp, err = VideoClient.GetVideoAnalyticsV2(ctx, req)
 	if err != nil {
 		return resp, err
 	}

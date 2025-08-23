@@ -12,13 +12,12 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
-func VideoPublishComplete(ctx context.Context, c *app.RequestContext) {
+func VideoPublishCompleteV2(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var v interface{}
 	var UserId int64
 	var VideoPublish VideoPublishCompleteParam
 	if err = c.BindAndValidate(&VideoPublish); err != nil {
-		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	}
@@ -28,10 +27,14 @@ func VideoPublishComplete(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	if resp, err := rpc.VideoPublishComplete(ctx, &videos.VideoPublishCompleteRequest{
-		UserId: UserId,
-		Uuid: VideoPublish.Uuid,
+	if resp, err := rpc.VideoPublishCompleteV2(ctx, &videos.VideoPublishCompleteRequestV2{
+		UserId:            UserId,
+		UploadSessionUuid: VideoPublish.Uuid,
+		FinalFileMd5:      "", // 需要从请求中获取
+		FinalFileSize:     0,  // 需要从请求中获取
+		EnableTranscoding: true,
 	}); err != nil {
+		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	} else {

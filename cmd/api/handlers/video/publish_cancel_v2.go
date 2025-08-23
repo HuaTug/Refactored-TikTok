@@ -12,11 +12,11 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
-func VideoPublishStart(ctx context.Context, c *app.RequestContext) {
+func VideoPublishCancelV2(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var v interface{}
 	var UserId int64
-	var VideoPublish VideoPublishStartParam
+	var VideoPublish VideoPublishCancleParam
 	if err = c.BindAndValidate(&VideoPublish); err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
@@ -27,14 +27,10 @@ func VideoPublishStart(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	if resp, err := rpc.VideoPublishStart(ctx, &videos.VideoPublishStartRequest{
-		UserId:           UserId,
-		Title:            VideoPublish.Title,
-		Description:      VideoPublish.Description,
-		LabName:          VideoPublish.LabName, //视频的标签(tag)
-		Category:         VideoPublish.Category, //视频上传的类别
-		Open:             VideoPublish.Open, //由用户自己决定是否公开
-		ChunkTotalNumber: VideoPublish.ChunkTotalNumber,
+	if resp, err := rpc.VideoPublishCancelV2(ctx, &videos.VideoPublishCancelRequestV2{
+		UserId:            UserId,
+		UploadSessionUuid: VideoPublish.Uuid,
+		CancelReason:      "User requested cancellation",
 	}); err != nil {
 		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)

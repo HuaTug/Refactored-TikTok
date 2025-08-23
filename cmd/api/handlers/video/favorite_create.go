@@ -29,11 +29,13 @@ func CreateFavoriteVideo(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.CreateFavorite(ctx, &videos.CreateFavoriteRequest{
+	resp, err := rpc.CreateFavorite(ctx, &videos.CreateFavoriteRequestV2{
 		UserId:      UserId,
 		Name:        CreateFavorite.Name,
 		Description: CreateFavorite.Description,
 		CoverUrl:    CreateFavorite.CoverUrl,
+		Privacy:     "private",  // 添加默认值
+		Tags:        []string{}, // 添加默认值
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

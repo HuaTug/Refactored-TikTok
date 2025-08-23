@@ -30,7 +30,7 @@ func NewRecommendVideoService(ctx context.Context) *RecommendVideoService {
 	return &RecommendVideoService{ctx: ctx}
 }
 
-func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoRequest) ([]*base.Video, error) {
+func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoRequestV2) ([]*base.Video, error) {
 	var rev []int64
 	var videos []*base.Video
 	var mu sync.Mutex

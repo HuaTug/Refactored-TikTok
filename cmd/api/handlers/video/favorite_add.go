@@ -30,10 +30,11 @@ func AddVideoToFavorite(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.AddFavoriteVideo(ctx, &videos.AddFavoriteVideoRequest{
+	resp, err := rpc.AddFavoriteVideo(ctx, &videos.AddFavoriteVideoRequestV2{
 		UserId:     UserId,
 		VideoId:    AddFavorite.VideoId,
 		FavoriteId: AddFavorite.FavoriteId,
+		Note:       "", // 添加默认值
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

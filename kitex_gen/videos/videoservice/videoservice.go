@@ -13,202 +13,6 @@ import (
 var errInvalidMessageType = errors.New("invalid message type for service method handler")
 
 var serviceMethods = map[string]kitex.MethodInfo{
-	"FeedService": kitex.NewMethodInfo(
-		feedServiceHandler,
-		newVideoServiceFeedServiceArgs,
-		newVideoServiceFeedServiceResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoPublishStart": kitex.NewMethodInfo(
-		videoPublishStartHandler,
-		newVideoServiceVideoPublishStartArgs,
-		newVideoServiceVideoPublishStartResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoPublishUploading": kitex.NewMethodInfo(
-		videoPublishUploadingHandler,
-		newVideoServiceVideoPublishUploadingArgs,
-		newVideoServiceVideoPublishUploadingResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoPublishComplete": kitex.NewMethodInfo(
-		videoPublishCompleteHandler,
-		newVideoServiceVideoPublishCompleteArgs,
-		newVideoServiceVideoPublishCompleteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoPublishCancle": kitex.NewMethodInfo(
-		videoPublishCancleHandler,
-		newVideoServiceVideoPublishCancleArgs,
-		newVideoServiceVideoPublishCancleResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoDelete": kitex.NewMethodInfo(
-		videoDeleteHandler,
-		newVideoServiceVideoDeleteArgs,
-		newVideoServiceVideoDeleteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoIdList": kitex.NewMethodInfo(
-		videoIdListHandler,
-		newVideoServiceVideoIdListArgs,
-		newVideoServiceVideoIdListResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoFeedList": kitex.NewMethodInfo(
-		videoFeedListHandler,
-		newVideoServiceVideoFeedListArgs,
-		newVideoServiceVideoFeedListResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoSearch": kitex.NewMethodInfo(
-		videoSearchHandler,
-		newVideoServiceVideoSearchArgs,
-		newVideoServiceVideoSearchResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoPopular": kitex.NewMethodInfo(
-		videoPopularHandler,
-		newVideoServiceVideoPopularArgs,
-		newVideoServiceVideoPopularResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoInfo": kitex.NewMethodInfo(
-		videoInfoHandler,
-		newVideoServiceVideoInfoArgs,
-		newVideoServiceVideoInfoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"VideoVisit": kitex.NewMethodInfo(
-		videoVisitHandler,
-		newVideoServiceVideoVisitArgs,
-		newVideoServiceVideoVisitResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"UpdateVisitCount": kitex.NewMethodInfo(
-		updateVisitCountHandler,
-		newVideoServiceUpdateVisitCountArgs,
-		newVideoServiceUpdateVisitCountResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"UpdateVideoCommentCount": kitex.NewMethodInfo(
-		updateVideoCommentCountHandler,
-		newVideoServiceUpdateVideoCommentCountArgs,
-		newVideoServiceUpdateVideoCommentCountResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"UpdateVideoLikeCount": kitex.NewMethodInfo(
-		updateVideoLikeCountHandler,
-		newVideoServiceUpdateVideoLikeCountArgs,
-		newVideoServiceUpdateVideoLikeCountResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"UpdateVideoHisLikeCount": kitex.NewMethodInfo(
-		updateVideoHisLikeCountHandler,
-		newVideoServiceUpdateVideoHisLikeCountArgs,
-		newVideoServiceUpdateVideoHisLikeCountResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetVideoVisitCount": kitex.NewMethodInfo(
-		getVideoVisitCountHandler,
-		newVideoServiceGetVideoVisitCountArgs,
-		newVideoServiceGetVideoVisitCountResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetVideoVisitCountInRedis": kitex.NewMethodInfo(
-		getVideoVisitCountInRedisHandler,
-		newVideoServiceGetVideoVisitCountInRedisArgs,
-		newVideoServiceGetVideoVisitCountInRedisResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"StreamVideo": kitex.NewMethodInfo(
-		streamVideoHandler,
-		newVideoServiceStreamVideoArgs,
-		newVideoServiceStreamVideoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"CreateFavorite": kitex.NewMethodInfo(
-		createFavoriteHandler,
-		newVideoServiceCreateFavoriteArgs,
-		newVideoServiceCreateFavoriteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetFavoriteVideoList": kitex.NewMethodInfo(
-		getFavoriteVideoListHandler,
-		newVideoServiceGetFavoriteVideoListArgs,
-		newVideoServiceGetFavoriteVideoListResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetFavoriteList": kitex.NewMethodInfo(
-		getFavoriteListHandler,
-		newVideoServiceGetFavoriteListArgs,
-		newVideoServiceGetFavoriteListResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"GetVideoFromFavorite": kitex.NewMethodInfo(
-		getVideoFromFavoriteHandler,
-		newVideoServiceGetVideoFromFavoriteArgs,
-		newVideoServiceGetVideoFromFavoriteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"AddFavoriteVideo": kitex.NewMethodInfo(
-		addFavoriteVideoHandler,
-		newVideoServiceAddFavoriteVideoArgs,
-		newVideoServiceAddFavoriteVideoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"DeleteFavorite": kitex.NewMethodInfo(
-		deleteFavoriteHandler,
-		newVideoServiceDeleteFavoriteArgs,
-		newVideoServiceDeleteFavoriteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"DeleteVideoFromFavorite": kitex.NewMethodInfo(
-		deleteVideoFromFavoriteHandler,
-		newVideoServiceDeleteVideoFromFavoriteArgs,
-		newVideoServiceDeleteVideoFromFavoriteResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"SharedVideo": kitex.NewMethodInfo(
-		sharedVideoHandler,
-		newVideoServiceSharedVideoArgs,
-		newVideoServiceSharedVideoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
-	"RecommendVideo": kitex.NewMethodInfo(
-		recommendVideoHandler,
-		newVideoServiceRecommendVideoArgs,
-		newVideoServiceRecommendVideoResult,
-		false,
-		kitex.WithStreamingMode(kitex.StreamingNone),
-	),
 	"VideoPublishStartV2": kitex.NewMethodInfo(
 		videoPublishStartV2Handler,
 		newVideoServiceVideoPublishStartV2Args,
@@ -248,6 +52,139 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		resumeUploadV2Handler,
 		newVideoServiceResumeUploadV2Args,
 		newVideoServiceResumeUploadV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoFeedListV2": kitex.NewMethodInfo(
+		videoFeedListV2Handler,
+		newVideoServiceVideoFeedListV2Args,
+		newVideoServiceVideoFeedListV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoSearchV2": kitex.NewMethodInfo(
+		videoSearchV2Handler,
+		newVideoServiceVideoSearchV2Args,
+		newVideoServiceVideoSearchV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoPopularV2": kitex.NewMethodInfo(
+		videoPopularV2Handler,
+		newVideoServiceVideoPopularV2Args,
+		newVideoServiceVideoPopularV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoInfoV2": kitex.NewMethodInfo(
+		videoInfoV2Handler,
+		newVideoServiceVideoInfoV2Args,
+		newVideoServiceVideoInfoV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoDeleteV2": kitex.NewMethodInfo(
+		videoDeleteV2Handler,
+		newVideoServiceVideoDeleteV2Args,
+		newVideoServiceVideoDeleteV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"VideoVisitV2": kitex.NewMethodInfo(
+		videoVisitV2Handler,
+		newVideoServiceVideoVisitV2Args,
+		newVideoServiceVideoVisitV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateVisitCountV2": kitex.NewMethodInfo(
+		updateVisitCountV2Handler,
+		newVideoServiceUpdateVisitCountV2Args,
+		newVideoServiceUpdateVisitCountV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateVideoCommentCountV2": kitex.NewMethodInfo(
+		updateVideoCommentCountV2Handler,
+		newVideoServiceUpdateVideoCommentCountV2Args,
+		newVideoServiceUpdateVideoCommentCountV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateVideoLikeCountV2": kitex.NewMethodInfo(
+		updateVideoLikeCountV2Handler,
+		newVideoServiceUpdateVideoLikeCountV2Args,
+		newVideoServiceUpdateVideoLikeCountV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetVideoVisitCountV2": kitex.NewMethodInfo(
+		getVideoVisitCountV2Handler,
+		newVideoServiceGetVideoVisitCountV2Args,
+		newVideoServiceGetVideoVisitCountV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"StreamVideoV2": kitex.NewMethodInfo(
+		streamVideoV2Handler,
+		newVideoServiceStreamVideoV2Args,
+		newVideoServiceStreamVideoV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"CreateFavoriteV2": kitex.NewMethodInfo(
+		createFavoriteV2Handler,
+		newVideoServiceCreateFavoriteV2Args,
+		newVideoServiceCreateFavoriteV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetFavoriteVideoListV2": kitex.NewMethodInfo(
+		getFavoriteVideoListV2Handler,
+		newVideoServiceGetFavoriteVideoListV2Args,
+		newVideoServiceGetFavoriteVideoListV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"GetFavoriteListV2": kitex.NewMethodInfo(
+		getFavoriteListV2Handler,
+		newVideoServiceGetFavoriteListV2Args,
+		newVideoServiceGetFavoriteListV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"AddFavoriteVideoV2": kitex.NewMethodInfo(
+		addFavoriteVideoV2Handler,
+		newVideoServiceAddFavoriteVideoV2Args,
+		newVideoServiceAddFavoriteVideoV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteFavoriteV2": kitex.NewMethodInfo(
+		deleteFavoriteV2Handler,
+		newVideoServiceDeleteFavoriteV2Args,
+		newVideoServiceDeleteFavoriteV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteVideoFromFavoriteV2": kitex.NewMethodInfo(
+		deleteVideoFromFavoriteV2Handler,
+		newVideoServiceDeleteVideoFromFavoriteV2Args,
+		newVideoServiceDeleteVideoFromFavoriteV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"SharedVideoV2": kitex.NewMethodInfo(
+		sharedVideoV2Handler,
+		newVideoServiceSharedVideoV2Args,
+		newVideoServiceSharedVideoV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RecommendVideoV2": kitex.NewMethodInfo(
+		recommendVideoV2Handler,
+		newVideoServiceRecommendVideoV2Args,
+		newVideoServiceRecommendVideoV2Result,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -350,510 +287,6 @@ func newServiceInfo(hasStreaming bool, keepStreamingMethods bool, keepNonStreami
 		Extra:           extra,
 	}
 	return svcInfo
-}
-
-func feedServiceHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceFeedServiceArgs)
-	realResult := result.(*videos.VideoServiceFeedServiceResult)
-	success, err := handler.(videos.VideoService).FeedService(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceFeedServiceArgs() interface{} {
-	return videos.NewVideoServiceFeedServiceArgs()
-}
-
-func newVideoServiceFeedServiceResult() interface{} {
-	return videos.NewVideoServiceFeedServiceResult()
-}
-
-func videoPublishStartHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoPublishStartArgs)
-	realResult := result.(*videos.VideoServiceVideoPublishStartResult)
-	success, err := handler.(videos.VideoService).VideoPublishStart(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoPublishStartArgs() interface{} {
-	return videos.NewVideoServiceVideoPublishStartArgs()
-}
-
-func newVideoServiceVideoPublishStartResult() interface{} {
-	return videos.NewVideoServiceVideoPublishStartResult()
-}
-
-func videoPublishUploadingHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoPublishUploadingArgs)
-	realResult := result.(*videos.VideoServiceVideoPublishUploadingResult)
-	success, err := handler.(videos.VideoService).VideoPublishUploading(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoPublishUploadingArgs() interface{} {
-	return videos.NewVideoServiceVideoPublishUploadingArgs()
-}
-
-func newVideoServiceVideoPublishUploadingResult() interface{} {
-	return videos.NewVideoServiceVideoPublishUploadingResult()
-}
-
-func videoPublishCompleteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoPublishCompleteArgs)
-	realResult := result.(*videos.VideoServiceVideoPublishCompleteResult)
-	success, err := handler.(videos.VideoService).VideoPublishComplete(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoPublishCompleteArgs() interface{} {
-	return videos.NewVideoServiceVideoPublishCompleteArgs()
-}
-
-func newVideoServiceVideoPublishCompleteResult() interface{} {
-	return videos.NewVideoServiceVideoPublishCompleteResult()
-}
-
-func videoPublishCancleHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoPublishCancleArgs)
-	realResult := result.(*videos.VideoServiceVideoPublishCancleResult)
-	success, err := handler.(videos.VideoService).VideoPublishCancle(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoPublishCancleArgs() interface{} {
-	return videos.NewVideoServiceVideoPublishCancleArgs()
-}
-
-func newVideoServiceVideoPublishCancleResult() interface{} {
-	return videos.NewVideoServiceVideoPublishCancleResult()
-}
-
-func videoDeleteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoDeleteArgs)
-	realResult := result.(*videos.VideoServiceVideoDeleteResult)
-	success, err := handler.(videos.VideoService).VideoDelete(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoDeleteArgs() interface{} {
-	return videos.NewVideoServiceVideoDeleteArgs()
-}
-
-func newVideoServiceVideoDeleteResult() interface{} {
-	return videos.NewVideoServiceVideoDeleteResult()
-}
-
-func videoIdListHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoIdListArgs)
-	realResult := result.(*videos.VideoServiceVideoIdListResult)
-	success, err := handler.(videos.VideoService).VideoIdList(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoIdListArgs() interface{} {
-	return videos.NewVideoServiceVideoIdListArgs()
-}
-
-func newVideoServiceVideoIdListResult() interface{} {
-	return videos.NewVideoServiceVideoIdListResult()
-}
-
-func videoFeedListHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoFeedListArgs)
-	realResult := result.(*videos.VideoServiceVideoFeedListResult)
-	success, err := handler.(videos.VideoService).VideoFeedList(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoFeedListArgs() interface{} {
-	return videos.NewVideoServiceVideoFeedListArgs()
-}
-
-func newVideoServiceVideoFeedListResult() interface{} {
-	return videos.NewVideoServiceVideoFeedListResult()
-}
-
-func videoSearchHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoSearchArgs)
-	realResult := result.(*videos.VideoServiceVideoSearchResult)
-	success, err := handler.(videos.VideoService).VideoSearch(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoSearchArgs() interface{} {
-	return videos.NewVideoServiceVideoSearchArgs()
-}
-
-func newVideoServiceVideoSearchResult() interface{} {
-	return videos.NewVideoServiceVideoSearchResult()
-}
-
-func videoPopularHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoPopularArgs)
-	realResult := result.(*videos.VideoServiceVideoPopularResult)
-	success, err := handler.(videos.VideoService).VideoPopular(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoPopularArgs() interface{} {
-	return videos.NewVideoServiceVideoPopularArgs()
-}
-
-func newVideoServiceVideoPopularResult() interface{} {
-	return videos.NewVideoServiceVideoPopularResult()
-}
-
-func videoInfoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoInfoArgs)
-	realResult := result.(*videos.VideoServiceVideoInfoResult)
-	success, err := handler.(videos.VideoService).VideoInfo(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoInfoArgs() interface{} {
-	return videos.NewVideoServiceVideoInfoArgs()
-}
-
-func newVideoServiceVideoInfoResult() interface{} {
-	return videos.NewVideoServiceVideoInfoResult()
-}
-
-func videoVisitHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceVideoVisitArgs)
-	realResult := result.(*videos.VideoServiceVideoVisitResult)
-	success, err := handler.(videos.VideoService).VideoVisit(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceVideoVisitArgs() interface{} {
-	return videos.NewVideoServiceVideoVisitArgs()
-}
-
-func newVideoServiceVideoVisitResult() interface{} {
-	return videos.NewVideoServiceVideoVisitResult()
-}
-
-func updateVisitCountHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceUpdateVisitCountArgs)
-	realResult := result.(*videos.VideoServiceUpdateVisitCountResult)
-	success, err := handler.(videos.VideoService).UpdateVisitCount(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceUpdateVisitCountArgs() interface{} {
-	return videos.NewVideoServiceUpdateVisitCountArgs()
-}
-
-func newVideoServiceUpdateVisitCountResult() interface{} {
-	return videos.NewVideoServiceUpdateVisitCountResult()
-}
-
-func updateVideoCommentCountHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceUpdateVideoCommentCountArgs)
-	realResult := result.(*videos.VideoServiceUpdateVideoCommentCountResult)
-	success, err := handler.(videos.VideoService).UpdateVideoCommentCount(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceUpdateVideoCommentCountArgs() interface{} {
-	return videos.NewVideoServiceUpdateVideoCommentCountArgs()
-}
-
-func newVideoServiceUpdateVideoCommentCountResult() interface{} {
-	return videos.NewVideoServiceUpdateVideoCommentCountResult()
-}
-
-func updateVideoLikeCountHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceUpdateVideoLikeCountArgs)
-	realResult := result.(*videos.VideoServiceUpdateVideoLikeCountResult)
-	success, err := handler.(videos.VideoService).UpdateVideoLikeCount(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceUpdateVideoLikeCountArgs() interface{} {
-	return videos.NewVideoServiceUpdateVideoLikeCountArgs()
-}
-
-func newVideoServiceUpdateVideoLikeCountResult() interface{} {
-	return videos.NewVideoServiceUpdateVideoLikeCountResult()
-}
-
-func updateVideoHisLikeCountHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceUpdateVideoHisLikeCountArgs)
-	realResult := result.(*videos.VideoServiceUpdateVideoHisLikeCountResult)
-	success, err := handler.(videos.VideoService).UpdateVideoHisLikeCount(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceUpdateVideoHisLikeCountArgs() interface{} {
-	return videos.NewVideoServiceUpdateVideoHisLikeCountArgs()
-}
-
-func newVideoServiceUpdateVideoHisLikeCountResult() interface{} {
-	return videos.NewVideoServiceUpdateVideoHisLikeCountResult()
-}
-
-func getVideoVisitCountHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceGetVideoVisitCountArgs)
-	realResult := result.(*videos.VideoServiceGetVideoVisitCountResult)
-	success, err := handler.(videos.VideoService).GetVideoVisitCount(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceGetVideoVisitCountArgs() interface{} {
-	return videos.NewVideoServiceGetVideoVisitCountArgs()
-}
-
-func newVideoServiceGetVideoVisitCountResult() interface{} {
-	return videos.NewVideoServiceGetVideoVisitCountResult()
-}
-
-func getVideoVisitCountInRedisHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceGetVideoVisitCountInRedisArgs)
-	realResult := result.(*videos.VideoServiceGetVideoVisitCountInRedisResult)
-	success, err := handler.(videos.VideoService).GetVideoVisitCountInRedis(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceGetVideoVisitCountInRedisArgs() interface{} {
-	return videos.NewVideoServiceGetVideoVisitCountInRedisArgs()
-}
-
-func newVideoServiceGetVideoVisitCountInRedisResult() interface{} {
-	return videos.NewVideoServiceGetVideoVisitCountInRedisResult()
-}
-
-func streamVideoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceStreamVideoArgs)
-	realResult := result.(*videos.VideoServiceStreamVideoResult)
-	success, err := handler.(videos.VideoService).StreamVideo(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceStreamVideoArgs() interface{} {
-	return videos.NewVideoServiceStreamVideoArgs()
-}
-
-func newVideoServiceStreamVideoResult() interface{} {
-	return videos.NewVideoServiceStreamVideoResult()
-}
-
-func createFavoriteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceCreateFavoriteArgs)
-	realResult := result.(*videos.VideoServiceCreateFavoriteResult)
-	success, err := handler.(videos.VideoService).CreateFavorite(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceCreateFavoriteArgs() interface{} {
-	return videos.NewVideoServiceCreateFavoriteArgs()
-}
-
-func newVideoServiceCreateFavoriteResult() interface{} {
-	return videos.NewVideoServiceCreateFavoriteResult()
-}
-
-func getFavoriteVideoListHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceGetFavoriteVideoListArgs)
-	realResult := result.(*videos.VideoServiceGetFavoriteVideoListResult)
-	success, err := handler.(videos.VideoService).GetFavoriteVideoList(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceGetFavoriteVideoListArgs() interface{} {
-	return videos.NewVideoServiceGetFavoriteVideoListArgs()
-}
-
-func newVideoServiceGetFavoriteVideoListResult() interface{} {
-	return videos.NewVideoServiceGetFavoriteVideoListResult()
-}
-
-func getFavoriteListHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceGetFavoriteListArgs)
-	realResult := result.(*videos.VideoServiceGetFavoriteListResult)
-	success, err := handler.(videos.VideoService).GetFavoriteList(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceGetFavoriteListArgs() interface{} {
-	return videos.NewVideoServiceGetFavoriteListArgs()
-}
-
-func newVideoServiceGetFavoriteListResult() interface{} {
-	return videos.NewVideoServiceGetFavoriteListResult()
-}
-
-func getVideoFromFavoriteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceGetVideoFromFavoriteArgs)
-	realResult := result.(*videos.VideoServiceGetVideoFromFavoriteResult)
-	success, err := handler.(videos.VideoService).GetVideoFromFavorite(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceGetVideoFromFavoriteArgs() interface{} {
-	return videos.NewVideoServiceGetVideoFromFavoriteArgs()
-}
-
-func newVideoServiceGetVideoFromFavoriteResult() interface{} {
-	return videos.NewVideoServiceGetVideoFromFavoriteResult()
-}
-
-func addFavoriteVideoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceAddFavoriteVideoArgs)
-	realResult := result.(*videos.VideoServiceAddFavoriteVideoResult)
-	success, err := handler.(videos.VideoService).AddFavoriteVideo(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceAddFavoriteVideoArgs() interface{} {
-	return videos.NewVideoServiceAddFavoriteVideoArgs()
-}
-
-func newVideoServiceAddFavoriteVideoResult() interface{} {
-	return videos.NewVideoServiceAddFavoriteVideoResult()
-}
-
-func deleteFavoriteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceDeleteFavoriteArgs)
-	realResult := result.(*videos.VideoServiceDeleteFavoriteResult)
-	success, err := handler.(videos.VideoService).DeleteFavorite(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceDeleteFavoriteArgs() interface{} {
-	return videos.NewVideoServiceDeleteFavoriteArgs()
-}
-
-func newVideoServiceDeleteFavoriteResult() interface{} {
-	return videos.NewVideoServiceDeleteFavoriteResult()
-}
-
-func deleteVideoFromFavoriteHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceDeleteVideoFromFavoriteArgs)
-	realResult := result.(*videos.VideoServiceDeleteVideoFromFavoriteResult)
-	success, err := handler.(videos.VideoService).DeleteVideoFromFavorite(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceDeleteVideoFromFavoriteArgs() interface{} {
-	return videos.NewVideoServiceDeleteVideoFromFavoriteArgs()
-}
-
-func newVideoServiceDeleteVideoFromFavoriteResult() interface{} {
-	return videos.NewVideoServiceDeleteVideoFromFavoriteResult()
-}
-
-func sharedVideoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceSharedVideoArgs)
-	realResult := result.(*videos.VideoServiceSharedVideoResult)
-	success, err := handler.(videos.VideoService).SharedVideo(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceSharedVideoArgs() interface{} {
-	return videos.NewVideoServiceSharedVideoArgs()
-}
-
-func newVideoServiceSharedVideoResult() interface{} {
-	return videos.NewVideoServiceSharedVideoResult()
-}
-
-func recommendVideoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
-	realArg := arg.(*videos.VideoServiceRecommendVideoArgs)
-	realResult := result.(*videos.VideoServiceRecommendVideoResult)
-	success, err := handler.(videos.VideoService).RecommendVideo(ctx, realArg.Req)
-	if err != nil {
-		return err
-	}
-	realResult.Success = success
-	return nil
-}
-func newVideoServiceRecommendVideoArgs() interface{} {
-	return videos.NewVideoServiceRecommendVideoArgs()
-}
-
-func newVideoServiceRecommendVideoResult() interface{} {
-	return videos.NewVideoServiceRecommendVideoResult()
 }
 
 func videoPublishStartV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -964,6 +397,348 @@ func newVideoServiceResumeUploadV2Result() interface{} {
 	return videos.NewVideoServiceResumeUploadV2Result()
 }
 
+func videoFeedListV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoFeedListV2Args)
+	realResult := result.(*videos.VideoServiceVideoFeedListV2Result)
+	success, err := handler.(videos.VideoService).VideoFeedListV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoFeedListV2Args() interface{} {
+	return videos.NewVideoServiceVideoFeedListV2Args()
+}
+
+func newVideoServiceVideoFeedListV2Result() interface{} {
+	return videos.NewVideoServiceVideoFeedListV2Result()
+}
+
+func videoSearchV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoSearchV2Args)
+	realResult := result.(*videos.VideoServiceVideoSearchV2Result)
+	success, err := handler.(videos.VideoService).VideoSearchV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoSearchV2Args() interface{} {
+	return videos.NewVideoServiceVideoSearchV2Args()
+}
+
+func newVideoServiceVideoSearchV2Result() interface{} {
+	return videos.NewVideoServiceVideoSearchV2Result()
+}
+
+func videoPopularV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoPopularV2Args)
+	realResult := result.(*videos.VideoServiceVideoPopularV2Result)
+	success, err := handler.(videos.VideoService).VideoPopularV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoPopularV2Args() interface{} {
+	return videos.NewVideoServiceVideoPopularV2Args()
+}
+
+func newVideoServiceVideoPopularV2Result() interface{} {
+	return videos.NewVideoServiceVideoPopularV2Result()
+}
+
+func videoInfoV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoInfoV2Args)
+	realResult := result.(*videos.VideoServiceVideoInfoV2Result)
+	success, err := handler.(videos.VideoService).VideoInfoV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoInfoV2Args() interface{} {
+	return videos.NewVideoServiceVideoInfoV2Args()
+}
+
+func newVideoServiceVideoInfoV2Result() interface{} {
+	return videos.NewVideoServiceVideoInfoV2Result()
+}
+
+func videoDeleteV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoDeleteV2Args)
+	realResult := result.(*videos.VideoServiceVideoDeleteV2Result)
+	success, err := handler.(videos.VideoService).VideoDeleteV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoDeleteV2Args() interface{} {
+	return videos.NewVideoServiceVideoDeleteV2Args()
+}
+
+func newVideoServiceVideoDeleteV2Result() interface{} {
+	return videos.NewVideoServiceVideoDeleteV2Result()
+}
+
+func videoVisitV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceVideoVisitV2Args)
+	realResult := result.(*videos.VideoServiceVideoVisitV2Result)
+	success, err := handler.(videos.VideoService).VideoVisitV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceVideoVisitV2Args() interface{} {
+	return videos.NewVideoServiceVideoVisitV2Args()
+}
+
+func newVideoServiceVideoVisitV2Result() interface{} {
+	return videos.NewVideoServiceVideoVisitV2Result()
+}
+
+func updateVisitCountV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceUpdateVisitCountV2Args)
+	realResult := result.(*videos.VideoServiceUpdateVisitCountV2Result)
+	success, err := handler.(videos.VideoService).UpdateVisitCountV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceUpdateVisitCountV2Args() interface{} {
+	return videos.NewVideoServiceUpdateVisitCountV2Args()
+}
+
+func newVideoServiceUpdateVisitCountV2Result() interface{} {
+	return videos.NewVideoServiceUpdateVisitCountV2Result()
+}
+
+func updateVideoCommentCountV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceUpdateVideoCommentCountV2Args)
+	realResult := result.(*videos.VideoServiceUpdateVideoCommentCountV2Result)
+	success, err := handler.(videos.VideoService).UpdateVideoCommentCountV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceUpdateVideoCommentCountV2Args() interface{} {
+	return videos.NewVideoServiceUpdateVideoCommentCountV2Args()
+}
+
+func newVideoServiceUpdateVideoCommentCountV2Result() interface{} {
+	return videos.NewVideoServiceUpdateVideoCommentCountV2Result()
+}
+
+func updateVideoLikeCountV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceUpdateVideoLikeCountV2Args)
+	realResult := result.(*videos.VideoServiceUpdateVideoLikeCountV2Result)
+	success, err := handler.(videos.VideoService).UpdateVideoLikeCountV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceUpdateVideoLikeCountV2Args() interface{} {
+	return videos.NewVideoServiceUpdateVideoLikeCountV2Args()
+}
+
+func newVideoServiceUpdateVideoLikeCountV2Result() interface{} {
+	return videos.NewVideoServiceUpdateVideoLikeCountV2Result()
+}
+
+func getVideoVisitCountV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceGetVideoVisitCountV2Args)
+	realResult := result.(*videos.VideoServiceGetVideoVisitCountV2Result)
+	success, err := handler.(videos.VideoService).GetVideoVisitCountV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceGetVideoVisitCountV2Args() interface{} {
+	return videos.NewVideoServiceGetVideoVisitCountV2Args()
+}
+
+func newVideoServiceGetVideoVisitCountV2Result() interface{} {
+	return videos.NewVideoServiceGetVideoVisitCountV2Result()
+}
+
+func streamVideoV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceStreamVideoV2Args)
+	realResult := result.(*videos.VideoServiceStreamVideoV2Result)
+	success, err := handler.(videos.VideoService).StreamVideoV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceStreamVideoV2Args() interface{} {
+	return videos.NewVideoServiceStreamVideoV2Args()
+}
+
+func newVideoServiceStreamVideoV2Result() interface{} {
+	return videos.NewVideoServiceStreamVideoV2Result()
+}
+
+func createFavoriteV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceCreateFavoriteV2Args)
+	realResult := result.(*videos.VideoServiceCreateFavoriteV2Result)
+	success, err := handler.(videos.VideoService).CreateFavoriteV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceCreateFavoriteV2Args() interface{} {
+	return videos.NewVideoServiceCreateFavoriteV2Args()
+}
+
+func newVideoServiceCreateFavoriteV2Result() interface{} {
+	return videos.NewVideoServiceCreateFavoriteV2Result()
+}
+
+func getFavoriteVideoListV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceGetFavoriteVideoListV2Args)
+	realResult := result.(*videos.VideoServiceGetFavoriteVideoListV2Result)
+	success, err := handler.(videos.VideoService).GetFavoriteVideoListV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceGetFavoriteVideoListV2Args() interface{} {
+	return videos.NewVideoServiceGetFavoriteVideoListV2Args()
+}
+
+func newVideoServiceGetFavoriteVideoListV2Result() interface{} {
+	return videos.NewVideoServiceGetFavoriteVideoListV2Result()
+}
+
+func getFavoriteListV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceGetFavoriteListV2Args)
+	realResult := result.(*videos.VideoServiceGetFavoriteListV2Result)
+	success, err := handler.(videos.VideoService).GetFavoriteListV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceGetFavoriteListV2Args() interface{} {
+	return videos.NewVideoServiceGetFavoriteListV2Args()
+}
+
+func newVideoServiceGetFavoriteListV2Result() interface{} {
+	return videos.NewVideoServiceGetFavoriteListV2Result()
+}
+
+func addFavoriteVideoV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceAddFavoriteVideoV2Args)
+	realResult := result.(*videos.VideoServiceAddFavoriteVideoV2Result)
+	success, err := handler.(videos.VideoService).AddFavoriteVideoV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceAddFavoriteVideoV2Args() interface{} {
+	return videos.NewVideoServiceAddFavoriteVideoV2Args()
+}
+
+func newVideoServiceAddFavoriteVideoV2Result() interface{} {
+	return videos.NewVideoServiceAddFavoriteVideoV2Result()
+}
+
+func deleteFavoriteV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceDeleteFavoriteV2Args)
+	realResult := result.(*videos.VideoServiceDeleteFavoriteV2Result)
+	success, err := handler.(videos.VideoService).DeleteFavoriteV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceDeleteFavoriteV2Args() interface{} {
+	return videos.NewVideoServiceDeleteFavoriteV2Args()
+}
+
+func newVideoServiceDeleteFavoriteV2Result() interface{} {
+	return videos.NewVideoServiceDeleteFavoriteV2Result()
+}
+
+func deleteVideoFromFavoriteV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceDeleteVideoFromFavoriteV2Args)
+	realResult := result.(*videos.VideoServiceDeleteVideoFromFavoriteV2Result)
+	success, err := handler.(videos.VideoService).DeleteVideoFromFavoriteV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceDeleteVideoFromFavoriteV2Args() interface{} {
+	return videos.NewVideoServiceDeleteVideoFromFavoriteV2Args()
+}
+
+func newVideoServiceDeleteVideoFromFavoriteV2Result() interface{} {
+	return videos.NewVideoServiceDeleteVideoFromFavoriteV2Result()
+}
+
+func sharedVideoV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceSharedVideoV2Args)
+	realResult := result.(*videos.VideoServiceSharedVideoV2Result)
+	success, err := handler.(videos.VideoService).SharedVideoV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceSharedVideoV2Args() interface{} {
+	return videos.NewVideoServiceSharedVideoV2Args()
+}
+
+func newVideoServiceSharedVideoV2Result() interface{} {
+	return videos.NewVideoServiceSharedVideoV2Result()
+}
+
+func recommendVideoV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceRecommendVideoV2Args)
+	realResult := result.(*videos.VideoServiceRecommendVideoV2Result)
+	success, err := handler.(videos.VideoService).RecommendVideoV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceRecommendVideoV2Args() interface{} {
+	return videos.NewVideoServiceRecommendVideoV2Args()
+}
+
+func newVideoServiceRecommendVideoV2Result() interface{} {
+	return videos.NewVideoServiceRecommendVideoV2Result()
+}
+
 func manageVideoHeatV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*videos.VideoServiceManageVideoHeatV2Args)
 	realResult := result.(*videos.VideoServiceManageVideoHeatV2Result)
@@ -1064,286 +839,6 @@ func newServiceClient(c client.Client) *kClient {
 	}
 }
 
-func (p *kClient) FeedService(ctx context.Context, req *videos.FeedServiceRequest) (r *videos.FeedServiceResponse, err error) {
-	var _args videos.VideoServiceFeedServiceArgs
-	_args.Req = req
-	var _result videos.VideoServiceFeedServiceResult
-	if err = p.c.Call(ctx, "FeedService", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoPublishStart(ctx context.Context, req *videos.VideoPublishStartRequest) (r *videos.VideoPublishStartResponse, err error) {
-	var _args videos.VideoServiceVideoPublishStartArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoPublishStartResult
-	if err = p.c.Call(ctx, "VideoPublishStart", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoPublishUploading(ctx context.Context, req *videos.VideoPublishUploadingRequest) (r *videos.VideoPublishUploadingResponse, err error) {
-	var _args videos.VideoServiceVideoPublishUploadingArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoPublishUploadingResult
-	if err = p.c.Call(ctx, "VideoPublishUploading", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoPublishComplete(ctx context.Context, req *videos.VideoPublishCompleteRequest) (r *videos.VideoPublishCompleteResponse, err error) {
-	var _args videos.VideoServiceVideoPublishCompleteArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoPublishCompleteResult
-	if err = p.c.Call(ctx, "VideoPublishComplete", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoPublishCancle(ctx context.Context, req *videos.VideoPublishCancleRequest) (r *videos.VideoPublishCancleResponse, err error) {
-	var _args videos.VideoServiceVideoPublishCancleArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoPublishCancleResult
-	if err = p.c.Call(ctx, "VideoPublishCancle", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoDelete(ctx context.Context, req *videos.VideoDeleteRequest) (r *videos.VideoDeleteResponse, err error) {
-	var _args videos.VideoServiceVideoDeleteArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoDeleteResult
-	if err = p.c.Call(ctx, "VideoDelete", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoIdList(ctx context.Context, req *videos.VideoIdListRequest) (r *videos.VideoIdListResponse, err error) {
-	var _args videos.VideoServiceVideoIdListArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoIdListResult
-	if err = p.c.Call(ctx, "VideoIdList", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequest) (r *videos.VideoFeedListResponse, err error) {
-	var _args videos.VideoServiceVideoFeedListArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoFeedListResult
-	if err = p.c.Call(ctx, "VideoFeedList", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoSearch(ctx context.Context, req *videos.VideoSearchRequest) (r *videos.VideoSearchResponse, err error) {
-	var _args videos.VideoServiceVideoSearchArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoSearchResult
-	if err = p.c.Call(ctx, "VideoSearch", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoPopular(ctx context.Context, req *videos.VideoPopularRequest) (r *videos.VideoPopularResponse, err error) {
-	var _args videos.VideoServiceVideoPopularArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoPopularResult
-	if err = p.c.Call(ctx, "VideoPopular", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoInfo(ctx context.Context, req *videos.VideoInfoRequest) (r *videos.VideoInfoResponse, err error) {
-	var _args videos.VideoServiceVideoInfoArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoInfoResult
-	if err = p.c.Call(ctx, "VideoInfo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) VideoVisit(ctx context.Context, req *videos.VideoVisitRequest) (r *videos.VideoVisitResponse, err error) {
-	var _args videos.VideoServiceVideoVisitArgs
-	_args.Req = req
-	var _result videos.VideoServiceVideoVisitResult
-	if err = p.c.Call(ctx, "VideoVisit", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) UpdateVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequest) (r *videos.UpdateVisitCountResponse, err error) {
-	var _args videos.VideoServiceUpdateVisitCountArgs
-	_args.Req = req
-	var _result videos.VideoServiceUpdateVisitCountResult
-	if err = p.c.Call(ctx, "UpdateVisitCount", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequest) (r *videos.UpdateVideoCommentCountResponse, err error) {
-	var _args videos.VideoServiceUpdateVideoCommentCountArgs
-	_args.Req = req
-	var _result videos.VideoServiceUpdateVideoCommentCountResult
-	if err = p.c.Call(ctx, "UpdateVideoCommentCount", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequest) (r *videos.UpdateLikeCountResponse, err error) {
-	var _args videos.VideoServiceUpdateVideoLikeCountArgs
-	_args.Req = req
-	var _result videos.VideoServiceUpdateVideoLikeCountResult
-	if err = p.c.Call(ctx, "UpdateVideoLikeCount", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest) (r *videos.UpdateVideoHisLikeCountResponse, err error) {
-	var _args videos.VideoServiceUpdateVideoHisLikeCountArgs
-	_args.Req = req
-	var _result videos.VideoServiceUpdateVideoHisLikeCountResult
-	if err = p.c.Call(ctx, "UpdateVideoHisLikeCount", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetVideoVisitCount(ctx context.Context, req *videos.GetVideoVisitCountRequest) (r *videos.GetVideoVisitCountResponse, err error) {
-	var _args videos.VideoServiceGetVideoVisitCountArgs
-	_args.Req = req
-	var _result videos.VideoServiceGetVideoVisitCountResult
-	if err = p.c.Call(ctx, "GetVideoVisitCount", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest) (r *videos.GetVideoVisitCountInRedisResponse, err error) {
-	var _args videos.VideoServiceGetVideoVisitCountInRedisArgs
-	_args.Req = req
-	var _result videos.VideoServiceGetVideoVisitCountInRedisResult
-	if err = p.c.Call(ctx, "GetVideoVisitCountInRedis", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) StreamVideo(ctx context.Context, req *videos.StreamVideoRequest) (r *videos.StreamVideoResponse, err error) {
-	var _args videos.VideoServiceStreamVideoArgs
-	_args.Req = req
-	var _result videos.VideoServiceStreamVideoResult
-	if err = p.c.Call(ctx, "StreamVideo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest) (r *videos.CreateFavoriteResponse, err error) {
-	var _args videos.VideoServiceCreateFavoriteArgs
-	_args.Req = req
-	var _result videos.VideoServiceCreateFavoriteResult
-	if err = p.c.Call(ctx, "CreateFavorite", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequest) (r *videos.GetFavoriteVideoListResponse, err error) {
-	var _args videos.VideoServiceGetFavoriteVideoListArgs
-	_args.Req = req
-	var _result videos.VideoServiceGetFavoriteVideoListResult
-	if err = p.c.Call(ctx, "GetFavoriteVideoList", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequest) (r *videos.GetFavoriteListResponse, err error) {
-	var _args videos.VideoServiceGetFavoriteListArgs
-	_args.Req = req
-	var _result videos.VideoServiceGetFavoriteListResult
-	if err = p.c.Call(ctx, "GetFavoriteList", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) GetVideoFromFavorite(ctx context.Context, req *videos.GetVideoFromFavoriteRequest) (r *videos.GetVideoFromFavoriteResponse, err error) {
-	var _args videos.VideoServiceGetVideoFromFavoriteArgs
-	_args.Req = req
-	var _result videos.VideoServiceGetVideoFromFavoriteResult
-	if err = p.c.Call(ctx, "GetVideoFromFavorite", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) AddFavoriteVideo(ctx context.Context, req *videos.AddFavoriteVideoRequest) (r *videos.AddFavoriteVideoResponse, err error) {
-	var _args videos.VideoServiceAddFavoriteVideoArgs
-	_args.Req = req
-	var _result videos.VideoServiceAddFavoriteVideoResult
-	if err = p.c.Call(ctx, "AddFavoriteVideo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest) (r *videos.DeleteFavoriteResponse, err error) {
-	var _args videos.VideoServiceDeleteFavoriteArgs
-	_args.Req = req
-	var _result videos.VideoServiceDeleteFavoriteResult
-	if err = p.c.Call(ctx, "DeleteFavorite", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequest) (r *videos.DeleteVideoFromFavoriteResponse, err error) {
-	var _args videos.VideoServiceDeleteVideoFromFavoriteArgs
-	_args.Req = req
-	var _result videos.VideoServiceDeleteVideoFromFavoriteResult
-	if err = p.c.Call(ctx, "DeleteVideoFromFavorite", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) SharedVideo(ctx context.Context, req *videos.SharedVideoRequest) (r *videos.SharedVideoResponse, err error) {
-	var _args videos.VideoServiceSharedVideoArgs
-	_args.Req = req
-	var _result videos.VideoServiceSharedVideoResult
-	if err = p.c.Call(ctx, "SharedVideo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
-func (p *kClient) RecommendVideo(ctx context.Context, req *videos.RecommendVideoRequest) (r *videos.RecommendVideoResponse, err error) {
-	var _args videos.VideoServiceRecommendVideoArgs
-	_args.Req = req
-	var _result videos.VideoServiceRecommendVideoResult
-	if err = p.c.Call(ctx, "RecommendVideo", &_args, &_result); err != nil {
-		return
-	}
-	return _result.GetSuccess(), nil
-}
-
 func (p *kClient) VideoPublishStartV2(ctx context.Context, req *videos.VideoPublishStartRequestV2) (r *videos.VideoPublishStartResponseV2, err error) {
 	var _args videos.VideoServiceVideoPublishStartV2Args
 	_args.Req = req
@@ -1399,6 +894,196 @@ func (p *kClient) ResumeUploadV2(ctx context.Context, req *videos.VideoPublishRe
 	_args.Req = req
 	var _result videos.VideoServiceResumeUploadV2Result
 	if err = p.c.Call(ctx, "ResumeUploadV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoFeedListV2(ctx context.Context, req *videos.VideoFeedListRequestV2) (r *videos.VideoFeedListResponseV2, err error) {
+	var _args videos.VideoServiceVideoFeedListV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoFeedListV2Result
+	if err = p.c.Call(ctx, "VideoFeedListV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoSearchV2(ctx context.Context, req *videos.VideoSearchRequestV2) (r *videos.VideoSearchResponseV2, err error) {
+	var _args videos.VideoServiceVideoSearchV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoSearchV2Result
+	if err = p.c.Call(ctx, "VideoSearchV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoPopularV2(ctx context.Context, req *videos.VideoPopularRequestV2) (r *videos.VideoPopularResponseV2, err error) {
+	var _args videos.VideoServiceVideoPopularV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoPopularV2Result
+	if err = p.c.Call(ctx, "VideoPopularV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoInfoV2(ctx context.Context, req *videos.VideoInfoRequestV2) (r *videos.VideoInfoResponseV2, err error) {
+	var _args videos.VideoServiceVideoInfoV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoInfoV2Result
+	if err = p.c.Call(ctx, "VideoInfoV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoDeleteV2(ctx context.Context, req *videos.VideoDeleteRequestV2) (r *videos.VideoDeleteResponseV2, err error) {
+	var _args videos.VideoServiceVideoDeleteV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoDeleteV2Result
+	if err = p.c.Call(ctx, "VideoDeleteV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2) (r *videos.VideoVisitResponseV2, err error) {
+	var _args videos.VideoServiceVideoVisitV2Args
+	_args.Req = req
+	var _result videos.VideoServiceVideoVisitV2Result
+	if err = p.c.Call(ctx, "VideoVisitV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateVisitCountV2(ctx context.Context, req *videos.UpdateVisitCountRequestV2) (r *videos.UpdateVisitCountResponseV2, err error) {
+	var _args videos.VideoServiceUpdateVisitCountV2Args
+	_args.Req = req
+	var _result videos.VideoServiceUpdateVisitCountV2Result
+	if err = p.c.Call(ctx, "UpdateVisitCountV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateVideoCommentCountV2(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2) (r *videos.UpdateVideoCommentCountResponseV2, err error) {
+	var _args videos.VideoServiceUpdateVideoCommentCountV2Args
+	_args.Req = req
+	var _result videos.VideoServiceUpdateVideoCommentCountV2Result
+	if err = p.c.Call(ctx, "UpdateVideoCommentCountV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (r *videos.UpdateLikeCountResponseV2, err error) {
+	var _args videos.VideoServiceUpdateVideoLikeCountV2Args
+	_args.Req = req
+	var _result videos.VideoServiceUpdateVideoLikeCountV2Result
+	if err = p.c.Call(ctx, "UpdateVideoLikeCountV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (r *videos.GetVideoVisitCountResponseV2, err error) {
+	var _args videos.VideoServiceGetVideoVisitCountV2Args
+	_args.Req = req
+	var _result videos.VideoServiceGetVideoVisitCountV2Result
+	if err = p.c.Call(ctx, "GetVideoVisitCountV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) StreamVideoV2(ctx context.Context, req *videos.StreamVideoRequestV2) (r *videos.StreamVideoResponseV2, err error) {
+	var _args videos.VideoServiceStreamVideoV2Args
+	_args.Req = req
+	var _result videos.VideoServiceStreamVideoV2Result
+	if err = p.c.Call(ctx, "StreamVideoV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CreateFavoriteV2(ctx context.Context, req *videos.CreateFavoriteRequestV2) (r *videos.CreateFavoriteResponseV2, err error) {
+	var _args videos.VideoServiceCreateFavoriteV2Args
+	_args.Req = req
+	var _result videos.VideoServiceCreateFavoriteV2Result
+	if err = p.c.Call(ctx, "CreateFavoriteV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetFavoriteVideoListV2(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (r *videos.GetFavoriteVideoListResponseV2, err error) {
+	var _args videos.VideoServiceGetFavoriteVideoListV2Args
+	_args.Req = req
+	var _result videos.VideoServiceGetFavoriteVideoListV2Result
+	if err = p.c.Call(ctx, "GetFavoriteVideoListV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetFavoriteListV2(ctx context.Context, req *videos.GetFavoriteListRequestV2) (r *videos.GetFavoriteListResponseV2, err error) {
+	var _args videos.VideoServiceGetFavoriteListV2Args
+	_args.Req = req
+	var _result videos.VideoServiceGetFavoriteListV2Result
+	if err = p.c.Call(ctx, "GetFavoriteListV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) AddFavoriteVideoV2(ctx context.Context, req *videos.AddFavoriteVideoRequestV2) (r *videos.AddFavoriteVideoResponseV2, err error) {
+	var _args videos.VideoServiceAddFavoriteVideoV2Args
+	_args.Req = req
+	var _result videos.VideoServiceAddFavoriteVideoV2Result
+	if err = p.c.Call(ctx, "AddFavoriteVideoV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteFavoriteV2(ctx context.Context, req *videos.DeleteFavoriteRequestV2) (r *videos.DeleteFavoriteResponseV2, err error) {
+	var _args videos.VideoServiceDeleteFavoriteV2Args
+	_args.Req = req
+	var _result videos.VideoServiceDeleteFavoriteV2Result
+	if err = p.c.Call(ctx, "DeleteFavoriteV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteVideoFromFavoriteV2(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) (r *videos.DeleteVideoFromFavoriteResponseV2, err error) {
+	var _args videos.VideoServiceDeleteVideoFromFavoriteV2Args
+	_args.Req = req
+	var _result videos.VideoServiceDeleteVideoFromFavoriteV2Result
+	if err = p.c.Call(ctx, "DeleteVideoFromFavoriteV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) SharedVideoV2(ctx context.Context, req *videos.SharedVideoRequestV2) (r *videos.SharedVideoResponseV2, err error) {
+	var _args videos.VideoServiceSharedVideoV2Args
+	_args.Req = req
+	var _result videos.VideoServiceSharedVideoV2Result
+	if err = p.c.Call(ctx, "SharedVideoV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RecommendVideoV2(ctx context.Context, req *videos.RecommendVideoRequestV2) (r *videos.RecommendVideoResponseV2, err error) {
+	var _args videos.VideoServiceRecommendVideoV2Args
+	_args.Req = req
+	var _result videos.VideoServiceRecommendVideoV2Result
+	if err = p.c.Call(ctx, "RecommendVideoV2", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

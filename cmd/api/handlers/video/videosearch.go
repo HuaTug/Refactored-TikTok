@@ -15,7 +15,7 @@ func VideoSearch(ctx context.Context, c *app.RequestContext) {
 	if err = c.Bind(&Serach); err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
-	resp, err := rpc.VideoSearch(ctx, &videos.VideoSearchRequest{
+	resp, err := rpc.VideoSearch(ctx, &videos.VideoSearchRequestV2{
 		Keyword:  Serach.Keyword,
 		PageNum:  Serach.PageNum,
 		PageSize: Serach.PageSize,

@@ -234,7 +234,7 @@ func (service *LikeActionService) GetLikeList(ctx context.Context, req *interact
 	videosList := make([]*base.Video, 0, len(videoIDs))
 	for _, videoID := range videoIDs {
 		// 调用视频服务获取视频详情
-		videoResp, err := client.VideoClient.VideoInfo(ctx, &videos.VideoInfoRequest{
+		videoResp, err := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{
 			VideoId: videoID,
 		})
 		if err != nil {

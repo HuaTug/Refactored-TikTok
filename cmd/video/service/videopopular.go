@@ -20,7 +20,7 @@ func NewVideoPopularService(ctx context.Context) *VideoPopularService {
 	return &VideoPopularService{ctx: ctx}
 }
 
-func (v *VideoPopularService) VideoPopular(req *videos.VideoPopularRequest) (video []*base.Video, err error) {
+func (v *VideoPopularService) VideoPopular(req *videos.VideoPopularRequestV2) (video []*base.Video, err error) {
 	res, err := cache.RangeList("Rank")
 	if err != nil {
 		hlog.Info(err)

@@ -39,56 +39,57 @@ func InitVideoRpc() {
 	VideoClient = c
 }
 
-func VideoIdList(ctx context.Context, req *videos.VideoIdListRequest) (resp *videos.VideoIdListResponse, err error) {
-	resp, err = VideoClient.VideoIdList(ctx, req)
+func VideoIdList(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
+	resp, err = VideoClient.VideoFeedListV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}
 	return resp, err
 }
 
-func GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest) (resp *videos.GetVideoVisitCountInRedisResponse, err error) {
-	resp, err = VideoClient.GetVideoVisitCountInRedis(ctx, req)
+func GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (resp *videos.GetVideoVisitCountResponseV2, err error) {
+	resp, err = VideoClient.GetVideoVisitCountV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}
 	return resp, err
 }
 
-func UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequest) (resp *videos.UpdateVideoCommentCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoCommentCount(ctx, req)
+func UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2) (resp *videos.UpdateVideoCommentCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVideoCommentCountV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}
 	return resp, err
 }
 
-func UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequest) (resp *videos.UpdateLikeCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoLikeCount(ctx, req)
+func UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (resp *videos.UpdateLikeCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVideoLikeCountV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}
 	return resp, err
 }
 
-func UpdateVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequest) (resp *videos.UpdateVisitCountResponse, err error) {
-	resp, err = VideoClient.UpdateVisitCount(ctx, req)
+func UpdateVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequestV2) (resp *videos.UpdateVisitCountResponseV2, err error) {
+	resp, err = VideoClient.UpdateVisitCountV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}
 	return resp, err
 }
 
-func UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest) (resp *videos.UpdateVideoHisLikeCountResponse, err error) {
-	resp, err = VideoClient.UpdateVideoHisLikeCount(ctx, req)
-	if err != nil {
-		return resp, nil
-	}
-	return resp, err
-}
+// NOTE: UpdateVideoHisLikeCount was removed in V2 API
+// func UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest) (resp *videos.UpdateVideoHisLikeCountResponse, err error) {
+// 	resp, err = VideoClient.UpdateVideoHisLikeCount(ctx, req)
+// 	if err != nil {
+// 		return resp, nil
+// 	}
+// 	return resp, err
+// }
 
-func VideoInfo(ctx context.Context, req *videos.VideoInfoRequest) (resp *videos.VideoInfoResponse, err error) {
-	resp, err = VideoClient.VideoInfo(ctx, req)
+func VideoInfo(ctx context.Context, req *videos.VideoInfoRequestV2) (resp *videos.VideoInfoResponseV2, err error) {
+	resp, err = VideoClient.VideoInfoV2(ctx, req)
 	if err != nil {
 		return resp, nil
 	}

@@ -9,11 +9,11 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
-func VideoPopular(ctx context.Context,c *app.RequestContext){
-	resp,err:=rpc.VideoPopular(ctx,&videos.VideoPopularRequest{})
-	if err!=nil{
-		SendResponse(c,errno.ConvertErr(err),nil)
+func VideoPopular(ctx context.Context, c *app.RequestContext) {
+	resp, err := rpc.VideoPopular(ctx, &videos.VideoPopularRequestV2{})
+	if err != nil {
+		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	}
-	SendResponse(c,errno.Success,resp)
+	SendResponse(c, errno.Success, resp)
 }

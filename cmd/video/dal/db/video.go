@@ -14,15 +14,28 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func Feedlist(ctx context.Context, req *videos.FeedServiceRequest) ([]*base.Video, error) {
+func Feedlist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("created_at<?", req.LastTime).Find(&video); err != nil {
+	query := DB.WithContext(ctx).Model(&base.Video{})
+
+	// 添加分类过滤
+	if req.CategoryFilter != "" {
+		query = query.Where("category = ?", req.CategoryFilter)
+	}
+
+	// 添加隐私过滤
+	if req.PrivacyFilter != "" {
+		query = query.Where("privacy = ?", req.PrivacyFilter)
+	}
+
+	// 分页查询
+	if err := query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video); err != nil {
 		return video, errors.Wrapf(err.Error, "FeedList failed,err:%v", err)
 	}
 	return video, nil
 }
 
-func GetAllFeedList(ctx context.Context, req *videos.FeedServiceRequest) ([]*base.Video, error) {
+func GetAllFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
 	if err := DB.WithContext(ctx).Model(&base.Video{}).Find(&video); err != nil {
 		return video, errors.Wrapf(err.Error, "GetAllFeedList failed,err:%v", err)
@@ -31,7 +44,7 @@ func GetAllFeedList(ctx context.Context, req *videos.FeedServiceRequest) ([]*bas
 }
 
 // 获取用户发布的视频
-func Videolist(ctx context.Context, req *videos.VideoFeedListRequest) ([]*base.Video, int64, error) {
+func Videolist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, int64, error) {
 	var video []*base.Video
 	var count int64
 	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id=?", req.UserId).Count(&count).Limit(int(req.PageSize)).
@@ -42,7 +55,7 @@ func Videolist(ctx context.Context, req *videos.VideoFeedListRequest) ([]*base.V
 	return video, count, nil
 }
 
-func Videosearch(ctx context.Context, req *videos.VideoSearchRequest) ([]*base.Video, int64, error) {
+func Videosearch(ctx context.Context, req *videos.VideoSearchRequestV2) ([]*base.Video, int64, error) {
 	var wg sync.WaitGroup
 	var video2 []*base.Video
 	var count int64
@@ -51,9 +64,23 @@ func Videosearch(ctx context.Context, req *videos.VideoSearchRequest) ([]*base.V
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err = DB.WithContext(ctx).Model(&base.Video{}).
-				Where("title like ? And created_at<? And created_at>?", "%"+req.Keyword+"%", req.ToDate, req.FromDate).
-				Count(&count).
+			query := DB.WithContext(ctx).Model(&base.Video{}).
+				Where("title like ?", "%"+req.Keyword+"%")
+
+			// 添加日期范围过滤
+			if req.FromDate != "" {
+				query = query.Where("created_at > ?", req.FromDate)
+			}
+			if req.ToDate != "" {
+				query = query.Where("created_at < ?", req.ToDate)
+			}
+
+			// 添加分类过滤
+			if len(req.Categories) > 0 {
+				query = query.Where("category IN ?", req.Categories)
+			}
+
+			err = query.Count(&count).
 				Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize)).
 				Find(&video2).Error
 		}()
@@ -204,11 +231,17 @@ func CreateFavorite(ctx context.Context, fav *base.Favorite) error {
 }
 
 // 获取用户收藏列表（有多少个收藏夹）
-func GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequest) ([]*base.Favorite, error) {
+func GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequestV2) ([]*base.Favorite, error) {
 	var favList []*base.Favorite
 	hlog.Info(req.UserId)
-	if err := DB.WithContext(ctx).Model(&base.Favorite{}).Where("user_id=?", req.UserId).
-		Offset((int(req.PageNum) - 1) * int(req.PageSize)).Limit(int(req.PageSize)).Find(&favList).Error; err != nil {
+	query := DB.WithContext(ctx).Model(&base.Favorite{}).Where("user_id=?", req.UserId)
+
+	// 添加隐私过滤
+	if req.PrivacyFilter != "" {
+		query = query.Where("privacy = ?", req.PrivacyFilter)
+	}
+
+	if err := query.Offset((int(req.PageNum) - 1) * int(req.PageSize)).Limit(int(req.PageSize)).Find(&favList).Error; err != nil {
 		return nil, errors.WithMessage(err, "Failed to get FavoriteList")
 	}
 	return favList, nil
@@ -231,7 +264,7 @@ func GetVideoIdFromFavorite(ctx context.Context, user_id, favorite_id int64) ([]
 }
 
 // 从视频收藏中获取视频列表
-func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequest) ([]*base.Video, error) {
+func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
 	videoIds, err := GetVideoIdFromFavorite(ctx, req.UserId, req.FavoriteId)
 	if err != nil {
@@ -241,21 +274,31 @@ func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListR
 		return video, nil
 	}
 
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id in?", videoIds).Find(&video).Error; err != nil {
+	query := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id in?", videoIds)
+
+	// 添加排序
+	if req.SortBy != "" {
+		query = query.Order(req.SortBy)
+	}
+
+	// 添加分页
+	query = query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize))
+
+	if err := query.Find(&video).Error; err != nil {
 		return video, errors.WithMessage(err, "Failed to get VideoFromList")
 	}
 	return video, nil
 }
 
-func GetVideoFromFavorite(ctx context.Context, req *videos.GetVideoFromFavoriteRequest) (*base.Video, error) {
+func GetVideoFromFavorite(ctx context.Context, userId, videoId int64) (*base.Video, error) {
 	var video *base.Video
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id = ? and video_id = ?", req.UserId, req.VideoId).Find(&video).Error; err != nil {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id = ? and video_id = ?", userId, videoId).Find(&video).Error; err != nil {
 		return nil, errors.WithMessage(err, "Failed to get VideoFromFavorite")
 	}
 	return video, nil
 }
 
-func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest) error {
+func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequestV2) error {
 	go DeleteAllVideoFromFavorite(ctx, req.UserId, req.FavoriteId)
 	if err := DB.WithContext(ctx).Model(&model.Favorite{}).Where("user_id =? and favorite_id =?", req.UserId, req.FavoriteId).Delete(&base.Favorite{}).Error; err != nil {
 		return errors.WithMessage(err, "Failed to delete Favorite")
@@ -263,7 +306,7 @@ func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest) erro
 	return nil
 }
 
-func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequest) error {
+func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) error {
 	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).Where("user_id =? and video_id =?", req.UserId, req.VideoId).Delete(&model.FavoritesVideos{}).Error; err != nil {
 		return errors.WithMessage(err, "Failed to delete VideoFromFavorite")
 	}

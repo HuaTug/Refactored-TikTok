@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"HuaTug.com/cmd/api/rpc"
-	"HuaTug.com/kitex_gen/videos"
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/utils"
@@ -31,13 +30,7 @@ func GetFavoriteVideo(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.GetVideoFromFavorite(ctx, &videos.GetVideoFromFavoriteRequest{
-		UserId:     UserId,
-		FavoriteId: GetVideoFromFavorite.FavoriteId,
-		VideoId:    GetVideoFromFavorite.VideoId,
-		PageNum:    GetVideoFromFavorite.PageNum,
-		PageSize:   GetVideoFromFavorite.PageSize,
-	})
+	resp, err := rpc.GetVideoFromFavorite(ctx, UserId, GetVideoFromFavorite.VideoId)
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return

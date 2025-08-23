@@ -30,11 +30,12 @@ func GetFavoriteVideoList(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.GetFavoriteVideoList(ctx, &videos.GetFavoriteVideoListRequest{
+	resp, err := rpc.GetFavoriteVideoList(ctx, &videos.GetFavoriteVideoListRequestV2{
 		UserId:     UserId,
 		FavoriteId: GetFavoriteVideo.FavoriteId,
 		PageNum:    GetFavoriteVideo.PageNum,
 		PageSize:   GetFavoriteVideo.PageSize,
+		SortBy:     "created_at DESC", // 添加默认值
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

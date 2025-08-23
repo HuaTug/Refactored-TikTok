@@ -12,13 +12,12 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
-func VideoPublishCancle(ctx context.Context, c *app.RequestContext) {
+func VideoPublishUploadingV2(ctx context.Context, c *app.RequestContext) {
 	var err error
 	var v interface{}
 	var UserId int64
-	var VideoPublish VideoPublishCancleParam
+	var VideoPublish VideoPublishUploadingParam
 	if err = c.BindAndValidate(&VideoPublish); err != nil {
-		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	}
@@ -28,13 +27,19 @@ func VideoPublishCancle(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	if resp, err := rpc.VideoPublishCancle(ctx, &videos.VideoPublishCancleRequest{
-		UserId: UserId,
-		Uuid:   VideoPublish.Uuid,
+	if resp, err := rpc.VideoPublishUploadingV2(ctx, &videos.VideoPublishUploadingRequestV2{
+		UserId:            UserId,
+		UploadSessionUuid: VideoPublish.Uuid,
+		ChunkNumber:       int32(VideoPublish.ChunkNumber),
+		ChunkData:         []byte{VideoPublish.Data},
+		ChunkMd5:          "", // 需要从请求中获取MD5
+		ChunkSize:         int64(len([]byte{VideoPublish.Data})),
+		ChunkOffset:       0, // 需要计算偏移量
 	}); err != nil {
+		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	} else {
-		SendResponse(c, errno.ConvertErr(err), resp)
+		SendResponse(c, errno.Success, resp)
 	}
 }

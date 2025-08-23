@@ -31,7 +31,7 @@ func VideoVisit(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	resp, err := rpc.VideoVisit(ctx, &videos.VideoVisitRequest{
+	resp, err := rpc.VideoVisit(ctx, &videos.VideoVisitRequestV2{
 		FromId:  UserId,
 		VideoId: videoId,
 	})
