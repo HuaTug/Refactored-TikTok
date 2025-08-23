@@ -25,7 +25,7 @@ func NewSharedVideoService(ctx context.Context) *SharedVideoService {
 	return &SharedVideoService{ctx: ctx}
 }
 
-func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequest) error {
+func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequestV2) error {
 
 	userExistsCh := make(chan bool)
 	videoExistsCh := make(chan bool)

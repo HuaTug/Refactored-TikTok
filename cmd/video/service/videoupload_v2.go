@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"HuaTug.com/cmd/video/dal/db"
@@ -51,7 +52,7 @@ type UploadSession struct {
 }
 
 // StartUpload 开始上传流程（TikTok风格）
-func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequest) (*UploadSession, error) {
+func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV2) (*UploadSession, error) {
 	// 1. 参数验证
 	if req.Title == "" || req.ChunkTotalNumber <= 0 {
 		return nil, errno.RequestErr
@@ -78,7 +79,7 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequest)
 		Title:          req.Title,
 		Description:    req.Description,
 		Category:       req.Category,
-		Tags:           req.LabName,
+		Tags:           strings.Join(req.Tags, ","),
 		TotalChunks:    int(req.ChunkTotalNumber),
 		UploadedChunks: make([]bool, req.ChunkTotalNumber),
 		TempDir:        s.createTempDir(req.UserId, videoID),
@@ -108,8 +109,8 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequest)
 }
 
 // UploadChunk 上传分片（高性能优化版）
-func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequest) error {
-	hlog.Infof("Starting upload chunk %d for session %s", req.ChunkNumber, req.Uuid)
+func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequestV2) error {
+	hlog.Infof("Starting upload chunk %d for session %s", req.ChunkNumber, req.UploadSessionUuid)
 
 	// 1. 基本参数验证（无需查询Redis）
 	if req.ChunkNumber <= 0 {
@@ -117,37 +118,37 @@ func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequ
 	}
 
 	// 2. 验证分片数据
-	if !s.verifyChunk(req.Data, req.Md5) {
+	if !s.verifyChunk(req.ChunkData, req.ChunkMd5) {
 		return errors.New("chunk verification failed")
 	}
 
 	// 3. 快速构建临时目录路径（避免getUploadSession调用）
 	uid := strconv.FormatInt(req.UserId, 10)
-	tempDir := s.createTempDir(req.UserId, req.Uuid)
+	tempDir := s.createTempDir(req.UserId, req.UploadSessionUuid)
 	chunkPath := filepath.Join(tempDir, fmt.Sprintf("chunk_%d.tmp", req.ChunkNumber))
 
 	// 4. 保存分片到临时目录
-	if err := s.saveChunkFile(chunkPath, req.Data); err != nil {
+	if err := s.saveChunkFile(chunkPath, req.ChunkData); err != nil {
 		return fmt.Errorf("failed to save chunk: %w", err)
 	}
 
 	// 5. 更新Redis中的分片状态（这是唯一必需的Redis操作）
-	if err := redis.UpdateChunkUploadStatus(s.ctx, req.Uuid, uid, req.ChunkNumber); err != nil {
+	if err := redis.UpdateChunkUploadStatus(s.ctx, req.UploadSessionUuid, uid, int64(req.ChunkNumber)); err != nil {
 		return fmt.Errorf("failed to update chunk status in Redis: %w", err)
 	}
 
-	hlog.Infof("Successfully uploaded chunk %d for session %s", req.ChunkNumber, req.Uuid)
+	hlog.Infof("Successfully uploaded chunk %d for session %s", req.ChunkNumber, req.UploadSessionUuid)
 	return nil
 }
 
 // CompleteUpload 完成上传（TikTok风格处理）
-func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRequest) error {
-	hlog.Infof("Starting complete upload for session %s, user %d", req.Uuid, req.UserId)
+func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRequestV2) error {
+	hlog.Infof("Starting complete upload for session %s, user %d", req.UploadSessionUuid, req.UserId)
 
 	// 1. 获取上传会话
-	session, err := s.getUploadSession(req.Uuid, req.UserId)
+	session, err := s.getUploadSession(req.UploadSessionUuid, req.UserId)
 	if err != nil {
-		hlog.Errorf("Failed to get upload session %s: %v", req.Uuid, err)
+		hlog.Errorf("Failed to get upload session %s: %v", req.UploadSessionUuid, err)
 		return fmt.Errorf("failed to get upload session: %w", err)
 	}
 
@@ -284,8 +285,8 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 }
 
 // CancelUpload 取消上传
-func (s *VideoUploadServiceV2) CancelUpload(req *videos.VideoPublishCancleRequest) error {
-	session, err := s.getUploadSession(req.Uuid, req.UserId)
+func (s *VideoUploadServiceV2) CancelUpload(req *videos.VideoPublishCancelRequestV2) error {
+	session, err := s.getUploadSession(req.UploadSessionUuid, req.UserId)
 	if err != nil {
 		return fmt.Errorf("failed to get upload session: %w", err)
 	}

@@ -15,11 +15,11 @@ import (
 type CommentEventProcessor struct {
 	shardedDB    *db.ShardedCommentDB
 	cacheManager *cache.CommentCacheManager
-	mqManager    *mq.CommentMQManager
+	mqManager    *mq.MQManager
 }
 
 // NewCommentEventProcessor 创建评论事件处理器
-func NewCommentEventProcessor(shardedDB *db.ShardedCommentDB, cacheManager *cache.CommentCacheManager, mqManager *mq.CommentMQManager) *CommentEventProcessor {
+func NewCommentEventProcessor(shardedDB *db.ShardedCommentDB, cacheManager *cache.CommentCacheManager, mqManager *mq.MQManager) *CommentEventProcessor {
 	return &CommentEventProcessor{
 		shardedDB:    shardedDB,
 		cacheManager: cacheManager,

@@ -29,10 +29,11 @@ func GetFavoroteList(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.GetFavoroteList(ctx, &videos.GetFavoriteListRequest{
-		UserId: UserId,
-		PageNum: GetFavoriteList.PageNum,
-		PageSize: GetFavoriteList.PageSize,
+	resp, err := rpc.GetFavoroteList(ctx, &videos.GetFavoriteListRequestV2{
+		UserId:        UserId,
+		PageNum:       GetFavoriteList.PageNum,
+		PageSize:      GetFavoriteList.PageSize,
+		PrivacyFilter: "", // 添加默认值
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

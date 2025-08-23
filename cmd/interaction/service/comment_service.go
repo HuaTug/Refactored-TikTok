@@ -199,7 +199,7 @@ func (service *CommentService) CreateComment(ctx context.Context, req *interacti
 
 	// Verify video exists (optional but recommended)
 	if videoId != 0 {
-		_, err := rpc.VideoClient.VideoInfo(ctx, &videos.VideoInfoRequest{VideoId: videoId})
+		_, err := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoId})
 		if err != nil {
 			return errors.WithMessage(err, "Video not found or inaccessible")
 		}
@@ -463,7 +463,7 @@ func (service *CommentService) ListComment(ctx context.Context, req *interaction
 
 func (service *CommentService) NewDeleteEvent(ctx context.Context, req *interactions.CommentDeleteRequest) error {
 	if req.VideoId != 0 {
-		videoInfo, err := rpc.VideoClient.VideoInfo(ctx, &videos.VideoInfoRequest{VideoId: req.VideoId})
+		videoInfo, err := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: req.VideoId})
 		if err != nil {
 			hlog.Info("Error in VideoInfo RPC call:", err)
 			return errno.RpcErr
@@ -660,7 +660,7 @@ func (service *CommentService) DeleteVideo(req *interactions.CommentDeleteReques
 	if err != nil {
 		return errno.MysqlErr
 	}
-	if _, err := rpc.VideoClient.VideoDelete(service.ctx, &videos.VideoDeleteRequest{VideoId: req.VideoId, UserId: req.FromUserId}); err != nil {
+	if _, err := rpc.VideoClient.VideoDeleteV2(service.ctx, &videos.VideoDeleteRequestV2{VideoId: req.VideoId, UserId: req.FromUserId}); err != nil {
 		return errno.ServiceErr
 	}
 

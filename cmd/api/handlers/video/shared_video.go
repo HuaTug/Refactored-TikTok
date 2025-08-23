@@ -30,10 +30,12 @@ func SharedVideo(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.SharedVideo(ctx, &videos.SharedVideoRequest{
-		UserId:     UserId,
-		VideoId:    SharedVideo.VideoId,
-		ToUserId:   SharedVideo.ToUserId,
+	resp, err := rpc.SharedVideo(ctx, &videos.SharedVideoRequestV2{
+		UserId:        UserId,
+		VideoId:       SharedVideo.VideoId,
+		ToUserId:      SharedVideo.ToUserId,
+		ShareMessage:  "",
+		SharePlatform: "default",
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

@@ -18,7 +18,7 @@ func VideoFeedList(ctx context.Context, c *app.RequestContext) {
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
 	hlog.Info(VideoList.AuthorId)
-	resp, err := rpc.VideoFeedList(ctx, &videos.VideoFeedListRequest{
+	resp, err := rpc.VideoFeedList(ctx, &videos.VideoFeedListRequestV2{
 		UserId:   VideoList.AuthorId,
 		PageNum:  VideoList.PageNum,
 		PageSize: VideoList.PageSize,

@@ -121,6 +121,75 @@ func (s *EventDrivenSyncService) Start() error {
 	return nil
 }
 
+// updateCommentLikeCount 更新评论表的点赞数
+func (s *EventDrivenSyncService) updateCommentLikeCount(ctx context.Context, tx *gorm.DB, commentID int64, delta int64) error {
+	// 使用原子操作更新点赞数，避免并发问题
+	result := tx.Model(&model.Comment{}).
+		Where("comment_id = ?", commentID).
+		Update("like_count", gorm.Expr("like_count + ?", delta))
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update comment like count: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		hlog.CtxWarnf(ctx, "No comment found with ID %d for like count update", commentID)
+	}
+
+	hlog.CtxInfof(ctx, "Updated comment %d like count by %d", commentID, delta)
+	return nil
+}
+
+// sendCommentLikeNotification 发送评论点赞通知
+func (s *EventDrivenSyncService) sendCommentLikeNotification(ctx context.Context, userID, commentID int64) error {
+	// 1. 获取评论信息以确定通知接收者
+	var comment model.Comment
+	if err := s.db.Where("comment_id = ?", commentID).First(&comment).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			hlog.CtxWarnf(ctx, "Comment %d not found for like notification", commentID)
+			return nil // 评论不存在，不发送通知
+		}
+		return fmt.Errorf("failed to get comment info: %w", err)
+	}
+
+	// 2. 不给自己发通知
+	if comment.UserId == userID {
+		return nil
+	}
+
+	// 3. 创建通知事件
+	notificationEvent := &mq.NotificationEvent{
+		Type:       "comment_like",
+		ReceiverID: comment.UserId,
+		SenderID:   userID,
+		Content:    "点赞了你的评论",
+		Extra: map[string]interface{}{
+			"comment_id": commentID,
+			"video_id":   comment.VideoId,
+			"content":    comment.Content,
+		},
+		Timestamp: time.Now().Unix(),
+		EventID:   uuid.New().String(),
+
+		// 兼容字段
+		UserID:           comment.UserId,
+		FromUserID:       userID,
+		NotificationType: "like",
+		TargetID:         commentID,
+	}
+
+	// 4. 发送通知事件到消息队列
+	if s.producer != nil {
+		if err := s.producer.PublishNotificationEvent(ctx, notificationEvent); err != nil {
+			return fmt.Errorf("failed to publish notification event: %w", err)
+		}
+		hlog.CtxInfof(ctx, "Sent comment like notification: user %d liked comment %d by user %d",
+			userID, commentID, comment.UserId)
+	}
+
+	return nil
+}
+
 // Stop 停止同步服务
 func (s *EventDrivenSyncService) Stop() error {
 	s.mu.Lock()
@@ -251,6 +320,19 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 		return fmt.Errorf("failed to create video like: %w", err)
 	}
 
+	// 3. 更新视频表的点赞数 - 关键缺失功能补充
+	if err := s.updateVideoLikeCount(ctx, tx, event.ResourceID, 1); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to update video like count: %v", err)
+		// 不返回错误，避免影响主流程，但记录日志
+	}
+
+	// 4. 异步发送点赞通知 - 关键缺失功能补充
+	go func() {
+		if err := s.sendVideoLikeNotification(context.Background(), event.UserID, event.ResourceID); err != nil {
+			hlog.Errorf("Failed to send video like notification: %v", err)
+		}
+	}()
+
 	// 注意：不在这里更新Redis缓存，避免重复计数
 	// Redis缓存已经在EventHandler中更新过了
 
@@ -270,6 +352,12 @@ func (s *EventDrivenSyncService) processVideoUnlike(ctx context.Context, tx *gor
 	if err := tx.Where("user_id = ? AND video_id = ?",
 		event.UserID, event.ResourceID).Delete(&model.VideoLike{}).Error; err != nil {
 		return fmt.Errorf("failed to delete video like: %w", err)
+	}
+
+	// 3. 更新视频表的点赞数 - 减少点赞数
+	if err := s.updateVideoLikeCount(ctx, tx, event.ResourceID, -1); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to update video like count: %v", err)
+		// 不返回错误，避免影响主流程，但记录日志
 	}
 
 	// 注意：不在这里更新Redis缓存，避免重复计数
@@ -292,6 +380,19 @@ func (s *EventDrivenSyncService) processCommentLike(ctx context.Context, tx *gor
 		return fmt.Errorf("failed to create comment like: %w", err)
 	}
 
+	// 更新评论表的点赞数 - 关键缺失功能补充
+	if err := s.updateCommentLikeCount(ctx, tx, event.ResourceID, 1); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to update comment like count: %v", err)
+		// 不返回错误，避免影响主流程，但记录日志
+	}
+
+	// 异步发送评论点赞通知 - 关键缺失功能补充
+	go func() {
+		if err := s.sendCommentLikeNotification(context.Background(), event.UserID, event.ResourceID); err != nil {
+			hlog.Errorf("Failed to send comment like notification: %v", err)
+		}
+	}()
+
 	// 注意：不在这里更新Redis缓存，避免重复计数
 	// Redis缓存已经在EventHandler中更新过了
 
@@ -304,6 +405,12 @@ func (s *EventDrivenSyncService) processCommentUnlike(ctx context.Context, tx *g
 	if err := tx.Where("user_id = ? AND comment_id = ?",
 		event.UserID, event.ResourceID).Delete(&model.CommentLike{}).Error; err != nil {
 		return fmt.Errorf("failed to delete comment like: %w", err)
+	}
+
+	// 更新评论表的点赞数 - 减少点赞数
+	if err := s.updateCommentLikeCount(ctx, tx, event.ResourceID, -1); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to update comment like count: %v", err)
+		// 不返回错误，避免影响主流程，但记录日志
 	}
 
 	// 注意：不在这里更新Redis缓存，避免重复计数
@@ -493,11 +600,7 @@ func (s *EventDrivenSyncService) checkIdempotency(ctx context.Context, key strin
 
 // publishToMQ 已弃用 - 避免事件循环
 // 原来的逻辑会导致 LikeEvent -> SyncEvent -> LikeEvent 的循环处理
-// 现在直接在 PublishSyncEvent 中处理，避免重复计数
-func (s *EventDrivenSyncService) publishToMQ(ctx context.Context, event *SyncEvent) error {
-	hlog.Warnf("publishToMQ called but deprecated to avoid event loops: %s", event.EventType)
-	return nil
-}
+// publishToMQ 方法已删除，避免事件循环和重复计数
 
 // RetryManager 方法
 func (rm *RetryManager) calculateBackoffDelay(retryCount int) time.Duration {
@@ -708,4 +811,72 @@ func (es *EventStore) UpdateEventStatus(ctx context.Context, eventID, status str
 		Where("id = ?", eventID).
 		Update("status", status).
 		Update("updated_at", time.Now()).Error
+}
+
+// updateVideoLikeCount 更新视频表的点赞数
+func (s *EventDrivenSyncService) updateVideoLikeCount(ctx context.Context, tx *gorm.DB, videoID int64, delta int64) error {
+	// 使用原子操作更新点赞数，避免并发问题
+	result := tx.Model(&model.Video{}).
+		Where("video_id = ?", videoID).
+		Update("like_count", gorm.Expr("like_count + ?", delta))
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to update video like count: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		hlog.CtxWarnf(ctx, "No video found with ID %d for like count update", videoID)
+	}
+
+	hlog.CtxInfof(ctx, "Updated video %d like count by %d", videoID, delta)
+	return nil
+}
+
+// sendVideoLikeNotification 发送视频点赞通知
+func (s *EventDrivenSyncService) sendVideoLikeNotification(ctx context.Context, userID, videoID int64) error {
+	// 1. 获取视频信息以确定通知接收者
+	var video model.Video
+	if err := s.db.Where("video_id = ?", videoID).First(&video).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			hlog.CtxWarnf(ctx, "Video %d not found for like notification", videoID)
+			return nil // 视频不存在，不发送通知
+		}
+		return fmt.Errorf("failed to get video info: %w", err)
+	}
+
+	// 2. 不给自己发通知
+	if video.UserId == userID {
+		return nil
+	}
+
+	// 3. 创建通知事件
+	notificationEvent := &mq.NotificationEvent{
+		Type:       "video_like",
+		ReceiverID: video.UserId,
+		SenderID:   userID,
+		Content:    "点赞了你的视频",
+		Extra: map[string]interface{}{
+			"video_id": videoID,
+			"title":    video.Title,
+		},
+		Timestamp: time.Now().Unix(),
+		EventID:   uuid.New().String(),
+
+		// 兼容字段
+		UserID:           video.UserId,
+		FromUserID:       userID,
+		NotificationType: "like",
+		TargetID:         videoID,
+	}
+
+	// 4. 发送通知事件到消息队列
+	if s.producer != nil {
+		if err := s.producer.PublishNotificationEvent(ctx, notificationEvent); err != nil {
+			return fmt.Errorf("failed to publish notification event: %w", err)
+		}
+		hlog.CtxInfof(ctx, "Sent video like notification: user %d liked video %d by user %d",
+			userID, videoID, video.UserId)
+	}
+
+	return nil
 }

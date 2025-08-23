@@ -72,7 +72,7 @@ func Init() {
 	}
 
 	// 创建统一的消息队列管理器
-	mqManager, err := mq.NewUnifiedMQManager(rabbitmqURL)
+	mqManager, err := mq.NewMQManager(rabbitmqURL)
 	if err != nil {
 		log.Fatalf("Failed to create unified MQ manager: %v", err)
 	}

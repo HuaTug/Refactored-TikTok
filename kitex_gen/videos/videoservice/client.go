@@ -11,40 +11,31 @@ import (
 
 // Client is designed to provide IDL-compatible methods with call-option parameter for kitex framework.
 type Client interface {
-	FeedService(ctx context.Context, req *videos.FeedServiceRequest, callOptions ...callopt.Option) (r *videos.FeedServiceResponse, err error)
-	VideoPublishStart(ctx context.Context, req *videos.VideoPublishStartRequest, callOptions ...callopt.Option) (r *videos.VideoPublishStartResponse, err error)
-	VideoPublishUploading(ctx context.Context, req *videos.VideoPublishUploadingRequest, callOptions ...callopt.Option) (r *videos.VideoPublishUploadingResponse, err error)
-	VideoPublishComplete(ctx context.Context, req *videos.VideoPublishCompleteRequest, callOptions ...callopt.Option) (r *videos.VideoPublishCompleteResponse, err error)
-	VideoPublishCancle(ctx context.Context, req *videos.VideoPublishCancleRequest, callOptions ...callopt.Option) (r *videos.VideoPublishCancleResponse, err error)
-	VideoDelete(ctx context.Context, req *videos.VideoDeleteRequest, callOptions ...callopt.Option) (r *videos.VideoDeleteResponse, err error)
-	VideoIdList(ctx context.Context, req *videos.VideoIdListRequest, callOptions ...callopt.Option) (r *videos.VideoIdListResponse, err error)
-	VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequest, callOptions ...callopt.Option) (r *videos.VideoFeedListResponse, err error)
-	VideoSearch(ctx context.Context, req *videos.VideoSearchRequest, callOptions ...callopt.Option) (r *videos.VideoSearchResponse, err error)
-	VideoPopular(ctx context.Context, req *videos.VideoPopularRequest, callOptions ...callopt.Option) (r *videos.VideoPopularResponse, err error)
-	VideoInfo(ctx context.Context, req *videos.VideoInfoRequest, callOptions ...callopt.Option) (r *videos.VideoInfoResponse, err error)
-	VideoVisit(ctx context.Context, req *videos.VideoVisitRequest, callOptions ...callopt.Option) (r *videos.VideoVisitResponse, err error)
-	UpdateVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVisitCountResponse, err error)
-	UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVideoCommentCountResponse, err error)
-	UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequest, callOptions ...callopt.Option) (r *videos.UpdateLikeCountResponse, err error)
-	UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVideoHisLikeCountResponse, err error)
-	GetVideoVisitCount(ctx context.Context, req *videos.GetVideoVisitCountRequest, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountResponse, err error)
-	GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountInRedisResponse, err error)
-	StreamVideo(ctx context.Context, req *videos.StreamVideoRequest, callOptions ...callopt.Option) (r *videos.StreamVideoResponse, err error)
-	CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest, callOptions ...callopt.Option) (r *videos.CreateFavoriteResponse, err error)
-	GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequest, callOptions ...callopt.Option) (r *videos.GetFavoriteVideoListResponse, err error)
-	GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequest, callOptions ...callopt.Option) (r *videos.GetFavoriteListResponse, err error)
-	GetVideoFromFavorite(ctx context.Context, req *videos.GetVideoFromFavoriteRequest, callOptions ...callopt.Option) (r *videos.GetVideoFromFavoriteResponse, err error)
-	AddFavoriteVideo(ctx context.Context, req *videos.AddFavoriteVideoRequest, callOptions ...callopt.Option) (r *videos.AddFavoriteVideoResponse, err error)
-	DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest, callOptions ...callopt.Option) (r *videos.DeleteFavoriteResponse, err error)
-	DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequest, callOptions ...callopt.Option) (r *videos.DeleteVideoFromFavoriteResponse, err error)
-	SharedVideo(ctx context.Context, req *videos.SharedVideoRequest, callOptions ...callopt.Option) (r *videos.SharedVideoResponse, err error)
-	RecommendVideo(ctx context.Context, req *videos.RecommendVideoRequest, callOptions ...callopt.Option) (r *videos.RecommendVideoResponse, err error)
 	VideoPublishStartV2(ctx context.Context, req *videos.VideoPublishStartRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishStartResponseV2, err error)
 	VideoPublishUploadingV2(ctx context.Context, req *videos.VideoPublishUploadingRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishUploadingResponseV2, err error)
 	VideoPublishCompleteV2(ctx context.Context, req *videos.VideoPublishCompleteRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishCompleteResponseV2, err error)
 	VideoPublishCancelV2(ctx context.Context, req *videos.VideoPublishCancelRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishCancelResponseV2, err error)
 	GetUploadProgressV2(ctx context.Context, req *videos.VideoPublishProgressRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishProgressResponseV2, err error)
 	ResumeUploadV2(ctx context.Context, req *videos.VideoPublishResumeRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishResumeResponseV2, err error)
+	VideoFeedListV2(ctx context.Context, req *videos.VideoFeedListRequestV2, callOptions ...callopt.Option) (r *videos.VideoFeedListResponseV2, err error)
+	VideoSearchV2(ctx context.Context, req *videos.VideoSearchRequestV2, callOptions ...callopt.Option) (r *videos.VideoSearchResponseV2, err error)
+	VideoPopularV2(ctx context.Context, req *videos.VideoPopularRequestV2, callOptions ...callopt.Option) (r *videos.VideoPopularResponseV2, err error)
+	VideoInfoV2(ctx context.Context, req *videos.VideoInfoRequestV2, callOptions ...callopt.Option) (r *videos.VideoInfoResponseV2, err error)
+	VideoDeleteV2(ctx context.Context, req *videos.VideoDeleteRequestV2, callOptions ...callopt.Option) (r *videos.VideoDeleteResponseV2, err error)
+	VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2, callOptions ...callopt.Option) (r *videos.VideoVisitResponseV2, err error)
+	UpdateVisitCountV2(ctx context.Context, req *videos.UpdateVisitCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateVisitCountResponseV2, err error)
+	UpdateVideoCommentCountV2(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateVideoCommentCountResponseV2, err error)
+	UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateLikeCountResponseV2, err error)
+	GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountResponseV2, err error)
+	StreamVideoV2(ctx context.Context, req *videos.StreamVideoRequestV2, callOptions ...callopt.Option) (r *videos.StreamVideoResponseV2, err error)
+	CreateFavoriteV2(ctx context.Context, req *videos.CreateFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.CreateFavoriteResponseV2, err error)
+	GetFavoriteVideoListV2(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2, callOptions ...callopt.Option) (r *videos.GetFavoriteVideoListResponseV2, err error)
+	GetFavoriteListV2(ctx context.Context, req *videos.GetFavoriteListRequestV2, callOptions ...callopt.Option) (r *videos.GetFavoriteListResponseV2, err error)
+	AddFavoriteVideoV2(ctx context.Context, req *videos.AddFavoriteVideoRequestV2, callOptions ...callopt.Option) (r *videos.AddFavoriteVideoResponseV2, err error)
+	DeleteFavoriteV2(ctx context.Context, req *videos.DeleteFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.DeleteFavoriteResponseV2, err error)
+	DeleteVideoFromFavoriteV2(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.DeleteVideoFromFavoriteResponseV2, err error)
+	SharedVideoV2(ctx context.Context, req *videos.SharedVideoRequestV2, callOptions ...callopt.Option) (r *videos.SharedVideoResponseV2, err error)
+	RecommendVideoV2(ctx context.Context, req *videos.RecommendVideoRequestV2, callOptions ...callopt.Option) (r *videos.RecommendVideoResponseV2, err error)
 	ManageVideoHeatV2(ctx context.Context, req *videos.VideoHeatManagementRequest, callOptions ...callopt.Option) (r *videos.VideoHeatManagementResponse, err error)
 	ManageUserQuotaV2(ctx context.Context, req *videos.UserQuotaManagementRequest, callOptions ...callopt.Option) (r *videos.UserQuotaManagementResponse, err error)
 	BatchOperateVideosV2(ctx context.Context, req *videos.BatchVideoOperationRequest, callOptions ...callopt.Option) (r *videos.BatchVideoOperationResponse, err error)
@@ -81,146 +72,6 @@ type kVideoServiceClient struct {
 	*kClient
 }
 
-func (p *kVideoServiceClient) FeedService(ctx context.Context, req *videos.FeedServiceRequest, callOptions ...callopt.Option) (r *videos.FeedServiceResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.FeedService(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoPublishStart(ctx context.Context, req *videos.VideoPublishStartRequest, callOptions ...callopt.Option) (r *videos.VideoPublishStartResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoPublishStart(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoPublishUploading(ctx context.Context, req *videos.VideoPublishUploadingRequest, callOptions ...callopt.Option) (r *videos.VideoPublishUploadingResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoPublishUploading(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoPublishComplete(ctx context.Context, req *videos.VideoPublishCompleteRequest, callOptions ...callopt.Option) (r *videos.VideoPublishCompleteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoPublishComplete(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoPublishCancle(ctx context.Context, req *videos.VideoPublishCancleRequest, callOptions ...callopt.Option) (r *videos.VideoPublishCancleResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoPublishCancle(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoDelete(ctx context.Context, req *videos.VideoDeleteRequest, callOptions ...callopt.Option) (r *videos.VideoDeleteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoDelete(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoIdList(ctx context.Context, req *videos.VideoIdListRequest, callOptions ...callopt.Option) (r *videos.VideoIdListResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoIdList(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequest, callOptions ...callopt.Option) (r *videos.VideoFeedListResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoFeedList(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoSearch(ctx context.Context, req *videos.VideoSearchRequest, callOptions ...callopt.Option) (r *videos.VideoSearchResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoSearch(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoPopular(ctx context.Context, req *videos.VideoPopularRequest, callOptions ...callopt.Option) (r *videos.VideoPopularResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoPopular(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoInfo(ctx context.Context, req *videos.VideoInfoRequest, callOptions ...callopt.Option) (r *videos.VideoInfoResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoInfo(ctx, req)
-}
-
-func (p *kVideoServiceClient) VideoVisit(ctx context.Context, req *videos.VideoVisitRequest, callOptions ...callopt.Option) (r *videos.VideoVisitResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.VideoVisit(ctx, req)
-}
-
-func (p *kVideoServiceClient) UpdateVisitCount(ctx context.Context, req *videos.UpdateVisitCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVisitCountResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.UpdateVisitCount(ctx, req)
-}
-
-func (p *kVideoServiceClient) UpdateVideoCommentCount(ctx context.Context, req *videos.UpdateVideoCommentCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVideoCommentCountResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.UpdateVideoCommentCount(ctx, req)
-}
-
-func (p *kVideoServiceClient) UpdateVideoLikeCount(ctx context.Context, req *videos.UpdateLikeCountRequest, callOptions ...callopt.Option) (r *videos.UpdateLikeCountResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.UpdateVideoLikeCount(ctx, req)
-}
-
-func (p *kVideoServiceClient) UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest, callOptions ...callopt.Option) (r *videos.UpdateVideoHisLikeCountResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.UpdateVideoHisLikeCount(ctx, req)
-}
-
-func (p *kVideoServiceClient) GetVideoVisitCount(ctx context.Context, req *videos.GetVideoVisitCountRequest, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.GetVideoVisitCount(ctx, req)
-}
-
-func (p *kVideoServiceClient) GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountInRedisResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.GetVideoVisitCountInRedis(ctx, req)
-}
-
-func (p *kVideoServiceClient) StreamVideo(ctx context.Context, req *videos.StreamVideoRequest, callOptions ...callopt.Option) (r *videos.StreamVideoResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.StreamVideo(ctx, req)
-}
-
-func (p *kVideoServiceClient) CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest, callOptions ...callopt.Option) (r *videos.CreateFavoriteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.CreateFavorite(ctx, req)
-}
-
-func (p *kVideoServiceClient) GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequest, callOptions ...callopt.Option) (r *videos.GetFavoriteVideoListResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.GetFavoriteVideoList(ctx, req)
-}
-
-func (p *kVideoServiceClient) GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequest, callOptions ...callopt.Option) (r *videos.GetFavoriteListResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.GetFavoriteList(ctx, req)
-}
-
-func (p *kVideoServiceClient) GetVideoFromFavorite(ctx context.Context, req *videos.GetVideoFromFavoriteRequest, callOptions ...callopt.Option) (r *videos.GetVideoFromFavoriteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.GetVideoFromFavorite(ctx, req)
-}
-
-func (p *kVideoServiceClient) AddFavoriteVideo(ctx context.Context, req *videos.AddFavoriteVideoRequest, callOptions ...callopt.Option) (r *videos.AddFavoriteVideoResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.AddFavoriteVideo(ctx, req)
-}
-
-func (p *kVideoServiceClient) DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequest, callOptions ...callopt.Option) (r *videos.DeleteFavoriteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.DeleteFavorite(ctx, req)
-}
-
-func (p *kVideoServiceClient) DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequest, callOptions ...callopt.Option) (r *videos.DeleteVideoFromFavoriteResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.DeleteVideoFromFavorite(ctx, req)
-}
-
-func (p *kVideoServiceClient) SharedVideo(ctx context.Context, req *videos.SharedVideoRequest, callOptions ...callopt.Option) (r *videos.SharedVideoResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.SharedVideo(ctx, req)
-}
-
-func (p *kVideoServiceClient) RecommendVideo(ctx context.Context, req *videos.RecommendVideoRequest, callOptions ...callopt.Option) (r *videos.RecommendVideoResponse, err error) {
-	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
-	return p.kClient.RecommendVideo(ctx, req)
-}
-
 func (p *kVideoServiceClient) VideoPublishStartV2(ctx context.Context, req *videos.VideoPublishStartRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishStartResponseV2, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.VideoPublishStartV2(ctx, req)
@@ -249,6 +100,101 @@ func (p *kVideoServiceClient) GetUploadProgressV2(ctx context.Context, req *vide
 func (p *kVideoServiceClient) ResumeUploadV2(ctx context.Context, req *videos.VideoPublishResumeRequestV2, callOptions ...callopt.Option) (r *videos.VideoPublishResumeResponseV2, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ResumeUploadV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoFeedListV2(ctx context.Context, req *videos.VideoFeedListRequestV2, callOptions ...callopt.Option) (r *videos.VideoFeedListResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoFeedListV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoSearchV2(ctx context.Context, req *videos.VideoSearchRequestV2, callOptions ...callopt.Option) (r *videos.VideoSearchResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoSearchV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoPopularV2(ctx context.Context, req *videos.VideoPopularRequestV2, callOptions ...callopt.Option) (r *videos.VideoPopularResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoPopularV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoInfoV2(ctx context.Context, req *videos.VideoInfoRequestV2, callOptions ...callopt.Option) (r *videos.VideoInfoResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoInfoV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoDeleteV2(ctx context.Context, req *videos.VideoDeleteRequestV2, callOptions ...callopt.Option) (r *videos.VideoDeleteResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoDeleteV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2, callOptions ...callopt.Option) (r *videos.VideoVisitResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.VideoVisitV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) UpdateVisitCountV2(ctx context.Context, req *videos.UpdateVisitCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateVisitCountResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateVisitCountV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) UpdateVideoCommentCountV2(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateVideoCommentCountResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateVideoCommentCountV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2, callOptions ...callopt.Option) (r *videos.UpdateLikeCountResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateVideoLikeCountV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2, callOptions ...callopt.Option) (r *videos.GetVideoVisitCountResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetVideoVisitCountV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) StreamVideoV2(ctx context.Context, req *videos.StreamVideoRequestV2, callOptions ...callopt.Option) (r *videos.StreamVideoResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.StreamVideoV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) CreateFavoriteV2(ctx context.Context, req *videos.CreateFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.CreateFavoriteResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CreateFavoriteV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) GetFavoriteVideoListV2(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2, callOptions ...callopt.Option) (r *videos.GetFavoriteVideoListResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetFavoriteVideoListV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) GetFavoriteListV2(ctx context.Context, req *videos.GetFavoriteListRequestV2, callOptions ...callopt.Option) (r *videos.GetFavoriteListResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetFavoriteListV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) AddFavoriteVideoV2(ctx context.Context, req *videos.AddFavoriteVideoRequestV2, callOptions ...callopt.Option) (r *videos.AddFavoriteVideoResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.AddFavoriteVideoV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) DeleteFavoriteV2(ctx context.Context, req *videos.DeleteFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.DeleteFavoriteResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteFavoriteV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) DeleteVideoFromFavoriteV2(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2, callOptions ...callopt.Option) (r *videos.DeleteVideoFromFavoriteResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteVideoFromFavoriteV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) SharedVideoV2(ctx context.Context, req *videos.SharedVideoRequestV2, callOptions ...callopt.Option) (r *videos.SharedVideoResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SharedVideoV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) RecommendVideoV2(ctx context.Context, req *videos.RecommendVideoRequestV2, callOptions ...callopt.Option) (r *videos.RecommendVideoResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RecommendVideoV2(ctx, req)
 }
 
 func (p *kVideoServiceClient) ManageVideoHeatV2(ctx context.Context, req *videos.VideoHeatManagementRequest, callOptions ...callopt.Option) (r *videos.VideoHeatManagementResponse, err error) {

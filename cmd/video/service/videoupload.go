@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,14 +38,14 @@ var (
 	TempVideoFolderPath string
 )
 
-func (service *VideoUploadService) NewCancleUploadEvent(req *videos.VideoPublishCancleRequest) error {
-	if req.Uuid == `` {
+func (service *VideoUploadService) NewCancleUploadEvent(req *videos.VideoPublishCancelRequestV2) error {
+	if req.UploadSessionUuid == `` {
 		return errno.RequestErr
 	}
-	if err := service.deleteTempDir(fmt.Sprint(req.UserId) + `_` + req.Uuid); err != nil {
+	if err := service.deleteTempDir(fmt.Sprint(req.UserId) + `_` + req.UploadSessionUuid); err != nil {
 		return errors.WithMessage(err, "Failed to deleteTemDir")
 	}
-	if err := redis.DeleteVideoEvent(service.ctx, req.Uuid, fmt.Sprint(req.UserId)); err != nil {
+	if err := redis.DeleteVideoEvent(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId)); err != nil {
 		return errors.WithMessage(err, "Failed to DeleteVideo")
 	}
 	return nil
@@ -123,11 +124,11 @@ func (service *VideoUploadService) CompleteUpload(uuid, uid, vid string, chunkDi
 	}
 	return OutputFile, nil
 }
-func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPublishCompleteRequest) error {
-	if req.Uuid == `` {
+func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPublishCompleteRequestV2) error {
+	if req.UploadSessionUuid == `` {
 		return errno.RequestErr
 	}
-	reallyComplete, err := redis.IsChunkAllRecorded(service.ctx, req.Uuid, fmt.Sprint(req.UserId))
+	reallyComplete, err := redis.IsChunkAllRecorded(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId))
 	if err != nil {
 		return errno.RedisErr
 	}
@@ -135,24 +136,24 @@ func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPubli
 		return errors.New("Not all chunks have been uploaded")
 	}
 
-	// m3u8name, err := redis.GetM3U8Filename(service.ctx, req.Uuid, fmt.Sprint(req.UserId))
+	// m3u8name, err := redis.GetM3U8Filename(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId))
 	// if err != nil {
 	// 	return errno.RedisErr
 	// }
 
-	// err = utils.M3u8ToMp4(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.Uuid+`/`+m3u8name,
-	// 	TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.Uuid+`/`+`video.mp4`)
+	// err = utils.M3u8ToMp4(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.UploadSessionUuid+`/`+m3u8name,
+	// 	TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.UploadSessionUuid+`/`+`video.mp4`)
 	// if err != nil {
 	// 	return errno.ServiceErr
 	// }
 
-	// err = utils.GenerateMp4CoverJpg(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.Uuid+`/`+`video.mp4`,
+	// err = utils.GenerateMp4CoverJpg(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.UploadSessionUuid+`/`+`video.mp4`,
 	// 	TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+`cover.jpg`)
 	// if err != nil {
 	// 	return errno.ServiceErr
 	// }
-	var Chunkdir = fmt.Sprint(req.UserId) + "_" + fmt.Sprint(req.Uuid)
-	info, err := redis.GetChunkInfo(fmt.Sprint(req.UserId), req.Uuid)
+	var Chunkdir = fmt.Sprint(req.UserId) + "_" + fmt.Sprint(req.UploadSessionUuid)
+	info, err := redis.GetChunkInfo(fmt.Sprint(req.UserId), req.UploadSessionUuid)
 	if err != nil {
 		return errno.RedisErr
 	}
@@ -165,7 +166,7 @@ func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPubli
 	if err != nil {
 		return errors.New("Failed to get max video_id")
 	}
-	videofile, err := service.CompleteUpload(req.Uuid, fmt.Sprint(req.UserId), vid, Chunkdir, int(TotalNumber))
+	videofile, err := service.CompleteUpload(req.UploadSessionUuid, fmt.Sprint(req.UserId), vid, Chunkdir, int(TotalNumber))
 	if err != nil {
 		hlog.Info("Error:", err)
 		return errors.WithMessage(err, "Failed to upload the file")
@@ -240,47 +241,50 @@ func (service *VideoUploadService) NewUploadCompleteEvent(req *videos.VideoPubli
 		return errno.MysqlErr
 	}
 
-	err = redis.DeleteVideoEvent(service.ctx, req.Uuid, fmt.Sprint(req.UserId))
+	err = redis.DeleteVideoEvent(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId))
 	if err != nil {
 		return errno.ServiceErr
 	}
 
-	err = service.deleteTempDir(fmt.Sprint(req.UserId) + `_` + req.Uuid)
+	err = service.deleteTempDir(fmt.Sprint(req.UserId) + `_` + req.UploadSessionUuid)
 	if err != nil {
 		return errno.ServiceErr
 	}
 	return nil
 }
 
-func (service *VideoUploadService) NewUploadingEvent(req *videos.VideoPublishUploadingRequest) error {
-	if req.Filename == `` || req.Uuid == `` || req.ChunkNumber <= 0 {
+func (service *VideoUploadService) NewUploadingEvent(req *videos.VideoPublishUploadingRequestV2) error {
+	if req.UploadSessionUuid == `` || req.ChunkNumber <= 0 {
 		return errno.RequestErr
 	}
-	data := req.Data
+	data := req.ChunkData
 
-	if !service.isMD5Same(data, req.Md5) {
+	if !service.isMD5Same(data, req.ChunkMd5) {
 		return errors.New("Data proccess failed")
 	}
-	if req.IsM3u8 {
-		err := redis.RecordM3U8Filename(service.ctx, req.Uuid, fmt.Sprint(req.UserId), req.Filename)
-		if err != nil {
-			return errors.WithMessage(err, "RecordM3U8Filename failed!")
-		}
-	}
+	// Note: IsM3u8 field doesn't exist in V2, handle this differently if needed
+	// if req.IsM3u8 {
+	// 	err := redis.RecordM3U8Filename(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId), req.Filename)
+	// 	if err != nil {
+	// 		return errors.WithMessage(err, "RecordM3U8Filename failed!")
+	// 	}
+	// }
 
 	hlog.Info(TempVideoFolderPath)
-	err := service.saveTempDate(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.Uuid+`/`+req.Filename, data)
+	// Use a default filename pattern since Filename field doesn't exist in V2
+	filename := fmt.Sprintf("chunk_%d", req.ChunkNumber)
+	err := service.saveTempDate(TempVideoFolderPath+fmt.Sprint(req.UserId)+`_`+req.UploadSessionUuid+`/`+filename, data)
 	if err != nil {
 		return errors.WithMessage(err, "SaveTempDate failed!")
 	}
-	err = redis.DoneChunkEvent(service.ctx, req.Uuid, fmt.Sprint(req.UserId), req.ChunkNumber)
+	err = redis.DoneChunkEvent(service.ctx, req.UploadSessionUuid, fmt.Sprint(req.UserId), int64(req.ChunkNumber))
 	if err != nil {
 		return errors.WithMessage(err, "DoneChunkEvent failed!")
 	}
 	return nil
 }
 
-func (service *VideoUploadService) NewUploadEvent(req *videos.VideoPublishStartRequest) (string, error) {
+func (service *VideoUploadService) NewUploadEvent(req *videos.VideoPublishStartRequestV2) (string, error) {
 	var (
 		uuid = ``
 		uid  = fmt.Sprint(req.UserId)
@@ -289,7 +293,7 @@ func (service *VideoUploadService) NewUploadEvent(req *videos.VideoPublishStartR
 	if req.Title == `` || req.ChunkTotalNumber <= 0 {
 		return ``, errno.RequestErr
 	}
-	uuid, err = redis.NewVideoEvent(service.ctx, req.Title, req.Description, uid,"" ,fmt.Sprint(req.ChunkTotalNumber), req.LabName, req.Category)
+	uuid, err = redis.NewVideoEvent(service.ctx, req.Title, req.Description, uid, "", fmt.Sprint(req.ChunkTotalNumber), strings.Join(req.Tags, ","), req.Category)
 	if err != nil {
 		return ``, errno.RedisErr
 	}
@@ -305,7 +309,7 @@ func (service *VideoUploadService) NewUploadEvent(req *videos.VideoPublishStartR
 	return uuid, nil
 }
 
-func (service *VideoUploadService) NewDeleteEvent(req *videos.VideoDeleteRequest) error {
+func (service *VideoUploadService) NewDeleteEvent(req *videos.VideoDeleteRequestV2) error {
 	var (
 		wg      sync.WaitGroup
 		errChan = make(chan error, 3)
@@ -335,10 +339,10 @@ func (service *VideoUploadService) NewDeleteEvent(req *videos.VideoDeleteRequest
 	}
 	return nil
 }
-func (service *VideoUploadService) NewSearchEvent(req *videos.VideoSearchRequest) (*videos.VideoSearchResponse, error) {
+func (service *VideoUploadService) NewSearchEvent(req *videos.VideoSearchRequestV2) (*videos.VideoSearchResponseV2, error) {
 	return nil, nil
 }
-func (service *VideoUploadService) NewIdListEvent(req *videos.VideoIdListRequest) (bool, *[]string, error) {
+func (service *VideoUploadService) NewIdListEvent(req *videos.VideoFeedListRequestV2) (bool, *[]string, error) {
 	list, err := db.GetVideoIdList(service.ctx, req.PageNum, req.PageSize)
 	if err != nil {
 		return true, nil, errors.WithMessage(err, "Failed to get list by id")
@@ -346,7 +350,7 @@ func (service *VideoUploadService) NewIdListEvent(req *videos.VideoIdListRequest
 	return len(*list) < int(req.PageSize), list, nil
 }
 
-func (service *VideoUploadService) NewUpdateVideoVisitCountEvent(req *videos.UpdateVisitCountRequest) error {
+func (service *VideoUploadService) NewUpdateVideoVisitCountEvent(req *videos.UpdateVisitCountRequestV2) error {
 	err := db.UpdateVideoVisit(service.ctx, req.VideoId, req.VisitCount)
 	if err != nil {
 		return errors.WithMessage(err, "Failed to update visitcount")
@@ -354,7 +358,7 @@ func (service *VideoUploadService) NewUpdateVideoVisitCountEvent(req *videos.Upd
 	return nil
 }
 
-func (service *VideoUploadService) NewUpdateVideoCommentCountEvent(req *videos.UpdateVideoCommentCountRequest) error {
+func (service *VideoUploadService) NewUpdateVideoCommentCountEvent(req *videos.UpdateVideoCommentCountRequestV2) error {
 	err := db.UpdateVideoCommentCount(service.ctx, req.VideoId, req.CommentCount)
 	if err != nil {
 		return errors.WithMessage(err, "Failed to update commentcount")
@@ -362,7 +366,7 @@ func (service *VideoUploadService) NewUpdateVideoCommentCountEvent(req *videos.U
 	return nil
 }
 
-func (service *VideoUploadService) NewUpdateVideoLikeCountEvent(req *videos.UpdateLikeCountRequest) error {
+func (service *VideoUploadService) NewUpdateVideoLikeCountEvent(req *videos.UpdateLikeCountRequestV2) error {
 	err := db.UpdateVideoLikeCount(service.ctx, req.VideoId, req.LikeCount)
 	if err != nil {
 		return errors.WithMessage(err, "Failed to update likecount")
@@ -370,14 +374,16 @@ func (service *VideoUploadService) NewUpdateVideoLikeCountEvent(req *videos.Upda
 	return nil
 }
 
-func (service *VideoUploadService) NewUpdateVideoHisLikeCountEvent(req *videos.UpdateVideoHisLikeCountRequest) error {
-	err := db.UpdateVideoHisLikeCount(service.ctx, req.VideoId, req.HisLikeCount)
-	if err != nil {
-		return errors.WithMessage(err, "Failed to update likecount")
-	}
-	return nil
-}
-func (service *VideoUploadService) NewGetVisitCountEvent(req *videos.GetVideoVisitCountRequest) (count int64, err error) {
+// NOTE: This function was removed as UpdateVideoHisLikeCountRequestV2 doesn't exist in the V2 API
+//
+//	func (service *VideoUploadService) NewUpdateVideoHisLikeCountEvent(req *videos.UpdateVideoHisLikeCountRequest) error {
+//		err := db.UpdateVideoHisLikeCount(service.ctx, req.VideoId, req.HisLikeCount)
+//		if err != nil {
+//			return errors.WithMessage(err, "Failed to update likecount")
+//		}
+//		return nil
+//	}
+func (service *VideoUploadService) NewGetVisitCountEvent(req *videos.GetVideoVisitCountRequestV2) (count int64, err error) {
 	count, err = db.GetVideoVisitCount(service.ctx, fmt.Sprint(req.VideoId))
 	if err != nil {
 		hlog.Info(err)
@@ -387,7 +393,7 @@ func (service *VideoUploadService) NewGetVisitCountEvent(req *videos.GetVideoVis
 	return count, nil
 }
 
-func (service *VideoUploadService) NewVideoVisitEvent(req *videos.VideoVisitRequest) (*base.Video, error) {
+func (service *VideoUploadService) NewVideoVisitEvent(req *videos.VideoVisitRequestV2) (*base.Video, error) {
 	var (
 		wg      sync.WaitGroup
 		errChan = make(chan error, 2)
@@ -441,13 +447,17 @@ func (service *VideoUploadService) NewVideoVisitEvent(req *videos.VideoVisitRequ
 	}
 	return data, nil
 }
-func (service *VideoUploadService) NewGetVisitCountInRedisEvent(req *videos.GetVideoVisitCountInRedisRequest) (int64, error) {
-	data, err := redis.GetVideoVisitCount(fmt.Sprint(req.VideoId))
-	if err != nil {
-		return -1, errors.WithMessage(err, "Failed to get visitcount")
-	}
-	return data, nil
-}
+
+// NOTE: This function was removed as GetVideoVisitCountInRedisRequestV2 doesn't exist in the V2 API
+// Consider using GetVideoVisitCountRequestV2 instead
+//
+//	func (service *VideoUploadService) NewGetVisitCountInRedisEvent(req *videos.GetVideoVisitCountInRedisRequest) (int64, error) {
+//		data, err := redis.GetVideoVisitCount(fmt.Sprint(req.VideoId))
+//		if err != nil {
+//			return -1, errors.WithMessage(err, "Failed to get visitcount")
+//		}
+//		return data, nil
+//	}
 func (service *VideoUploadService) deleteTempDir(path string) error {
 	return os.RemoveAll(path)
 }

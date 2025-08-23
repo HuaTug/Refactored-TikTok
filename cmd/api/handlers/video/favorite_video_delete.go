@@ -30,10 +30,11 @@ func DeleteVideoFromFavorite(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.DeleteVideoFromFavortie(ctx, &videos.DeleteVideoFromFavoriteRequest{
-		UserId:     UserId,
-		VideoId:    DeleteVideo.VideoId,
-		FavoriteId: DeleteVideo.FavoriteId,
+	resp, err := rpc.DeleteVideoFromFavortie(ctx, &videos.DeleteVideoFromFavoriteRequestV2{
+		UserId:       UserId,
+		VideoId:      DeleteVideo.VideoId,
+		FavoriteId:   DeleteVideo.FavoriteId,
+		RemoveReason: "user_request", // 添加默认值
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

@@ -1,0 +1,20 @@
+nohup: ignoring input
+time="2025-08-22T19:16:25+08:00" level=info msg="Current working directory: /data/home/zhihuaxu/test/Refactored-TikTok/cmd/user"
+time="2025-08-22T19:16:25+08:00" level=info msg="Added config path: ../../config (absolute: /data/home/zhihuaxu/test/Refactored-TikTok/config)"
+time="2025-08-22T19:16:25+08:00" level=info msg="Added config path: ./config (absolute: /data/home/zhihuaxu/test/Refactored-TikTok/cmd/user/config)"
+time="2025-08-22T19:16:25+08:00" level=info msg="Added config path: ../config (absolute: /data/home/zhihuaxu/test/Refactored-TikTok/cmd/config)"
+time="2025-08-22T19:16:25+08:00" level=info msg="Added config path: . (absolute: /data/home/zhihuaxu/test/Refactored-TikTok/cmd/user)"
+time="2025-08-22T19:16:25+08:00" level=info msg="Successfully read config file: /data/home/zhihuaxu/test/Refactored-TikTok/config/config.yml"
+time="2025-08-22T19:16:25+08:00" level=info msg="Config loaded - MySQL: root:***@localhost:3307/TikTok"
+time="2025-08-22T19:16:25+08:00" level=info msg="Comment sharding - DatabaseCount: 4, TableCount: 4, MasterDSNs count: 4"
+time="2025-08-22T19:16:25+08:00" level=info msg="Follows sharding - DatabaseCount: 4, TableCount: 4, MasterDSNs count: 4"
+2025/08/22 19:16:25.401404 init.go:18: [Info] Initializing MinIO client with endpoint: localhost:9002, accessKey: tiktok_minio_admin
+2025/08/22 19:16:25.401479 init.go:30: [Info] Connect Minio Success
+2025/08/22 19:16:25 debug logging disabled
+2025/08/22 19:16:25 Initializing logging reporter
+2025/08/22 19:16:25 debug logging disabled
+2025/08/22 19:16:25.407203 init.go:18: [Info] Could not connect to redis : NOAUTH Authentication required.
+2025/08/22 19:16:25.407301 init.go:20: [Info] Connected to redis : 
+2025/08/22 19:16:25.407701 server.go:79: [Info] KITEX: server listen at addr=9.135.117.45:8889
+2025/08/22 19:16:26.412194 etcd_registry.go:299: [Info] start keepalive lease 69f598d177a85a04 for etcd registry
+2025/08/22 19:33:26.898262 etcd_registry.go:216: [Info] stop keep register service kitex/registry-etcd/User/9.135.117.45:8889

@@ -14,13 +14,7 @@ type Consumer struct {
 	channel *amqp091.Channel
 }
 
-type LikeEventHandler interface {
-	HandleLikeEvent(ctx context.Context, event *LikeEvent) error
-}
-
-type NotificationEventHandler interface {
-	HandleNotificationEvent(ctx context.Context, event *NotificationEvent) error
-}
+// 接口定义已移至 interfaces.go 统一管理
 
 func NewConsumer(rabbitmqURL string) (*Consumer, error) {
 	conn, err := amqp091.Dial(rabbitmqURL)

@@ -17,58 +17,6 @@ struct UserStorageQuota {
     6: i32 max_video_count       // 最大视频数量
 }
 
-// ========== V1版本结构体（保持兼容性） ==========
-struct FeedServiceRequest{
-    1: string last_time
-}
-struct FeedServiceResponse{
-    1: base.Status base
-    2: list<base.Video> video_list
-}
-
-struct VideoPublishStartRequest{
-    1: i64 user_id
-    2: string title (vt.min_size="1")
-    3: string description
-    4: string lab_name                    // 保留兼容性，建议使用V2版本
-    5: string category
-    6: i64 open                          // 保留兼容性，建议使用V2版本
-    7: i64 chunk_total_number (vt.gt="0")
-}
-struct VideoPublishStartResponse{
-    1: base.Status base
-    2: string uuid
-}
-
-struct VideoPublishUploadingRequest{
-    1: i64 user_id
-    2: string uuid
-    3: binary data
-    4: string md5
-    5: bool is_m3u8
-    6: string filename
-    7: i64 chunk_number
-}
-struct VideoPublishUploadingResponse{
-    1: base.Status base
-}
-
-struct VideoPublishCompleteRequest{
-    1: i64 user_id
-    2: string uuid
-}
-struct VideoPublishCompleteResponse{
-    1: base.Status base
-}
-
-struct VideoPublishCancleRequest{
-    1: i64 user_id
-    2: string uuid
-}
-struct VideoPublishCancleResponse{
-    1: base.Status base
-}
-
 // ========== V2版本结构体（推荐使用） ==========
 struct VideoPublishStartRequestV2 {
     1: i64 user_id
@@ -191,228 +139,264 @@ struct VideoPublishResumeResponseV2 {
     6: string resume_strategy
 }
 
-// ========== 视频查询和管理（V1功能） ==========
-struct VideoFeedListRequest{
+// ========== 视频查询和管理（V2版本） ==========
+struct VideoFeedListRequestV2 {
     1: i64 user_id
     2: i64 page_num
     3: i64 page_size
+    4: string category_filter
+    5: string privacy_filter
+    6: list<string> tag_filters
 }
-struct VideoFeedListResponse{
+
+struct VideoFeedListResponseV2 {
     1: base.Status base
     2: list<base.Video> video_list
     3: i64 total
+    4: bool has_more
+    5: string next_cursor
 }
 
-struct VideoSearchRequest{
+struct VideoSearchRequestV2 {
     1: string keyword
     2: i64 page_num
     3: i64 page_size
     4: string from_date
     5: string to_date
+    6: list<string> categories
+    7: list<string> tags
+    8: string sort_by
 }
-struct VideoSearchResponse{
+
+struct VideoSearchResponseV2 {
     1: base.Status base
     2: list<base.Video> video_search
     3: i64 count
+    4: map<string, i64> facets
+    5: list<string> suggestions
 }
 
-struct VideoPopularRequest{
+struct VideoPopularRequestV2 {
     1: i64 page_num
     2: i64 page_size
+    3: string time_range
+    4: string category
 }
-struct VideoPopularResponse{
+
+struct VideoPopularResponseV2 {
     1: base.Status base
     2: list<base.Video> Popular
+    3: string ranking_algorithm
+    4: string updated_at
 }
 
-struct VideoInfoRequest{
+struct VideoInfoRequestV2 {
     1: i64 video_id
+    2: i64 requesting_user_id
+    3: bool include_analytics
 }
-struct VideoInfoResponse{
+
+struct VideoInfoResponseV2 {
     1: base.Status base
     2: base.Video items
+    3: map<string, string> analytics_data
+    4: bool can_edit
+    5: bool can_delete
 }
 
-struct VideoDeleteRequest{
+struct VideoDeleteRequestV2 {
     1: i64 user_id
     2: i64 video_id
-}
-struct VideoDeleteResponse{
-    1: base.Status base
+    3: string delete_reason
+    4: bool permanent_delete
 }
 
-struct VideoVisitRequest{
+struct VideoDeleteResponseV2 {
+    1: base.Status base
+    2: i64 storage_recovered_bytes
+    3: UserStorageQuota updated_quota
+}
+
+struct VideoVisitRequestV2 {
     1: i64 from_id
     2: i64 video_id
+    3: string visit_source
+    4: map<string, string> context
 }
-struct VideoVisitResponse{
+
+struct VideoVisitResponseV2 {
     1: base.Status base
     2: base.Video item
+    3: bool view_counted
+    4: list<base.Video> related_videos
 }
 
-struct VideoIdListRequest{
-    1: i64 page_num
-    2: i64 page_size
-}
-struct VideoIdListResponse{
-    1: base.Status base
-    2: bool is_end
-    3: list<string> list
-}
-
-// ========== 视频统计功能 ==========
-struct UpdateVisitCountRequest{
+// ========== 视频统计功能（V2版本） ==========
+struct UpdateVisitCountRequestV2 {
     1: i64 video_id
     2: i64 visit_count
-}
-struct UpdateVisitCountResponse{
-    1: base.Status base
+    3: string visitor_ip
+    4: i64 visitor_user_id
 }
 
-struct UpdateVideoCommentCountRequest{
+struct UpdateVisitCountResponseV2 {
+    1: base.Status base
+    2: i64 new_total_count
+}
+
+struct UpdateVideoCommentCountRequestV2 {
     1: i64 video_id
     2: i64 comment_count
-}
-struct UpdateVideoCommentCountResponse{
-    1: base.Status base
+    3: string operation_type
 }
 
-struct UpdateLikeCountRequest{
+struct UpdateVideoCommentCountResponseV2 {
+    1: base.Status base
+    2: i64 new_total_count
+}
+
+struct UpdateLikeCountRequestV2 {
     1: i64 video_id
     2: i64 like_count
-}
-struct UpdateLikeCountResponse{
-    1: base.Status base
-}
-
-struct UpdateVideoHisLikeCountRequest{
-    1: i64 video_id
-    2: i64 his_like_count
-}
-struct UpdateVideoHisLikeCountResponse{
-    1: base.Status base
+    3: i64 user_id
+    4: string operation_type
 }
 
-struct GetVideoVisitCountRequest{
-    1: i64 video_id
+struct UpdateLikeCountResponseV2 {
+    1: base.Status base
+    2: i64 new_total_count
 }
-struct GetVideoVisitCountResponse{
+
+struct GetVideoVisitCountRequestV2 {
+    1: i64 video_id
+    2: string count_type
+}
+
+struct GetVideoVisitCountResponseV2 {
     1: base.Status base
     2: i64 visit_count
+    3: map<string, i64> detailed_counts
 }
 
-struct GetVideoVisitCountInRedisRequest{
-    1: i64 video_id
-}
-struct GetVideoVisitCountInRedisResponse{
-    1: i64 visit_count
-    2: base.Status base
+// ========== 视频流播放（V2版本） ==========
+struct StreamVideoRequestV2 {
+    1: string video_id
+    2: string quality
+    3: string format
+    4: i64 start_time
+    5: i64 end_time
 }
 
-// ========== 视频流播放 ==========
-struct StreamVideoRequest{
-    1: string index
-}
-struct StreamVideoResponse{
+struct StreamVideoResponseV2 {
     1: base.Status base
-    2: byte data
+    2: string stream_url
+    3: map<string, string> stream_metadata
+    4: i64 expires_at
 }
 
-// ========== 收藏夹功能（V1） ==========
-struct CreateFavoriteRequest{
+// ========== 收藏夹功能（V2版本） ==========
+struct CreateFavoriteRequestV2 {
     1: i64 user_id
     2: string name
     3: string description
     4: string cover_url
-}
-struct CreateFavoriteResponse{
-    1: base.Status base
+    5: string privacy
+    6: list<string> tags
 }
 
-struct GetFavoriteListRequest{
+struct CreateFavoriteResponseV2 {
+    1: base.Status base
+    2: i64 favorite_id
+}
+
+struct GetFavoriteListRequestV2 {
     1: i64 user_id
     2: i64 page_num
     3: i64 page_size
-}
-struct GetFavoriteListResponse{
-    1: base.Status base
-    2: list<base.Favorite> favorite_list
+    4: string privacy_filter
 }
 
-struct AddFavoriteVideoRequest{
+struct GetFavoriteListResponseV2 {
+    1: base.Status base
+    2: list<base.Favorite> favorite_list
+    3: i64 total_count
+}
+
+struct AddFavoriteVideoRequestV2 {
     1: i64 favorite_id
     2: i64 user_id
     3: i64 video_id
-}
-struct AddFavoriteVideoResponse{
-    1: base.Status base
+    4: string note
 }
 
-struct GetFavoriteVideoListRequest{
+struct AddFavoriteVideoResponseV2 {
+    1: base.Status base
+    2: bool already_exists
+}
+
+struct GetFavoriteVideoListRequestV2 {
     1: i64 user_id
     2: i64 favorite_id
     3: i64 page_num
     4: i64 page_size
+    5: string sort_by
 }
-struct GetFavoriteVideoListResponse{
+
+struct GetFavoriteVideoListResponseV2 {
     1: base.Status base
     2: list<base.Video> video_list
+    3: i64 total_count
 }
 
-struct GetVideoFromFavoriteRequest{
-    1: i64 favorite_id
-    2: i64 user_id
-    3: i64 video_id
-    4: i64 page_num
-    5: i64 page_size
-}
-struct GetVideoFromFavoriteResponse{
-    1: base.Status base
-    2: base.Video video
-}
-
-struct DeleteFavoriteRequest{
+struct DeleteFavoriteRequestV2 {
     1: i64 user_id
     2: i64 favorite_id
-}
-struct DeleteFavoriteResponse{
-    1: base.Status base
+    3: string delete_reason
 }
 
-struct DeleteVideoFromFavoriteRequest{
+struct DeleteFavoriteResponseV2 {
+    1: base.Status base
+    2: i64 videos_moved_count
+}
+
+struct DeleteVideoFromFavoriteRequestV2 {
     1: i64 favorite_id
     2: i64 user_id
     3: i64 video_id
+    4: string remove_reason
 }
-struct DeleteVideoFromFavoriteResponse{
+
+struct DeleteVideoFromFavoriteResponseV2 {
     1: base.Status base
 }
 
-// ========== 分享功能（V1） ==========
-struct SharedVideoRequest{
+// ========== 分享功能（V2版本） ==========
+struct SharedVideoRequestV2 {
     1: i64 user_id
     2: i64 to_user_id
     3: i64 video_id
-}
-struct SharedVideoResponse{
-    1: base.Status base
-}
-
-struct GetPopularVideoRequest{
-    1: i64 page_num
-    2: i64 page_size
-}
-struct GetPopularVideoResponse{
-    1: base.Status base
-    2: list<base.Video> video_list
+    4: string share_message
+    5: string share_platform
 }
 
-struct RecommendVideoRequest{
+struct SharedVideoResponseV2 {
+    1: base.Status base
+    2: string share_url
+    3: string share_code
+}
+
+struct RecommendVideoRequestV2 {
     1: i64 user_id
+    2: i32 count
+    3: list<string> categories
+    4: string algorithm_type
 }
-struct RecommendVideoResponse{
+
+struct RecommendVideoResponseV2 {
     1: base.Status base
     2: list<base.Video> video_list
+    3: string recommendation_id
+    4: string algorithm_used
 }
 
 // ========== V2扩展功能：存储管理 ==========
@@ -508,43 +492,8 @@ struct VideoAnalyticsResponse {
     5: string report_generated_at
 }
 
-// ========== 统一视频服务 ==========
+// ========== 统一视频服务（仅V2版本） ==========
 service VideoService {
-    // ========== V1版本API（保持兼容性） ==========
-    FeedServiceResponse FeedService(1: FeedServiceRequest req)(api.get="/v1/video/feed")
-    VideoPublishStartResponse VideoPublishStart(1: VideoPublishStartRequest req)(api.post="/v1/publish/start")
-    VideoPublishUploadingResponse VideoPublishUploading(1: VideoPublishUploadingRequest req)(api.post="/v1/publish/uploading")
-    VideoPublishCompleteResponse VideoPublishComplete(1: VideoPublishCompleteRequest req)(api.post="/v1/publish/complete")
-    VideoPublishCancleResponse VideoPublishCancle(1: VideoPublishCancleRequest req)(api.post="/v1/publish/cancle")
-    
-    VideoDeleteResponse VideoDelete(1: VideoDeleteRequest req)(api.delete="/v1/video/delete")
-    VideoIdListResponse VideoIdList(1: VideoIdListRequest req)
-    VideoFeedListResponse VideoFeedList(1: VideoFeedListRequest req)(api.get="/v1/video/list")
-    VideoSearchResponse VideoSearch(1: VideoSearchRequest req)(api.post="/v1/video/search")
-    VideoPopularResponse VideoPopular(1: VideoPopularRequest req)(api.get="/v1/video/popular")
-    VideoInfoResponse VideoInfo(1: VideoInfoRequest req)
-    VideoVisitResponse VideoVisit(1: VideoVisitRequest req)(api.post="/v1/visit/:id")
-    
-    UpdateVisitCountResponse UpdateVisitCount(1: UpdateVisitCountRequest req)
-    UpdateVideoCommentCountResponse UpdateVideoCommentCount(1: UpdateVideoCommentCountRequest req)
-    UpdateLikeCountResponse UpdateVideoLikeCount(1: UpdateLikeCountRequest req)
-    UpdateVideoHisLikeCountResponse UpdateVideoHisLikeCount(1: UpdateVideoHisLikeCountRequest req)
-    GetVideoVisitCountResponse GetVideoVisitCount(1: GetVideoVisitCountRequest req)
-    GetVideoVisitCountInRedisResponse GetVideoVisitCountInRedis(1: GetVideoVisitCountInRedisRequest req)
-    
-    StreamVideoResponse StreamVideo(1: StreamVideoRequest req)(api.post="/v1/stream")
-    
-    CreateFavoriteResponse CreateFavorite(1: CreateFavoriteRequest req)(api.post="/v1/favorite/create")
-    GetFavoriteVideoListResponse GetFavoriteVideoList(1: GetFavoriteVideoListRequest req)(api.get="/v1/favorite/video/list")
-    GetFavoriteListResponse GetFavoriteList(1: GetFavoriteListRequest req)(api.get="/v1/favorite/list")
-    GetVideoFromFavoriteResponse GetVideoFromFavorite(1: GetVideoFromFavoriteRequest req)(api.get="/v1/favorite/video")
-    AddFavoriteVideoResponse AddFavoriteVideo(1: AddFavoriteVideoRequest req)(api.post="/v1/favorite/video/add")
-    DeleteFavoriteResponse DeleteFavorite(1: DeleteFavoriteRequest req)(api.delete="/v1/favorite/delete")
-    DeleteVideoFromFavoriteResponse DeleteVideoFromFavorite(1: DeleteVideoFromFavoriteRequest req)(api.delete="/v1/favorite/video/delete")
-    
-    SharedVideoResponse SharedVideo(1: SharedVideoRequest req)(api.post="/v1/share/video")
-    RecommendVideoResponse RecommendVideo(1: RecommendVideoRequest req)(api.get="/v1/recommend/video")
-    
     // ========== V2版本API（推荐使用） ==========
     // 核心上传流程
     VideoPublishStartResponseV2 VideoPublishStartV2(1: VideoPublishStartRequestV2 req)(api.post="/v2/publish/start")
@@ -556,6 +505,35 @@ service VideoService {
     VideoPublishProgressResponseV2 GetUploadProgressV2(1: VideoPublishProgressRequestV2 req)(api.get="/v2/publish/progress")
     VideoPublishResumeResponseV2 ResumeUploadV2(1: VideoPublishResumeRequestV2 req)(api.post="/v2/publish/resume")
     
+    // 视频查询和管理
+    VideoFeedListResponseV2 VideoFeedListV2(1: VideoFeedListRequestV2 req)(api.get="/v2/video/feed")
+    VideoSearchResponseV2 VideoSearchV2(1: VideoSearchRequestV2 req)(api.post="/v2/video/search")
+    VideoPopularResponseV2 VideoPopularV2(1: VideoPopularRequestV2 req)(api.get="/v2/video/popular")
+    VideoInfoResponseV2 VideoInfoV2(1: VideoInfoRequestV2 req)(api.get="/v2/video/info")
+    VideoDeleteResponseV2 VideoDeleteV2(1: VideoDeleteRequestV2 req)(api.delete="/v2/video/delete")
+    VideoVisitResponseV2 VideoVisitV2(1: VideoVisitRequestV2 req)(api.post="/v2/video/visit")
+    
+    // 视频统计
+    UpdateVisitCountResponseV2 UpdateVisitCountV2(1: UpdateVisitCountRequestV2 req)(api.post="/v2/video/visit/update")
+    UpdateVideoCommentCountResponseV2 UpdateVideoCommentCountV2(1: UpdateVideoCommentCountRequestV2 req)(api.post="/v2/video/comment/update")
+    UpdateLikeCountResponseV2 UpdateVideoLikeCountV2(1: UpdateLikeCountRequestV2 req)(api.post="/v2/video/like/update")
+    GetVideoVisitCountResponseV2 GetVideoVisitCountV2(1: GetVideoVisitCountRequestV2 req)(api.get="/v2/video/visit/count")
+    
+    // 视频流播放
+    StreamVideoResponseV2 StreamVideoV2(1: StreamVideoRequestV2 req)(api.post="/v2/video/stream")
+    
+    // 收藏夹功能
+    CreateFavoriteResponseV2 CreateFavoriteV2(1: CreateFavoriteRequestV2 req)(api.post="/v2/favorite/create")
+    GetFavoriteVideoListResponseV2 GetFavoriteVideoListV2(1: GetFavoriteVideoListRequestV2 req)(api.get="/v2/favorite/video/list")
+    GetFavoriteListResponseV2 GetFavoriteListV2(1: GetFavoriteListRequestV2 req)(api.get="/v2/favorite/list")
+    AddFavoriteVideoResponseV2 AddFavoriteVideoV2(1: AddFavoriteVideoRequestV2 req)(api.post="/v2/favorite/video/add")
+    DeleteFavoriteResponseV2 DeleteFavoriteV2(1: DeleteFavoriteRequestV2 req)(api.delete="/v2/favorite/delete")
+    DeleteVideoFromFavoriteResponseV2 DeleteVideoFromFavoriteV2(1: DeleteVideoFromFavoriteRequestV2 req)(api.delete="/v2/favorite/video/delete")
+    
+    // 分享功能
+    SharedVideoResponseV2 SharedVideoV2(1: SharedVideoRequestV2 req)(api.post="/v2/video/share")
+    RecommendVideoResponseV2 RecommendVideoV2(1: RecommendVideoRequestV2 req)(api.get="/v2/video/recommend")
+    
     // 存储管理
     VideoHeatManagementResponse ManageVideoHeatV2(1: VideoHeatManagementRequest req)(api.post="/v2/storage/heat/manage")
     UserQuotaManagementResponse ManageUserQuotaV2(1: UserQuotaManagementRequest req)(api.post="/v2/storage/quota/manage")
@@ -566,5 +544,4 @@ service VideoService {
     
     // 分析统计
     VideoAnalyticsResponse GetVideoAnalyticsV2(1: VideoAnalyticsRequest req)(api.get="/v2/video/analytics")
-    
-} 
+}

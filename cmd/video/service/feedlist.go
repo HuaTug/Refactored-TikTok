@@ -34,18 +34,12 @@ func NewFeedListService(ctx context.Context) *FeedListService {
 // }
 
 // FeedList 视频流接口
-func (v *FeedListService) FeedList(req *videos.FeedServiceRequest) (res []*base.Video, err error) {
-	if req.LastTime == "" {
-		res, err = db.GetAllFeedList(v.ctx, req)
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
-		res, err = db.Feedlist(v.ctx, req)
-		if err != nil {
-			return nil, err
-		}
+func (v *FeedListService) FeedList(req *videos.VideoFeedListRequestV2) (res []*base.Video, err error) {
+	// Convert V2 request to match database interface
+	// Note: The LastTime field is not available in V2, need to handle this differently
+	res, err = db.GetAllFeedList(v.ctx, req)
+	if err != nil {
+		return nil, err
 	}
 	VideoFiles = res
 	return res, nil

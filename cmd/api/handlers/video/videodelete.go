@@ -28,9 +28,11 @@ func VideoDelete(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	resp, err := rpc.VideoDelete(ctx, &videos.VideoDeleteRequest{
-		UserId:  UserId,
-		VideoId: VideoPublish.VideoId,
+	resp, err := rpc.VideoDelete(ctx, &videos.VideoDeleteRequestV2{
+		UserId:          UserId,
+		VideoId:         VideoPublish.VideoId,
+		DeleteReason:    "user_request",
+		PermanentDelete: false,
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

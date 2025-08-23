@@ -15,8 +15,8 @@ func VideoStream(ctx context.Context, c *app.RequestContext) {
 	if err = c.Bind(&Stream); err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
-	resp, err := rpc.VideoStream(ctx, &videos.StreamVideoRequest{
-		Index: Stream.Index,
+	resp, err := rpc.VideoStream(ctx, &videos.StreamVideoRequestV2{
+		VideoId: Stream.Index,
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

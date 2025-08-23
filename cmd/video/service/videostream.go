@@ -24,14 +24,15 @@ type StreamVideoService struct {
 func NewStreamVideoService(ctx context.Context) *StreamVideoService {
 	return &StreamVideoService{ctx: ctx}
 }
-func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequest) (string, error) {
+func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequestV2) (string, error) {
 
 	//db.UpdateVideoUrl(s.ctx, url, "", fmt.Sprint(VideoFiles[index].VideoId))
-	if req.Index == "" {
-		return "", fmt.Errorf("Missing video index")
+	if req.VideoId == "" {
+		return "", fmt.Errorf("Missing video ID")
 	}
 
-	index, err := strconv.Atoi(req.Index)
+	// Convert video ID to index for now - this may need to be updated based on your logic
+	index, err := strconv.Atoi(req.VideoId)
 	if err != nil {
 		hlog.Info(err)
 	}
@@ -39,8 +40,9 @@ func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequest) (string
 	if err != nil || index < 0 || index > len(VideoFiles) {
 		return "", fmt.Errorf("invalid video index")
 	}
-	VideoFiles, err = NewFeedListService(s.ctx).FeedList(&videos.FeedServiceRequest{
-		LastTime: "2026-03-24",
+	VideoFiles, err = NewFeedListService(s.ctx).FeedList(&videos.VideoFeedListRequestV2{
+		PageNum:  1,
+		PageSize: 10,
 	})
 	hlog.Info(VideoFiles)
 	if err != nil {
@@ -69,8 +71,8 @@ func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequest) (string
 }
 
 func (s *StreamVideoService) ServeVideo(w http.ResponseWriter, r *http.Request) {
-	req := &videos.StreamVideoRequest{
-		Index: r.URL.Query().Get("index"),
+	req := &videos.StreamVideoRequestV2{
+		VideoId: r.URL.Query().Get("video_id"),
 	}
 	videoFilePath, err := s.VideoStream(req)
 	if err != nil {

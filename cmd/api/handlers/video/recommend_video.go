@@ -23,8 +23,11 @@ func RecommendVideo(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
-	resp, err := rpc.RecommendVideo(ctx, &videos.RecommendVideoRequest{
-		UserId: UserId,
+	resp, err := rpc.RecommendVideo(ctx, &videos.RecommendVideoRequestV2{
+		UserId:        UserId,
+		Count:         10,
+		Categories:    []string{},
+		AlgorithmType: "default",
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

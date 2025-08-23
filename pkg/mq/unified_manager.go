@@ -10,8 +10,8 @@ import (
 	"github.com/rabbitmq/amqp091-go"
 )
 
-// UnifiedMQManager 统一的消息队列管理器
-type UnifiedMQManager struct {
+// MQManager 统一的消息队列管理器
+type MQManager struct {
 	conn    *amqp091.Connection
 	channel *amqp091.Channel
 
@@ -22,8 +22,8 @@ type UnifiedMQManager struct {
 	consumer *Consumer
 }
 
-// NewUnifiedMQManager 创建统一的消息队列管理器
-func NewUnifiedMQManager(rabbitmqURL string) (*UnifiedMQManager, error) {
+// NewMQManager 创建统一的消息队列管理器
+func NewMQManager(rabbitmqURL string) (*MQManager, error) {
 	// 创建生产者
 	producer, err := NewProducer(rabbitmqURL)
 	if err != nil {
@@ -37,7 +37,7 @@ func NewUnifiedMQManager(rabbitmqURL string) (*UnifiedMQManager, error) {
 		return nil, fmt.Errorf("failed to create consumer: %w", err)
 	}
 
-	return &UnifiedMQManager{
+	return &MQManager{
 		conn:     producer.conn,
 		channel:  producer.channel,
 		producer: producer,
@@ -48,12 +48,12 @@ func NewUnifiedMQManager(rabbitmqURL string) (*UnifiedMQManager, error) {
 // ========== 生产者方法 ==========
 
 // PublishLikeEvent 发布点赞事件
-func (umm *UnifiedMQManager) PublishLikeEvent(ctx context.Context, event *LikeEvent) error {
+func (umm *MQManager) PublishLikeEvent(ctx context.Context, event *LikeEvent) error {
 	return umm.producer.PublishLikeEvent(ctx, event)
 }
 
 // PublishCommentEvent 发布评论事件
-func (umm *UnifiedMQManager) PublishCommentEvent(ctx context.Context, event *CommentEvent) error {
+func (umm *MQManager) PublishCommentEvent(ctx context.Context, event *CommentEvent) error {
 	body, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("failed to marshal comment event: %w", err)
@@ -81,19 +81,19 @@ func (umm *UnifiedMQManager) PublishCommentEvent(ctx context.Context, event *Com
 }
 
 // PublishNotificationEvent 发布通知事件
-func (umm *UnifiedMQManager) PublishNotificationEvent(ctx context.Context, event *NotificationEvent) error {
+func (umm *MQManager) PublishNotificationEvent(ctx context.Context, event *NotificationEvent) error {
 	return umm.producer.PublishNotificationEvent(ctx, event)
 }
 
 // ========== 消费者方法 ==========
 
 // ConsumeLikeEvents 消费点赞事件
-func (umm *UnifiedMQManager) ConsumeLikeEvents(ctx context.Context, handler LikeEventHandler) error {
+func (umm *MQManager) ConsumeLikeEvents(ctx context.Context, handler LikeEventHandler) error {
 	return umm.consumer.ConsumeLikeEvents(ctx, handler)
 }
 
 // ConsumeCommentEvents 消费评论事件
-func (umm *UnifiedMQManager) ConsumeCommentEvents(ctx context.Context, handler CommentEventHandler) error {
+func (umm *MQManager) ConsumeCommentEvents(ctx context.Context, handler CommentEventHandler) error {
 	msgs, err := umm.channel.Consume(
 		CommentEventQueue,
 		"comment_consumer",
@@ -140,21 +140,18 @@ func (umm *UnifiedMQManager) ConsumeCommentEvents(ctx context.Context, handler C
 }
 
 // ConsumeNotificationEvents 消费通知事件
-func (umm *UnifiedMQManager) ConsumeNotificationEvents(ctx context.Context, handler NotificationEventHandler) error {
+func (umm *MQManager) ConsumeNotificationEvents(ctx context.Context, handler NotificationEventHandler) error {
 	return umm.consumer.ConsumeNotificationEvents(ctx, handler)
 }
 
 // ========== 接口定义 ==========
 
-// CommentEventHandler 评论事件处理器接口
-type CommentEventHandler interface {
-	HandleCommentEvent(ctx context.Context, event *CommentEvent) error
-}
+// 接口定义已移至 interfaces.go 统一管理
 
 // ========== 管理方法 ==========
 
 // HealthCheck 健康检查
-func (umm *UnifiedMQManager) HealthCheck() error {
+func (umm *MQManager) HealthCheck() error {
 	if umm.conn == nil || umm.conn.IsClosed() {
 		return fmt.Errorf("RabbitMQ connection is closed")
 	}
@@ -177,7 +174,7 @@ func (umm *UnifiedMQManager) HealthCheck() error {
 }
 
 // Close 关闭连接
-func (umm *UnifiedMQManager) Close() error {
+func (umm *MQManager) Close() error {
 	var errs []error
 
 	if umm.producer != nil {

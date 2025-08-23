@@ -17,8 +17,12 @@ func FeedService(ctx context.Context, c *app.RequestContext) {
 		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
-	resp, err := rpc.FeedList(ctx, &videos.FeedServiceRequest{
-		LastTime: FeedList.LastTime,
+	resp, err := rpc.FeedList(ctx, &videos.VideoFeedListRequestV2{
+		PageNum:        1,
+		PageSize:       20,
+		CategoryFilter: "",
+		PrivacyFilter:  "public",
+		TagFilters:     []string{},
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

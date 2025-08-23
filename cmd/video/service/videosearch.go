@@ -18,7 +18,7 @@ func NewVideoSearchService(ctx context.Context) *VideoSearchService {
 	return &VideoSearchService{ctx: ctx}
 }
 
-func (v *VideoSearchService) VideoSearch(req *videos.VideoSearchRequest) (video []*base.Video, count int64, err error) {
+func (v *VideoSearchService) VideoSearch(req *videos.VideoSearchRequestV2) (video []*base.Video, count int64, err error) {
 	if video, count, err = db.Videosearch(v.ctx, req); err != nil {
 		hlog.Info(err)
 		return video, count, errors.WithMessage(err, "dao.VideoSearch failed")

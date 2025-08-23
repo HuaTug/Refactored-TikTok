@@ -12,83 +12,113 @@ func rootMw() []app.HandlerFunc {
 	return nil
 }
 
-func _v1Mw() []app.HandlerFunc {
-	// your code...
+// ========== V2版本中间件（推荐使用） ==========
+func _v2Mw() []app.HandlerFunc {
+	// V2版本全局中间件
 	return nil
 }
 
-func _publishMw() []app.HandlerFunc {
-	// your code...
+func _publishV2Mw() []app.HandlerFunc {
+	// V2发布相关中间件
 	return nil
 }
 
-func _videopublishcancleMw() []app.HandlerFunc {
-	// your code...
+func _videopublishstartV2Mw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
-func _videopublishcompleteMw() []app.HandlerFunc {
-	// your code...
+func _videopublishuploadingV2Mw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
-func _videopublishstartMw() []app.HandlerFunc {
-	// your code...
+func _videopublishcompleteV2Mw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
-func _videopublishuploadingMw() []app.HandlerFunc {
-	// your code...
+func _videopublishcancelV2Mw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
+func _getuploadprogressV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _resumeuploadV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _storageV2Mw() []app.HandlerFunc {
+	return nil
+}
+
+func _managevideoheatV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _manageuserquotaV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _videosV2Mw() []app.HandlerFunc {
+	return nil
+}
+
+func _batchoperateV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _videoV2Mw() []app.HandlerFunc {
+	return nil
+}
+
+func _transcodevideoV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _getvideoanalyticsV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+// ========== 通用功能中间件 ==========
 func _videorecommendvideoMw() []app.HandlerFunc {
 	// your code...
 	return authfunc.Auth()
 }
-func _createFavoriteMv() []app.HandlerFunc {
 
+func _createFavoriteMv() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
 func _deleteFavoriteMv() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
 
 func _deleteVideoFromFavoriteMv() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
 
 func _sharedVideoMv() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
 
 func _getFavoriteVideoMv() []app.HandlerFunc {
-
-	return authfunc.Auth()
-}
-
-func _getVideoFromFavoriteMv() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
 
 func _getFavoriteListMv() []app.HandlerFunc {
+	return authfunc.Auth()
+}
 
+func _getVideoFromFavoriteMv() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
 func _addFavoriteVideoMv() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
 
 func _videoStreamVideoMv() []app.HandlerFunc {
-
-	return nil
+	return authfunc.Auth()
 }
 
 func _videoMw() []app.HandlerFunc {
@@ -98,33 +128,34 @@ func _videoMw() []app.HandlerFunc {
 
 func _feedserviceMw() []app.HandlerFunc {
 	// your code...
-	return nil
+	return authfunc.Auth()
 }
 
 func _videofeedlistMw() []app.HandlerFunc {
 	// your code...
-	return nil
+	return authfunc.Auth()
 }
 
 func _videopopularMw() []app.HandlerFunc {
 	// your code...
-	return nil
+	return authfunc.Auth()
 }
 
 func _videosearchMw() []app.HandlerFunc {
 	// your code...
-	return nil
+	return authfunc.Auth()
 }
 
 func _videodeleteMw() []app.HandlerFunc {
-
 	return authfunc.Auth()
 }
+
 func _visitMw() []app.HandlerFunc {
 	// your code...
 	return nil
 }
 
 func _videoidlistMw() []app.HandlerFunc {
+	// your code...
 	return authfunc.Auth()
 }

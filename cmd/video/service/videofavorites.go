@@ -22,7 +22,7 @@ func NewVideoFavoritesService(ctx context.Context) *VideoFavoritesService {
 	}
 }
 
-func (s *VideoFavoritesService) CreateFavorite(req *videos.CreateFavoriteRequest) error {
+func (s *VideoFavoritesService) CreateFavorite(req *videos.CreateFavoriteRequestV2) error {
 	if err := db.CreateFavorite(s.ctx, &base.Favorite{
 		UserId:      req.UserId,
 		Name:        req.Name,
@@ -36,7 +36,7 @@ func (s *VideoFavoritesService) CreateFavorite(req *videos.CreateFavoriteRequest
 	return nil
 }
 
-func (s *VideoFavoritesService) GetFavoriteList(req *videos.GetFavoriteListRequest) ([]*base.Favorite, error) {
+func (s *VideoFavoritesService) GetFavoriteList(req *videos.GetFavoriteListRequestV2) ([]*base.Favorite, error) {
 	var favList []*base.Favorite
 	favList, err := db.GetFavoriteList(s.ctx, req)
 	if err != nil {
@@ -45,7 +45,7 @@ func (s *VideoFavoritesService) GetFavoriteList(req *videos.GetFavoriteListReque
 	return favList, nil
 }
 
-func (s *VideoFavoritesService) GetFavoriteVideoList(req *videos.GetFavoriteVideoListRequest) ([]*base.Video, error) {
+func (s *VideoFavoritesService) GetFavoriteVideoList(req *videos.GetFavoriteVideoListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
 	video, err := db.GetFavoriteVideoList(s.ctx, req)
 	if err != nil {
@@ -54,16 +54,18 @@ func (s *VideoFavoritesService) GetFavoriteVideoList(req *videos.GetFavoriteVide
 	return video, nil
 }
 
-func (s *VideoFavoritesService) GetVideoFromFavorite(req *videos.GetVideoFromFavoriteRequest) (*base.Video, error) {
-	var video *base.Video
-	video, err := db.GetVideoFromFavorite(s.ctx, req)
-	if err != nil {
-		return video, errors.WithMessage(err, "Failed to get VideoFromFavorite")
-	}
-	return video, nil
-}
+// NOTE: This function might not be needed in V2 API as there's no specific request type for getting a single video from favorites
+// Consider using GetFavoriteVideoListRequestV2 to get the list and filter on the client side
+// func (s *VideoFavoritesService) GetVideoFromFavorite(req *videos.GetFavoriteVideoListRequestV2) (*base.Video, error) {
+// 	var video *base.Video
+// 	video, err := db.GetVideoFromFavorite(s.ctx, req.FavoriteId, req.VideoId)
+// 	if err != nil {
+// 		return video, errors.WithMessage(err, "Failed to get VideoFromFavorite")
+// 	}
+// 	return video, nil
+// }
 
-func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoRequest) error {
+func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoRequestV2) error {
 	if err := db.AddVideoToFavorite(s.ctx, &model.FavoritesVideos{
 		UserId:     req.UserId,
 		FavoriteId: req.FavoriteId,
@@ -75,14 +77,14 @@ func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoReq
 }
 
 // 在删除收藏夹的同时 删除视频收藏夹中的视频
-func (s *VideoFavoritesService) DeleteFavorite(req *videos.DeleteFavoriteRequest) error {
+func (s *VideoFavoritesService) DeleteFavorite(req *videos.DeleteFavoriteRequestV2) error {
 	if err := db.DeleteFavorite(s.ctx, req); err != nil {
 		return errors.WithMessage(err, "Failed to DeleteFavorite")
 	}
 	return nil
 }
 
-func (s *VideoFavoritesService) DeleteVideoFromFavorite(req *videos.DeleteVideoFromFavoriteRequest) error {
+func (s *VideoFavoritesService) DeleteVideoFromFavorite(req *videos.DeleteVideoFromFavoriteRequestV2) error {
 	if err := db.DeleteVideoFromFavorite(s.ctx, req); err != nil {
 		return errors.WithMessage(err, "Failed to DeleteFavorite")
 	}
