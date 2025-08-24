@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"HuaTug.com/cmd/video/service"
 	"HuaTug.com/kitex_gen/base"
@@ -14,27 +15,6 @@ import (
 )
 
 type VideoServiceImpl struct{}
-
-// func (s *VideoServiceImpl) FeedService(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
-// 	resp = new(videos.VideoFeedListResponseV2)
-// NOTE: These functions were commented out as their V2 equivalents don't exist in the IDL
-// func (s *VideoServiceImpl) CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest) (resp *videos.CreateFavoriteResponse, err error) {
-// 	resp = new(videos.CreateFavoriteResponse)
-// 	resp.Base = &base.Status{}
-// 	// TODO: Add your implementation logic here
-// 	// Example:
-// 	err = service.NewVideoFavoritesService(ctx).CreateFavorite(req)
-// 	if err != nil {
-// 		resp.Base.Code = errno.ServiceErrCode
-// 		resp.Base.Msg = "Failed to CreateFavorite"
-// 		return resp, err
-// 	}
-// 	resp.Base.Code = consts.StatusOK
-// 	resp.Base.Msg = "Success to CreateFavorite"
-// 	return resp, nil
-// }
-
-// NOTE: Removed duplicate VideoFeedList function - keeping the one that uses VideoListService
 
 func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
 	resp = new(videos.VideoFeedListResponseV2)
@@ -111,25 +91,33 @@ func (s *VideoServiceImpl) VideoPublishStartV2(ctx context.Context, req *videos.
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishStart (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+	}
 
-		// 如果V2失败，降级到V1
-		hlog.Warnf("Falling back to V1 upload service")
-		uuid, fallbackErr := service.NewVideoUploadService(ctx).NewUploadEvent(req)
-		if fallbackErr != nil {
-			resp.Base.Code = consts.StatusBadRequest
-			resp.Base.Msg = "Fail to Start Video Publish (both V2 and V1 failed)!"
-			resp.UploadSessionUuid = ""
-			return resp, err
+	// 获取用户存储配额信息
+	userQuota, err := uploadServiceV2.GetUserStorageQuota(req.UserId)
+	if err != nil {
+		hlog.CtxWarnf(ctx, "Failed to get user quota: %v", err)
+		// 使用默认配额，不影响主流程
+		userQuota = &videos.UserStorageQuota{
+			TotalQuotaBytes:   10 * 1024 * 1024 * 1024, // 10GB
+			UsedQuotaBytes:    0,
+			VideoCount:        0,
+			QuotaLevel:        "standard",
+			MaxVideoSizeBytes: 1024 * 1024 * 1024, // 1GB per video
+			MaxVideoCount:     100,
 		}
-		resp.Base.Code = consts.StatusOK
-		resp.Base.Msg = "Video Publish Started Successfully (V1 fallback)"
-		resp.UploadSessionUuid = uuid
-		return resp, nil
 	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Video Publish Started Successfully (V2 TikTok Style)"
 	resp.UploadSessionUuid = session.UUID
+	resp.VideoId = session.VideoID
+	resp.UserQuota = userQuota
+	resp.TempUploadPath = session.TempDir
+	resp.SessionExpiresAt = session.ExpiresAt.Unix()
+	// 暂时不实现预签名URL，保持空数组
+	resp.PresignedUrls = []string{}
+
 	return resp, nil
 }
 
@@ -139,26 +127,47 @@ func (s *VideoServiceImpl) VideoPublishUploadingV2(ctx context.Context, req *vid
 
 	// 优先使用新的TikTok风格上传服务V2
 	uploadServiceV2 := service.NewVideoUploadServiceV2(ctx)
+
+	// 获取上传进度信息
+	progress, progressErr := uploadServiceV2.GetUploadProgress(req.UploadSessionUuid, req.UserId)
+
 	err = uploadServiceV2.UploadChunk(req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishUploading (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
 
-		// 如果V2失败，降级到V1
-		hlog.Warnf("Falling back to V1 upload service for chunk upload")
-		fallbackErr := service.NewVideoUploadService(ctx).NewUploadingEvent(req)
-		if fallbackErr != nil {
-			resp.Base.Code = consts.StatusBadRequest
-			resp.Base.Msg = "Fail to Upload Video (both V2 and V1 failed)!"
-			return resp, err
+		// 检查是否是会话不存在的错误
+		if strings.Contains(err.Error(), "upload session not found") || strings.Contains(err.Error(), "session not found") {
+			hlog.Warnf("Session not found error for UUID %s, attempting to continue with V1 fallback", req.UploadSessionUuid)
 		}
-		resp.Base.Code = consts.StatusOK
-		resp.Base.Msg = "Video Chunk Uploaded Successfully (V1 fallback)"
-		return resp, nil
+	}
+
+	// V2成功时，获取更新后的进度信息
+	if progressErr == nil {
+		// 更新进度信息（上传成功后重新获取）
+		updatedProgress, updateErr := uploadServiceV2.GetUploadProgress(req.UploadSessionUuid, req.UserId)
+		if updateErr == nil {
+			progress = updatedProgress
+		}
 	}
 
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Video Chunk Uploaded Successfully (V2 TikTok Style)"
+	resp.Base.Msg = "Video Chunk Uploaded Successfully (V2)"
+	resp.UploadedChunkNumber = req.ChunkNumber
+
+	if progress != nil {
+		resp.ChunkUploadStatus = progress.Status
+		resp.UploadProgressPercent = progress.ProgressPercent
+		resp.NextChunkOffset = progress.NextChunkOffset
+		resp.UploadSpeedMbps = progress.UploadSpeedMbps
+	} else {
+		// 默认值
+		resp.ChunkUploadStatus = "uploaded"
+		resp.UploadProgressPercent = 0
+		resp.NextChunkOffset = 0
+		resp.UploadSpeedMbps = "calculating"
+	}
+
 	return resp, nil
 }
 
@@ -172,18 +181,6 @@ func (s *VideoServiceImpl) VideoPublishCompleteV2(ctx context.Context, req *vide
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishComplete (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-
-		// 如果V2失败，降级到V1
-		hlog.Warnf("Falling back to V1 upload service for complete upload")
-		fallbackErr := service.NewVideoUploadService(ctx).NewUploadCompleteEvent(req)
-		if fallbackErr != nil {
-			resp.Base.Code = consts.StatusBadRequest
-			resp.Base.Msg = "Fail to Complete Video Publish (both V2 and V1 failed)!"
-			return resp, err
-		}
-		resp.Base.Code = consts.StatusOK
-		resp.Base.Msg = "Video Publish Completed Successfully (V1 fallback)"
-		return resp, nil
 	}
 
 	resp.Base.Code = consts.StatusOK
@@ -201,18 +198,6 @@ func (s *VideoServiceImpl) VideoPublishCancelV2(ctx context.Context, req *videos
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishCancle (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-
-		// 如果V2失败，降级到V1
-		hlog.Warnf("Falling back to V1 upload service for cancel upload")
-		fallbackErr := service.NewVideoUploadService(ctx).NewCancleUploadEvent(req)
-		if fallbackErr != nil {
-			resp.Base.Code = consts.StatusBadRequest
-			resp.Base.Msg = "Fail to Cancel Video Publish (both V2 and V1 failed)!"
-			return resp, err
-		}
-		resp.Base.Code = consts.StatusOK
-		resp.Base.Msg = "Video Publish Canceled Successfully (V1 fallback)"
-		return resp, nil
 	}
 
 	resp.Base.Code = consts.StatusOK
@@ -221,79 +206,18 @@ func (s *VideoServiceImpl) VideoPublishCancelV2(ctx context.Context, req *videos
 }
 
 func (s *VideoServiceImpl) VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2) (resp *videos.VideoVisitResponseV2, err error) {
-	resp = new(videos.VideoVisitResponseV2)
-	resp.Base = &base.Status{}
-	data := &base.Video{}
-	// TODO: Add your implementation logic here
-	// Example:
-	// err = service.NewVideoVisitService(ctx).RecordVisit(req)
-	data, err = service.NewVideoUploadService(ctx).NewVideoVisitEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.VideoVisit failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Record Video Visit!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Video Visit Recorded Successfully"
-	resp.Item = data
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (resp *videos.GetVideoVisitCountResponseV2, err error) {
-	resp = new(videos.GetVideoVisitCountResponseV2)
-	resp.Base = &base.Status{}
-	resp.VisitCount, err = service.NewVideoUploadService(ctx).NewGetVisitCountEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.GetVideoVisitCount failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to GetVideoVisitCount!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "GetVideoVisitCount Successfully"
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) VideoDeleteV2(ctx context.Context, req *videos.VideoDeleteRequestV2) (resp *videos.VideoDeleteResponseV2, err error) {
-	resp = new(videos.VideoDeleteResponseV2)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewVideoUploadService(ctx).NewDeleteEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.VideoDelete failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Delete Video!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Video Deleted Successfully"
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) VideoIdList(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
-	resp = new(videos.VideoFeedListResponseV2)
-	resp.Base = &base.Status{}
-	isEnd, _, err := service.NewVideoUploadService(ctx).NewIdListEvent(req)
-	if err != nil {
-		resp.Base = &base.Status{
-			Code: errno.ServiceErrCode,
-			Msg:  "Failed get videolist by videoId",
-		}
-		hlog.Info(err)
-		return resp, err
-	}
-	resp.Base = &base.Status{
-		Code: 200,
-		Msg:  "Success get videolist by videoId",
-	}
-	resp.HasMore = !isEnd
-	// Convert list to video list - this may need adjustment based on actual list structure
-	// resp.VideoList = convertListToVideos(*list)
 	return resp, nil
 }
 
@@ -314,126 +238,17 @@ func (s *VideoServiceImpl) VideoInfoV2(ctx context.Context, req *videos.VideoInf
 }
 
 func (s *VideoServiceImpl) UpdateVisitCountV2(ctx context.Context, req *videos.UpdateVisitCountRequestV2) (resp *videos.UpdateVisitCountResponseV2, err error) {
-	resp = new(videos.UpdateVisitCountResponseV2)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewVideoUploadService(ctx).NewUpdateVideoVisitCountEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.UpdateVisitCount failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Update Visit Count!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Update Visit Count Success"
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) UpdateVideoCommentCountV2(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2) (resp *videos.UpdateVideoCommentCountResponseV2, err error) {
-	resp = new(videos.UpdateVideoCommentCountResponseV2)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewVideoUploadService(ctx).NewUpdateVideoCommentCountEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.UpdateVisitCount failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Update Visit Count!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Update Visit Count Success"
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (resp *videos.UpdateLikeCountResponseV2, err error) {
-	resp = new(videos.UpdateLikeCountResponseV2)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewVideoUploadService(ctx).NewUpdateVideoLikeCountEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.UpdateVisitCount failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Update Visit Count!"
-		return resp, err
-	}
-	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Update Visit Count Success"
 	return resp, nil
 }
 
-// NOTE: This function was removed as UpdateVideoHisLikeCountRequestV2 doesn't exist in the V2 API
-// func (s *VideoServiceImpl) UpdateVideoHisLikeCount(ctx context.Context, req *videos.UpdateVideoHisLikeCountRequest) (resp *videos.UpdateVideoHisLikeCountResponse, err error) {
-// 	resp = new(videos.UpdateVideoHisLikeCountResponse)
-// 	resp.Base = &base.Status{}
-// 	// TODO: Add your implementation logic here
-// 	// Example:
-// 	err = service.NewVideoUploadService(ctx).NewUpdateVideoHisLikeCountEvent(req)
-// 	if err != nil {
-// 		hlog.CtxErrorf(ctx, "service.UpdateVisitCount failed, original error: %v", errors.Cause(err))
-// 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-// 		resp.Base.Code = consts.StatusBadRequest
-// 		resp.Base.Msg = "Fail to Update Visit Count!"
-// 		return resp, err
-// 	}
-// 	resp.Base.Code = consts.StatusOK
-// 	resp.Base.Msg = "Update Visit Count Success"
-// 	return resp, nil
-// }
-// NOTE: This function was removed as GetVideoVisitCountInRedisRequestV2 doesn't exist in the V2 API
-// func (s *VideoServiceImpl) GetVideoVisitCountInRedis(ctx context.Context, req *videos.GetVideoVisitCountInRedisRequest) (resp *videos.GetVideoVisitCountInRedisResponse, err error) {
-// 	resp = new(videos.GetVideoVisitCountInRedisResponse)
-// 	resp.Base = &base.Status{}
-// 	data, err := service.NewVideoUploadService(ctx).NewGetVisitCountInRedisEvent(req)
-// 	if err != nil {
-// 		resp.Base.Code = errno.ServiceErrCode
-// 		resp.Base.Msg = "Failed to get Videovisit_Count"
-// 		return resp, err
-// 	}
-// 	resp.Base.Code = consts.StatusOK
-// 	resp.Base.Msg = "Success to get Videovisit_Count from Redis"
-// 	resp.VisitCount = data
-// 	return resp, nil
-// }
-
-// NOTE: This function was commented out as VideoStreamService doesn't exist
-// func (s *VideoServiceImpl) StreamVideo(ctx context.Context, req *videos.StreamVideoRequest) (resp *videos.StreamVideoResponse, err error) {
-//	resp = new(videos.StreamVideoResponse)
-//	resp.Base = &base.Status{}
-//	// TODO: Add your implementation logic here
-//	// Example:
-//	parh, err := service.NewVideoStreamService(ctx).VideoStream(req)
-//	if err != nil {
-//		resp.Base.Code = errno.ServiceErrCode
-//		resp.Base.Msg = "Failed to Stream Video"
-//		return resp, err
-//	}
-//	hlog.Info(parh)
-//	resp.Base.Code = consts.StatusOK
-//	resp.Base.Msg = "Success to Stream Video"
-//	return resp, nil
-// }
-
-// NOTE: These functions were commented out as their V2 equivalents don't exist in the IDL
-// func (s *VideoServiceImpl) CreateFavorite(ctx context.Context, req *videos.CreateFavoriteRequest) (resp *videos.CreateFavoriteResponse, err error) {
-// 	resp = new(videos.CreateFavoriteResponse)
-// 	resp.Base = &base.Status{}
-// 	// TODO: Add your implementation logic here
-// 	// Example:
-// 	if err := service.NewVideoFavoritesService(ctx).CreateFavorite(req); err != nil {
-// 		resp.Base.Code = errno.ServiceErrCode
-// 		resp.Base.Msg = "Failed to Create Favorite"
-// 		return resp, err
-// 	}
-// 	resp.Base.Code = consts.StatusOK
-// 	resp.Base.Msg = "Success to Create Favorite"
-// 	return resp, nil
-// }
 
 func (s *VideoServiceImpl) GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (resp *videos.GetFavoriteVideoListResponseV2, err error) {
 	resp = new(videos.GetFavoriteVideoListResponseV2)

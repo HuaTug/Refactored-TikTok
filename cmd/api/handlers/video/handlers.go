@@ -59,10 +59,10 @@ type VideoPublishStartParam struct {
 
 type VideoPublishUploadingParam struct {
 	Uuid        string `form:"uuid"`
-	Data        byte   `form:"data"`
 	Is_M3U8     bool   `form:"is_m3u8"`
 	FileName    string `form:"filename"`
-	ChunkNumber int64  `form:"chunk_number"`
+	ChunkNumber int64  `form:"chunk_number"` // 要分片的数量，服务端会根据此值对大文件进行分片
+	// Data字段移除，直接从请求中读取
 }
 
 type VideoPublishCompleteParam struct {

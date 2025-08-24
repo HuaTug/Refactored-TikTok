@@ -11,13 +11,13 @@ build:
 # 	cd cmd/message && go build -o message 
 api:
 	cd cmd/api && ./api
-user:	
+users:	
 	cd cmd/user &&./user
-video:
+videos:
 	cd cmd/video &&./video
-interaction:
+interactions:
 	cd cmd/interaction && ./interaction
-relation:
+relations:
 	cd cmd/relation && ./relation		
 # message:
 # 	cd cmd/message && ./message
