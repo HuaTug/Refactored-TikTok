@@ -27,11 +27,15 @@ func VideoPublishCompleteV2(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
+	// 最终文件的MD5和Size由视频服务在合并后计算，这里无需在网关侧读本地文件
+	finalFileMd5 := ""
+	var finalFileSize int64 = 0
+
 	if resp, err := rpc.VideoPublishCompleteV2(ctx, &videos.VideoPublishCompleteRequestV2{
 		UserId:            UserId,
 		UploadSessionUuid: VideoPublish.Uuid,
-		FinalFileMd5:      "", // 需要从请求中获取
-		FinalFileSize:     0,  // 需要从请求中获取
+		FinalFileMd5:      finalFileMd5,
+		FinalFileSize:     finalFileSize,
 		EnableTranscoding: true,
 	}); err != nil {
 		hlog.Info(err)

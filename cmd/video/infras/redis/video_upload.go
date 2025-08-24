@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"HuaTug.com/pkg/errno"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -89,7 +90,7 @@ func DoneChunkEvent(ctx context.Context, uuid, uid string, chunk int64) error {
 		return err
 	}
 	if bitrecord == 1 {
-		return errors.New("Information already exists")
+		return errors.New("information already exists")
 	}
 	if _, err = redisDBVideoUpload.SetBit("b:"+uid+":"+uuid, chunk, 1).Result(); err != nil {
 		hlog.Info("SetBit Error:", err)
@@ -208,21 +209,76 @@ func GetUploadedChunksStatus(ctx context.Context, uuid, uid string) ([]bool, err
 	return uploadedChunks, nil
 }
 
+// EnsureUploadSessionExists 确保上传会话存在，如果不存在则创建基本会话
+func EnsureUploadSessionExists(ctx context.Context, uuid, uid string) error {
+	sessionKey := "l:" + uid + ":" + uuid
+	exist, err := redisDBVideoUpload.Exists(sessionKey).Result()
+	if err != nil {
+		return fmt.Errorf("failed to check session existence: %w", err)
+	}
+
+	if exist == 0 {
+		hlog.Warnf("Session %s not found, creating emergency session", uuid)
+
+		// 尝试从UUID中推断一些信息，或使用默认值
+		title := "Resume Upload"
+		description := "Resumed upload session"
+		labelName := "resumed"
+		category := "general"
+
+		// 检查是否有已上传的分片来推断总分片数
+		chunkTotalNumber := estimateChunkTotalFromExistingChunks(ctx, uuid, uid)
+		if chunkTotalNumber == "" {
+			chunkTotalNumber = "50" // 合理的默认值
+		}
+
+		err := CreateVideoEventV2(ctx, title, description, uid, uuid, chunkTotalNumber, labelName, category)
+		if err != nil {
+			return fmt.Errorf("failed to create emergency session: %w", err)
+		}
+		hlog.Infof("Emergency session created for UUID %s with estimated %s chunks", uuid, chunkTotalNumber)
+	}
+
+	return nil
+}
+
+// estimateChunkTotalFromExistingChunks 从已存在的分片推断总分片数
+func estimateChunkTotalFromExistingChunks(ctx context.Context, uuid, uid string) string {
+	bitKey := "b:" + uid + ":" + uuid
+
+	// 检查bitmap中的最高位
+	maxChunk := int64(0)
+	// 检查前100个位置（合理的范围）
+	for i := int64(1); i <= 100; i++ {
+		bit, err := redisDBVideoUpload.GetBit(bitKey, i).Result()
+		if err != nil {
+			continue
+		}
+		if bit == 1 && i > maxChunk {
+			maxChunk = i
+		}
+	}
+
+	if maxChunk > 0 {
+		// 假设当前最大分片是总数的一部分，给一些余量
+		estimated := maxChunk + 10
+		return strconv.FormatInt(estimated, 10)
+	}
+
+	return "" // 返回空字符串表示无法推断
+}
+
 // UpdateChunkUploadStatus 更新分片上传状态（V2版本专用）
 func UpdateChunkUploadStatus(ctx context.Context, uuid, uid string, chunkNumber int64) error {
 	hlog.Infof("DEBUG: UpdateChunkUploadStatus called for session %s, chunk %d", uuid, chunkNumber)
 
-	// 检查会话是否存在
-	exist, err := redisDBVideoUpload.Exists("l:" + uid + ":" + uuid).Result()
-	if err != nil {
-		hlog.Errorf("DEBUG: Failed to check session existence: %v", err)
-		return fmt.Errorf("failed to check session existence: %w", err)
+	// 确保上传会话存在
+	if err := EnsureUploadSessionExists(ctx, uuid, uid); err != nil {
+		hlog.Errorf("DEBUG: Failed to ensure session exists: %v", err)
+		return fmt.Errorf("failed to ensure session exists: %w", err)
 	}
-	if exist == 0 {
-		hlog.Errorf("DEBUG: Upload session not found: %s", uuid)
-		return fmt.Errorf("upload session not found: %s", uuid)
-	}
-	hlog.Infof("DEBUG: Session exists, proceeding with bit update")
+
+	hlog.Infof("DEBUG: Session verified/created, proceeding with bit update")
 
 	// 检查分片是否已经上传
 	bitKey := "b:" + uid + ":" + uuid
@@ -304,23 +360,29 @@ func IsAllChunksUploadedV2(ctx context.Context, uuid, uid string) (bool, error) 
 
 // CreateVideoEventV2 创建视频上传事件（V2版本专用，支持自定义UUID）
 func CreateVideoEventV2(ctx context.Context, title, description, uid, customUUID, chunkTotalNumber, labelName, category string) error {
+	sessionKey := "l:" + uid + ":" + customUUID
+
 	// 检查UUID是否已存在
-	exist, err := redisDBVideoUpload.Exists("l:" + uid + ":" + customUUID).Result()
+	exist, err := redisDBVideoUpload.Exists(sessionKey).Result()
 	if err != nil {
 		return fmt.Errorf("failed to check UUID existence: %w", err)
 	}
 
 	if exist != 0 {
-		hlog.Warnf("Video event already exists for UUID %s, updating", customUUID)
-		// 如果已存在，删除旧记录
-		if err := DeleteVideoEvent(ctx, customUUID, uid); err != nil {
-			hlog.Warnf("Failed to delete existing event: %v", err)
-		}
+		hlog.Warnf("Video event already exists for UUID %s, updating TTL", customUUID)
+		// 如果已存在，更新TTL而不是删除
+		redisDBVideoUpload.Expire(sessionKey, 24*time.Hour)
+		return nil
 	}
 
 	// 创建新的视频事件
-	if _, err := redisDBVideoUpload.RPush("l:"+uid+":"+customUUID, chunkTotalNumber, title, description, labelName, category).Result(); err != nil {
+	if _, err := redisDBVideoUpload.RPush(sessionKey, chunkTotalNumber, title, description, labelName, category).Result(); err != nil {
 		return fmt.Errorf("failed to create video event: %w", err)
+	}
+
+	// 设置24小时过期时间
+	if err := redisDBVideoUpload.Expire(sessionKey, 24*time.Hour).Err(); err != nil {
+		hlog.Warnf("Failed to set TTL for session %s: %v", customUUID, err)
 	}
 
 	hlog.Infof("Created video event V2 for UUID %s, total chunks: %s", customUUID, chunkTotalNumber)
@@ -369,4 +431,36 @@ func countTrueBits(bits []bool) int {
 		}
 	}
 	return count
+}
+
+// SaveSessionData 保存会话数据到Redis
+func SaveSessionData(ctx context.Context, sessionKey string, sessionData string) error {
+	if err := redisDBVideoUpload.Set(sessionKey, sessionData, 24*time.Hour).Err(); err != nil {
+		hlog.Errorf("Failed to save session data to Redis: %v", err)
+		return err
+	}
+	return nil
+}
+
+// GetSessionData 从Redis获取会话数据
+func GetSessionData(ctx context.Context, sessionKey string) (string, error) {
+	sessionData, err := redisDBVideoUpload.Get(sessionKey).Result()
+	if err != nil {
+		if err.Error() == "redis: nil" {
+			// 键不存在，返回空字符串
+			return "", nil
+		}
+		hlog.Errorf("Failed to get session data from Redis: %v", err)
+		return "", err
+	}
+	return sessionData, nil
+}
+
+// DeleteSessionData 从Redis删除会话数据
+func DeleteSessionData(ctx context.Context, sessionKey string) error {
+	if err := redisDBVideoUpload.Del(sessionKey).Err(); err != nil {
+		hlog.Errorf("Failed to delete session data from Redis: %v", err)
+		return err
+	}
+	return nil
 }

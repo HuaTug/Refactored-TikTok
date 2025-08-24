@@ -3,11 +3,13 @@ package oss
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +86,14 @@ type VideoStoragePath struct {
 	UserID    int64  `json:"user_id"`
 	VideoID   int64  `json:"video_id"`
 	CreatedAt string `json:"created_at"`
+}
+
+// MinIOObjectPart MinIO分片信息
+type MinIOObjectPart struct {
+	PartNumber int    `json:"part_number"`
+	ETag       string `json:"etag"`
+	Size       int64  `json:"size"`
+	Data       []byte `json:"data"` // 分片数据，序列化到JSON以支持会话恢复
 }
 
 // NewTikTokStorage 创建新的存储服务实例
@@ -527,4 +537,194 @@ func (ts *TikTokStorage) selectOptimalQuality(userAgent, requestedQuality string
 	}
 
 	return 720 // 桌面设备默认720p
+}
+
+// CreateMultipartUpload 初始化分片上传，返回 UploadID
+func (ts *TikTokStorage) CreateMultipartUpload(ctx context.Context, bucketName, objectName, contentType string) (string, error) {
+	// MinIO Go SDK v7 采用了不同的方式
+	// 我们直接使用一个唯一的uploadID，实际的multipart由PutObject处理
+	uploadID := fmt.Sprintf("native_%d_%s", time.Now().UnixNano(), strings.ReplaceAll(objectName, "/", "_"))
+
+	hlog.Infof("已初始化分片上传会话，Bucket: %s, Object: %s, UploadID: %s", bucketName, objectName, uploadID)
+	return uploadID, nil
+}
+
+// UploadPart 上传单个分片 - 使用内存缓存方案
+func (ts *TikTokStorage) UploadPart(ctx context.Context, bucketName, objectName, uploadID string, partNumber int, data io.Reader, partSize int64) (MinIOObjectPart, error) {
+	// 将数据读取到内存中
+	partData := make([]byte, partSize)
+	_, err := io.ReadFull(data, partData)
+	if err != nil {
+		return MinIOObjectPart{}, fmt.Errorf("读取分片数据失败: %v", err)
+	}
+
+	// 计算ETag (MD5)
+	etag := fmt.Sprintf("%x", md5.Sum(partData))
+
+	hlog.Infof("分片 %d 准备完成，ETag: %s, Size: %d bytes", partNumber, etag, partSize)
+
+	return MinIOObjectPart{
+		PartNumber: partNumber,
+		ETag:       etag,
+		Size:       partSize,
+		Data:       partData, // 将数据保存在内存中，待合并时使用
+	}, nil
+}
+
+// CompleteMultipartUpload 完成分片合并 - 使用内存拼接后上传
+func (ts *TikTokStorage) CompleteMultipartUpload(ctx context.Context, bucketName, objectName, uploadID string, parts []MinIOObjectPart) error {
+	hlog.Infof("开始合并 %d 个分片到内存中", len(parts))
+
+	// 按分片号排序
+	sort.Slice(parts, func(i, j int) bool {
+		return parts[i].PartNumber < parts[j].PartNumber
+	})
+
+	// 计算总大小
+	var totalSize int64
+	for _, part := range parts {
+		totalSize += part.Size
+	}
+
+	// 创建缓冲区来存储完整文件
+	var fullData bytes.Buffer
+	fullData.Grow(int(totalSize))
+
+	// 按顺序拼接所有分片数据
+	for _, part := range parts {
+		hlog.Infof("拼接分片 %d: ETag=%s, Size=%d", part.PartNumber, part.ETag, part.Size)
+		if len(part.Data) == 0 {
+			return fmt.Errorf("分片 %d 数据为空", part.PartNumber)
+		}
+		fullData.Write(part.Data)
+	}
+
+	hlog.Infof("所有分片已拼接完成，总大小: %d bytes", fullData.Len())
+
+	// 使用PutObject上传完整文件
+	reader := bytes.NewReader(fullData.Bytes())
+	uploadInfo, err := ts.client.PutObject(ctx, bucketName, objectName, reader, int64(fullData.Len()), minio.PutObjectOptions{
+		ContentType: "video/mp4",
+	})
+	if err != nil {
+		hlog.Errorf("MinIO PutObject失败: %v", err)
+		return fmt.Errorf("MinIO文件上传失败: %v", err)
+	}
+
+	hlog.Infof("✅ MinIO文件上传成功，文件: %s/%s，大小: %d bytes，ETag: %s",
+		bucketName, objectName, uploadInfo.Size, uploadInfo.ETag)
+	return nil
+}
+
+// AbortMultipartUpload 取消分片上传
+func (ts *TikTokStorage) AbortMultipartUpload(ctx context.Context, bucketName, objectName, uploadID string) error {
+	// 使用内存方式时，不需要清理临时文件，只需要清理内存中的分片数据
+	// 分片数据由上层调用者负责清理
+
+	hlog.Infof("已取消分片上传，Bucket: %s, Object: %s, UploadID: %s", bucketName, objectName, uploadID)
+	return nil
+}
+
+// ListParts 列出已上传的分片
+func (ts *TikTokStorage) ListParts(ctx context.Context, bucketName, objectName, uploadID string) ([]MinIOObjectPart, error) {
+	// 列出临时分片目录下的所有对象
+	prefix := fmt.Sprintf("temp_parts/%s/", uploadID)
+	objectsCh := ts.client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	})
+
+	var parts []MinIOObjectPart
+	for object := range objectsCh {
+		if object.Err != nil {
+			return nil, fmt.Errorf("列出分片失败: %v", object.Err)
+		}
+
+		// 从对象名中提取分片编号
+		partName := strings.TrimPrefix(object.Key, prefix)
+		if strings.HasPrefix(partName, "part_") {
+			partNumberStr := strings.TrimPrefix(partName, "part_")
+			partNumber, err := strconv.Atoi(partNumberStr)
+			if err != nil {
+				continue // 跳过无效的分片名
+			}
+
+			parts = append(parts, MinIOObjectPart{
+				PartNumber: partNumber,
+				ETag:       object.ETag,
+				Size:       object.Size,
+			})
+		}
+	}
+
+	return parts, nil
+} // CalculateOptimalChunkSize 计算最优分片大小
+func (ts *TikTokStorage) CalculateOptimalChunkSize(fileSize int64, maxChunks int) int64 {
+	const minChunkSize = 5 * 1024 * 1024   // 5MB - MinIO最小分片大小
+	const maxChunkSize = 100 * 1024 * 1024 // 100MB - 推荐最大分片大小
+
+	// 基于文件大小和最大分片数计算分片大小
+	calculatedSize := fileSize / int64(maxChunks)
+
+	// 确保分片大小在合理范围内
+	if calculatedSize < minChunkSize {
+		return minChunkSize
+	}
+	if calculatedSize > maxChunkSize {
+		return maxChunkSize
+	}
+
+	return calculatedSize
+}
+
+// GenerateVideoObjectName 生成视频对象名称
+func (ts *TikTokStorage) GenerateVideoObjectName(userID, videoID int64) string {
+	return fmt.Sprintf("videos/user_%d/video_%d/source.mp4", userID, videoID)
+}
+
+// GetObjectInfo 获取对象信息
+func (ts *TikTokStorage) GetObjectInfo(ctx context.Context, bucketName, objectName string) (*minio.ObjectInfo, error) {
+	objectInfo, err := ts.client.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("获取对象信息失败: %v", err)
+	}
+
+	return &objectInfo, nil
+}
+
+// cleanupTempParts 清理临时分片文件
+func (ts *TikTokStorage) cleanupTempParts(ctx context.Context, bucketName, uploadID string, maxParts int) {
+	prefix := fmt.Sprintf("temp_parts/%s/", uploadID)
+
+	// 如果maxParts为0，清理所有分片
+	if maxParts == 0 {
+		// 列出所有临时分片
+		objectsCh := ts.client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
+			Prefix:    prefix,
+			Recursive: true,
+		})
+
+		for object := range objectsCh {
+			if object.Err != nil {
+				hlog.Errorf("列出临时分片失败: %v", object.Err)
+				continue
+			}
+
+			err := ts.client.RemoveObject(ctx, bucketName, object.Key, minio.RemoveObjectOptions{})
+			if err != nil {
+				hlog.Errorf("删除临时分片 %s 失败: %v", object.Key, err)
+			}
+		}
+	} else {
+		// 删除指定数量的分片
+		for i := 1; i <= maxParts; i++ {
+			tempObjectName := fmt.Sprintf("temp_parts/%s/part_%d", uploadID, i)
+			err := ts.client.RemoveObject(ctx, bucketName, tempObjectName, minio.RemoveObjectOptions{})
+			if err != nil {
+				hlog.Errorf("删除临时分片 %s 失败: %v", tempObjectName, err)
+			}
+		}
+	}
+
+	hlog.Infof("已清理上传ID %s 的临时分片", uploadID)
 }

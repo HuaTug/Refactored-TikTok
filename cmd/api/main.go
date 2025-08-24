@@ -6,8 +6,6 @@ import (
 
 	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/cmd/video/infras/redis"
-
-	webs "HuaTug.com/cmd/api/router/websocket"
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/oss"
@@ -86,15 +84,5 @@ func main() {
 
 	// 注册路由
 	register(r)
-
-	// 启动 WebSocket 服务
-	ws := server.Default(
-		server.WithHostPorts(`:10000`),
-	)
-	ws.NoHijackConnPool = true
-	webs.WebsocketRegister(ws)
-
-	// 启动 WebSocket 和 HTTP 服务
-	go ws.Spin()
 	r.Spin()
 }

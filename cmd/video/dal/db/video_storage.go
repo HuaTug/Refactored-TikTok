@@ -2,6 +2,9 @@ package db
 
 import (
 	"context"
+	"database/sql/driver"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -37,6 +40,34 @@ type VideoStorageMapping struct {
 
 // JSON 自定义JSON类型
 type JSON map[string]interface{}
+
+// Value 实现 driver.Valuer 接口
+func (j JSON) Value() (driver.Value, error) {
+	if j == nil {
+		return nil, nil
+	}
+	return json.Marshal(j)
+}
+
+// Scan 实现 sql.Scanner 接口
+func (j *JSON) Scan(value interface{}) error {
+	if value == nil {
+		*j = make(JSON)
+		return nil
+	}
+
+	var bytes []byte
+	switch v := value.(type) {
+	case []byte:
+		bytes = v
+	case string:
+		bytes = []byte(v)
+	default:
+		return errors.New("cannot scan into JSON")
+	}
+
+	return json.Unmarshal(bytes, j)
+}
 
 // TableName 表名
 func (VideoStorageMapping) TableName() string {
@@ -209,16 +240,17 @@ func GetUserStorageQuota(ctx context.Context, userID int64) (*UserStorageQuota, 
 		if err.Error() == "record not found" {
 			// 如果没有配额记录，创建默认配额
 			defaultQuota := &UserStorageQuota{
-				UserID:             userID,
-				MaxStorageBytes:    10737418240, // 10GB
-				MaxVideoCount:      1000,
-				MaxVideoDuration:   600,        // 10分钟
-				MaxVideoSize:       1073741824, // 1GB
-				UsedStorageBytes:   0,
-				VideoCount:         0,
-				DraftCount:         0,
-				QuotaExceeded:      false,
-				WarningSent:        false,
+				UserID:           userID,
+				MaxStorageBytes:  10737418240, // 10GB
+				MaxVideoCount:    1000,
+				MaxVideoDuration: 600,        // 10分钟
+				MaxVideoSize:     1073741824, // 1GB
+				UsedStorageBytes: 0,
+				VideoCount:       0,
+				DraftCount:       0,
+				QuotaExceeded:    false,
+				WarningSent:      false,
+
 				QuotaLevel:         "basic",
 				TotalUploadBytes:   0,
 				TotalDownloadBytes: 0,
