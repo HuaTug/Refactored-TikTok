@@ -7,6 +7,15 @@ type config struct {
 	Redis           redis           `yaml:"redis" mapstructure:"redis"`
 	Etcd            etcd            `yaml:"etcd" mapstructure:"etcd"`
 	RabbitMq        rabbitmq        `yaml:"rabbitmq" mapstructure:"rabbitmq"`
+	Kafka           kafka           `yaml:"kafka" mapstructure:"kafka"`
+}
+
+// kafka 配置
+type kafka struct {
+	Brokers            []string `yaml:"brokers" mapstructure:"brokers"`
+	Version            string   `yaml:"version" mapstructure:"version"`
+	ProducerRetries    int      `yaml:"producer_retries" mapstructure:"producer_retries"`
+	ConsumerOffsetInit string   `yaml:"consumer_offset_init" mapstructure:"consumer_offset_init"` // newest / oldest
 }
 
 type mysql struct {

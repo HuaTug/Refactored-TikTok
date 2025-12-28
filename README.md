@@ -4,9 +4,13 @@
 
 ## 🚀 项目特色
 
+- **智能推荐系统**: 多路召回+精排+重排三阶段推荐,支持个性化内容分发 ⭐⭐⭐
 - **微服务架构**: 基于 Kitex RPC 框架的分布式微服务设计
 - **高性能**: 使用 Hertz HTTP 框架提供高性能 API 网关
 - **事件驱动**: 实现事件驱动的数据同步机制，保证最终一致性
+- **分库分表**: 评论和关系服务 4库×4表架构,支持海量数据 ⭐⭐⭐
+- **多层限流**: 滑动窗口、令牌桶等多种限流算法,集成 Sentinel 熔断降级 ⭐⭐⭐
+- **冷热分离**: 基于 MinIO 的多层存储策略,自动热度迁移 ⭐⭐
 - **分布式存储**: 支持 MySQL 分库分表、Redis 缓存、MinIO 对象存储
 - **消息队列**: 集成 RabbitMQ 实现异步消息处理
 - **服务发现**: 基于 etcd 的服务注册与发现
@@ -280,3 +284,44 @@ etcd:
 - 自动故障转移
 - 服务降级策略
 
+## 🎯 技术亮点与未来规划
+
+### ✅ 已实现的核心亮点
+1. **智能推荐系统** ⭐⭐⭐
+   - 多路召回策略 (协同过滤、热门、内容、社交、探索)
+   - Learning to Rank 精排模型
+   - MMR 重排序保证多样性
+   - 详见: [`pkg/recommendation/README.md`](pkg/recommendation/README.md)
+
+2. **分库分表架构** ⭐⭐⭐
+   - 评论服务: 4库×4表
+   - 关系服务: 4库×4表
+   - 详见: [`scripts/init_relation_shard.sh`](scripts/init_relation_shard.sh)
+
+3. **多层限流与熔断** ⭐⭐⭐
+   - 滑动窗口、令牌桶、固定窗口、自适应限流
+   - 用户级、IP级、全局限流
+   - 集成 Alibaba Sentinel
+   - 详见: [`pkg/security/advanced_rate_limiter.go`](pkg/security/advanced_rate_limiter.go)
+
+4. **事件驱动架构** ⭐⭐⭐
+   - 完整的事件溯源模型
+   - 幂等性和分布式锁
+   - 详见: [`cmd/model/event_driven_models.go`](cmd/model/event_driven_models.go)
+
+5. **冷热数据分离** ⭐⭐
+   - 基于 MinIO 的多层存储
+   - 自动热度迁移
+   - 详见: [`pkg/oss/hot_storage_manager.go`](pkg/oss/hot_storage_manager.go)
+
+### 🚀 未来规划
+- [ ] 推荐算法优化 (机器学习模型升级, GBDT/DeepFM)
+- [ ] 完善监控体系 (Prometheus + Grafana)
+- [ ] 视频内容审核 (AI审核)
+- [ ] 直播功能
+- [ ] 实时消息推送 (WebSocket)
+- [ ] A/B测试框架
+- [ ] CDN 加速
+- [ ] 数据库读写分离
+
+**详细分析请参考**: [`docs/HIGHLIGHTS_AND_IMPROVEMENTS.md`](docs/HIGHLIGHTS_AND_IMPROVEMENTS.md)

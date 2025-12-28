@@ -109,6 +109,12 @@ func Init() {
 	ConfigInfo.RabbitMq.Username = viper.GetString("rabbitmq.username")
 	ConfigInfo.RabbitMq.Password = viper.GetString("rabbitmq.password")
 
+	// Kafka 配置
+	ConfigInfo.Kafka.Brokers = viper.GetStringSlice("kafka.brokers")
+	ConfigInfo.Kafka.Version = viper.GetString("kafka.version")
+	ConfigInfo.Kafka.ProducerRetries = viper.GetInt("kafka.producer_retries")
+	ConfigInfo.Kafka.ConsumerOffsetInit = viper.GetString("kafka.consumer_offset_init")
+
 	// 打印配置信息用于调试
 	logrus.Infof("Config loaded - MySQL: %s:%s@%s/%s",
 		ConfigInfo.Mysql.Username, "***", ConfigInfo.Mysql.Addr, ConfigInfo.Mysql.Database)
@@ -120,6 +126,7 @@ func Init() {
 		ConfigInfo.FollowsSharding.DatabaseCount,
 		ConfigInfo.FollowsSharding.TableCount,
 		len(ConfigInfo.FollowsSharding.MasterDSNs))
+	logrus.Infof("Kafka - Brokers: %v", ConfigInfo.Kafka.Brokers)
 
 	if len(ConfigInfo.CommentSharding.MasterDSNs) == 0 {
 		logrus.Warn("No comment sharding DSNs configured!")
