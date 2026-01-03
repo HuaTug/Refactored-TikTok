@@ -12,26 +12,11 @@ import (
 // customizeRegister registers customize routers.
 func customizedRegister(r *server.Hertz) {
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:8808", "http://localhost:8888"},  // 允许的源
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},        // 允许的方法
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},        // 允许的头
-		ExposeHeaders:    []string{"Content-Length"},                                  // 可暴露的头
-		AllowCredentials: true,                                                        // 是否允许发送凭证
-		AllowOriginFunc: func(origin string) bool {
-			// 允许常用的开发端口
-			allowedOrigins := []string{
-				"http://localhost:3000",
-				"http://localhost:8080", 
-				"http://localhost:8808",
-				"http://localhost:8888",
-			}
-			for _, allowed := range allowedOrigins {
-				if origin == allowed {
-					return true
-				}
-			}
-			return false
-		},
-		MaxAge: 12 * time.Hour,  // 缓存预检请求的结果 12 小时
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Access-Token", "Refresh-Token", "Accept", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length", "New-Access-Token", "Access-Control-Allow-Origin", "Access-Control-Allow-Headers"},
+		AllowCredentials: false, // 当 AllowAllOrigins 为 true 时，AllowCredentials 必须为 false
+		MaxAge:           12 * time.Hour,
 	}))
 }

@@ -305,19 +305,44 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 		return fmt.Errorf("failed to create user behavior: %w", err)
 	}
 
-	// 2. 创建或更新video_likes记录
-	uuid := uuid.New().ID()
+	// 2. 创建或更新video_likes记录（幂等性处理）
+	// 首先检查是否已存在
+	var existingLike model.VideoLike
+	err := tx.Where("user_id = ? AND video_id = ?", event.UserID, event.ResourceID).First(&existingLike).Error
 
-	videoLike := &model.VideoLike{
-		VideoLikesId: int64(uuid),
-		UserId:       event.UserID,
-		VideoId:      event.ResourceID,
-		CreatedAt:    eventTime.Format("2006-01-02 15:04:05"),
-		DeletedAt:    "", // 空字符串表示未删除
-	}
+	if err == nil {
+		// 记录已存在，检查是否是软删除状态
+		if existingLike.DeletedAt != "" {
+			// 如果是软删除状态，恢复它
+			if err := tx.Model(&existingLike).Updates(map[string]interface{}{
+				"deleted_at": "",
+				"created_at": eventTime.Format("2006-01-02 15:04:05"),
+			}).Error; err != nil {
+				return fmt.Errorf("failed to restore video like: %w", err)
+			}
+			hlog.CtxInfof(ctx, "Restored soft-deleted video like: user=%d, video=%d", event.UserID, event.ResourceID)
+		} else {
+			// 记录已存在且未删除，这是幂等操作，直接返回成功
+			hlog.CtxInfof(ctx, "Video like already exists: user=%d, video=%d, skipping", event.UserID, event.ResourceID)
+			return nil
+		}
+	} else if err == gorm.ErrRecordNotFound {
+		// 记录不存在，创建新记录
+		uuid := uuid.New().ID()
+		videoLike := &model.VideoLike{
+			VideoLikesId: int64(uuid),
+			UserId:       event.UserID,
+			VideoId:      event.ResourceID,
+			CreatedAt:    eventTime.Format("2006-01-02 15:04:05"),
+			DeletedAt:    "", // 空字符串表示未删除
+		}
 
-	if err := tx.Create(videoLike).Error; err != nil {
-		return fmt.Errorf("failed to create video like: %w", err)
+		if err := tx.Create(videoLike).Error; err != nil {
+			return fmt.Errorf("failed to create video like: %w", err)
+		}
+	} else {
+		// 其他数据库错误
+		return fmt.Errorf("failed to check existing video like: %w", err)
 	}
 
 	// 3. 更新视频表的点赞数 - 关键缺失功能补充

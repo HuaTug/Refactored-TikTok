@@ -21,6 +21,7 @@ func DoubleTokenAuthFunc() app.HandlerFunc {
 		if !jwt.IsAccessTokenAvailable(ctx, c) {
 			if !jwt.IsRefreshTokenAvailable(ctx, c) {
 				handlers.SendResponse(c, errno.ConvertErr(errno.TokenInvailedErr), nil)
+				c.Abort()
 				return
 			}
 			//此时表示refresh-token并未过期 在生成一个新的access-token

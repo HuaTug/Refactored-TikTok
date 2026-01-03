@@ -23,13 +23,13 @@ func SendResponse(c *app.RequestContext, err error, data interface{}) {
 }
 
 type RelationParam struct {
-	ActionType int64 `form:"action_type"`
-	ToUserId   int64 `form:"to_user_id"`
-	UserId     int64 `form:"user_id"`
+	ActionType int64 `form:"action_type" json:"action_type"`
+	ToUserId   int64 `form:"to_user_id" json:"to_user_id"`
+	UserId     int64 `form:"user_id" json:"user_id"`
 }
 
 type RelationPageParam struct {
-	PageNum  int64 `form:"page_num"`
-	PageSize int64 `form:"page_size"`
-	UserId   int64 `form:"user_id"`
+	PageNum  int64 `form:"page_num" json:"page_num"`
+	PageSize int64 `form:"page_size" json:"page_size"`
+	UserId   int64 `form:"user_id" json:"user_id"`
 }

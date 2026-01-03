@@ -23,33 +23,33 @@ func SendResponse(c *app.RequestContext, err error, data interface{}) {
 }
 
 type CreateCommentParam struct {
-	VideoId   int64  `form:"video_id"`
-	CommentId int64  `form:"comment_id"`
-	Mode      int64  `form:"mode"`
-	Content   string `form:"content"`
+	VideoId   int64  `form:"video_id" json:"video_id"`
+	CommentId int64  `form:"comment_id" json:"comment_id"`
+	Mode      int64  `form:"mode" json:"mode"`
+	Content   string `form:"content" json:"content"`
 }
 
 type ListCommentParam struct {
-	VideoId   int64  `form:"video_id"`
-	CommentId int64  `form:"comment_id"`
-	PageNum   int64  `form:"page_num"`
-	PageSize  int64  `form:"page_size"`
-	SortType  string `form:"sort_type"` // "hot" for popular comments, "latest" for newest comments
+	VideoId   int64  `form:"video_id" json:"video_id"`
+	CommentId int64  `form:"comment_id" json:"comment_id"`
+	PageNum   int64  `form:"page_num" json:"page_num"`
+	PageSize  int64  `form:"page_size" json:"page_size"`
+	SortType  string `form:"sort_type" json:"sort_type"` // "hot" for popular comments, "latest" for newest comments
 }
 
 type DeleteCommentParam struct {
-	VideoId    int64 `form:"video_id"`
-	CommentId  int64 `form:"comment_id"`
-	FromUserId int64 `form:"from_user_id"`
+	VideoId    int64 `form:"video_id" json:"video_id"`
+	CommentId  int64 `form:"comment_id" json:"comment_id"`
+	FromUserId int64 `form:"from_user_id" json:"from_user_id"`
 }
 
 type LikeParam struct {
-	VideoId    int64  `form:"video_id"`
-	CommentId  int64  `form:"comment_id"`
-	ActionType string `form:"action_type"`
+	VideoId    int64  `form:"video_id" json:"video_id"`
+	CommentId  int64  `form:"comment_id" json:"comment_id"`
+	ActionType string `form:"action_type" json:"action_type"`
 }
 
 type LikeListParam struct {
-	PageNum  int64 `form:"page_num"`
-	PageSize int64 `form:"page_size"`
+	PageNum  int64 `form:"page_num" json:"page_num"`
+	PageSize int64 `form:"page_size" json:"page_size"`
 }

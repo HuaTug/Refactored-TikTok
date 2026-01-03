@@ -33,14 +33,21 @@ func (v *RelationServiceImpl) RelationService(ctx context.Context, req *relation
 
 func (v *RelationServiceImpl) FollowingList(ctx context.Context, req *relations.FollowingListRequest) (resp *relations.FollowingListResponse, err error) {
 	resp = new(relations.FollowingListResponse)
-	resp, err = service.NewFollowingListService(ctx, dal.ShardedFollowDBInstance).FollowingList(ctx, req)
 	resp.Base = &base.Status{}
+
+	result, err := service.NewFollowingListService(ctx, dal.ShardedFollowDBInstance).FollowingList(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FollowingList failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to List Following!"
 		return resp, err
+	}
+
+	// 复制结果到 resp
+	if result != nil {
+		resp.Items = result.Items
+		resp.Total = result.Total
 	}
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "List Following Successfully"
@@ -49,14 +56,20 @@ func (v *RelationServiceImpl) FollowingList(ctx context.Context, req *relations.
 
 func (v *RelationServiceImpl) FollowerList(ctx context.Context, req *relations.FollowerListRequest) (resp *relations.FollowerListResponse, err error) {
 	resp = new(relations.FollowerListResponse)
-	resp, err = service.NewFollowerListService(ctx, dal.ShardedFollowDBInstance).FollowerList(ctx, req)
 	resp.Base = &base.Status{}
+
+	result, err := service.NewFollowerListService(ctx, dal.ShardedFollowDBInstance).FollowerList(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FollowerList failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to List Follower!"
 		return resp, err
+	}
+
+	if result != nil {
+		resp.Items = result.Items
+		resp.Total = result.Total
 	}
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "List Follower Successfully"
@@ -65,14 +78,20 @@ func (v *RelationServiceImpl) FollowerList(ctx context.Context, req *relations.F
 
 func (v *RelationServiceImpl) FriendList(ctx context.Context, req *relations.FriendListRequest) (resp *relations.FriendListResponse, err error) {
 	resp = new(relations.FriendListResponse)
-	resp, err = service.NewFriendListService(ctx, dal.ShardedFollowDBInstance).FriendList(ctx, req)
 	resp.Base = &base.Status{}
+
+	result, err := service.NewFriendListService(ctx, dal.ShardedFollowDBInstance).FriendList(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.FriendList failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to List Friend!"
 		return resp, err
+	}
+
+	if result != nil {
+		resp.Items = result.Items
+		resp.Total = result.Total
 	}
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "List Friend Successfully"

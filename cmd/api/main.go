@@ -58,14 +58,14 @@ func main() {
 		server.WithMaxRequestBodySize(16*1024*1024*1024),
 	)
 
-	// 配置 CORS
+	// 配置 CORS - 允许前端开发端口访问
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:3000", "http://localhost:8888"}, // 允许的来源
-		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},        // 允许的请求方法
-		// AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},      // 允许的请求头
-		// ExposeHeaders:    []string{"Content-Length"},                              // 可暴露的响应头
-		AllowCredentials: true,      // 是否允许发送凭证
-		MaxAge:           12 * 3600, // 预检请求的缓存时间
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Access-Token", "Refresh-Token", "Accept", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length", "New-Access-Token"},
+		AllowCredentials: false,
+		MaxAge:           12 * 3600,
 	}))
 
 	// 初始化 JWT

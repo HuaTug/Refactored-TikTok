@@ -21,13 +21,28 @@ func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.Vide
 	resp.Base = &base.Status{}
 	var video []*base.Video
 	var count int64
-	if video, count, err = service.NewVideoListService(ctx).VideoList(req); err != nil {
-		hlog.CtxErrorf(ctx, "service.VideoFeedList failed,original error:%v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Get VideoList!"
-		resp.VideoList = video
-		return resp, err
+
+	// 如果有 user_id，获取该用户的视频；否则获取所有视频（feed流）
+	if req.UserId > 0 {
+		if video, count, err = service.NewVideoListService(ctx).VideoList(req); err != nil {
+			hlog.CtxErrorf(ctx, "service.VideoList failed,original error:%v", errors.Cause(err))
+			hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+			resp.Base.Code = consts.StatusBadRequest
+			resp.Base.Msg = "Fail to Get VideoList!"
+			resp.VideoList = video
+			return resp, err
+		}
+	} else {
+		// 获取 feed 流（所有公开视频）
+		if video, err = service.NewFeedListService(ctx).FeedList(req); err != nil {
+			hlog.CtxErrorf(ctx, "service.FeedList failed,original error:%v", errors.Cause(err))
+			hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+			resp.Base.Code = consts.StatusBadRequest
+			resp.Base.Msg = "Fail to Get FeedList!"
+			resp.VideoList = video
+			return resp, err
+		}
+		count = int64(len(video))
 	}
 	//todo
 	fmt.Print(count)
@@ -248,7 +263,6 @@ func (s *VideoServiceImpl) UpdateVideoCommentCountV2(ctx context.Context, req *v
 func (s *VideoServiceImpl) UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (resp *videos.UpdateLikeCountResponseV2, err error) {
 	return resp, nil
 }
-
 
 func (s *VideoServiceImpl) GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (resp *videos.GetFavoriteVideoListResponseV2, err error) {
 	resp = new(videos.GetFavoriteVideoListResponseV2)

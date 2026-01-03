@@ -49,10 +49,9 @@ func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactio
 	return resp, nil
 }
 
-
 func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *interactions.LikeListResponse, err error) {
-	//likeService := service.NewLikeActionService(ctx, globalProducer)
-	//resp, err = likeService.LikeList(ctx, req)
+	likeService := service.NewLikeActionService(ctx, globalProducer)
+	resp, err = likeService.GetLikeList(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.LikeList failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
