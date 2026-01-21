@@ -13,7 +13,6 @@ import (
 
 	"HuaTug.com/config"
 	"HuaTug.com/pkg/bound"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/oss"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -57,10 +56,8 @@ func main() {
 
 	suite, closer := jaeger.NewServerSuite().Init("Video")
 	defer closer.Close()
-	ip, err := constants.GetOutBoundIP()
-	if err != nil {
-		panic(err)
-	}
+
+	ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8891")
 	if err != nil {
 		panic(err)

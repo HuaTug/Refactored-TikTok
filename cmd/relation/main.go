@@ -11,7 +11,6 @@ import (
 	"HuaTug.com/config/pprof"
 	relation "HuaTug.com/kitex_gen/relations/followservice"
 	"HuaTug.com/pkg/bound"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/limit"
@@ -35,10 +34,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ip, err := constants.GetOutBoundIP()
-	if err != nil {
-		panic(err)
-	}
+	ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8892")
 	if err != nil {
 		panic(err)

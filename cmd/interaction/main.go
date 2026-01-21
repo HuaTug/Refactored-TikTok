@@ -16,7 +16,6 @@ import (
 	"HuaTug.com/config"
 	interaction "HuaTug.com/kitex_gen/interactions/interactionservice"
 	"HuaTug.com/pkg/bound"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/mq"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -79,7 +78,6 @@ func initEventDrivenSyncService() {
 	// 获取全局生产者
 	producer := GetGlobalProducer()
 	db := db.DB
-	
 
 	// 创建事件驱动同步服务
 	globalEventDrivenSyncService = common.NewEventDrivenSyncService(producer, db)
@@ -110,10 +108,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ip, err := constants.GetOutBoundIP()
-	if err != nil {
-		panic(err)
-	}
+	ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8893")
 	if err != nil {
 		panic(err)

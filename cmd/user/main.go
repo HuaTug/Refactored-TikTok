@@ -24,7 +24,6 @@ import (
 	"HuaTug.com/config/jaeger"
 	user "HuaTug.com/kitex_gen/users/userservice"
 	"HuaTug.com/pkg/bound"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/oss"
 
@@ -56,10 +55,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ip, err := constants.GetOutBoundIP()
-	if err != nil {
-		panic(err)
-	}
+	ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8889")
 	if err != nil {
 		panic(err)
