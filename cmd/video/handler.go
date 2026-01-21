@@ -299,13 +299,13 @@ func (s *VideoServiceImpl) AddFavoriteVideoV2(ctx context.Context, req *videos.A
 	resp = new(videos.AddFavoriteVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement add favorite video logic
-	// err = service.NewVideoFavoritesService(ctx).AddFavoriteVideo(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to add favorite video"
-	// 	return resp, err
-	// }
+	err = service.NewVideoFavoritesService(ctx).AddFavoriteVideo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.AddFavoriteVideo failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to add video to favorites"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully added video to favorites"
@@ -317,13 +317,13 @@ func (s *VideoServiceImpl) DeleteFavoriteV2(ctx context.Context, req *videos.Del
 	resp = new(videos.DeleteFavoriteResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement delete favorite logic
-	// err = service.NewVideoFavoritesService(ctx).DeleteFavorite(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to delete favorite"
-	// 	return resp, err
-	// }
+	err = service.NewVideoFavoritesService(ctx).DeleteFavorite(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.DeleteFavorite failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to delete favorite"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully deleted favorite"
@@ -335,13 +335,13 @@ func (s *VideoServiceImpl) DeleteVideoFromFavoriteV2(ctx context.Context, req *v
 	resp = new(videos.DeleteVideoFromFavoriteResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement delete video from favorite logic
-	// err = service.NewVideoFavoritesService(ctx).DeleteVideoFromFavorite(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to delete video from favorite"
-	// 	return resp, err
-	// }
+	err = service.NewVideoFavoritesService(ctx).DeleteVideoFromFavorite(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.DeleteVideoFromFavorite failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to delete video from favorite"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully deleted video from favorite"
@@ -444,13 +444,13 @@ func (s *VideoServiceImpl) CreateFavoriteV2(ctx context.Context, req *videos.Cre
 	resp = new(videos.CreateFavoriteResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement create favorite logic
-	// err = service.NewVideoFavoritesService(ctx).CreateFavorite(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to create favorite"
-	// 	return resp, err
-	// }
+	err = service.NewVideoFavoritesService(ctx).CreateFavorite(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.CreateFavorite failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to create favorite"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully created favorite"
@@ -462,17 +462,18 @@ func (s *VideoServiceImpl) GetFavoriteVideoListV2(ctx context.Context, req *vide
 	resp = new(videos.GetFavoriteVideoListResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement get favorite video list logic
-	// videos, err := service.NewVideoFavoritesService(ctx).GetFavoriteVideoList(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to get favorite video list"
-	// 	return resp, err
-	// }
+	videoList, err := service.NewVideoFavoritesService(ctx).GetFavoriteVideoList(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetFavoriteVideoList failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get favorite video list"
+		return resp, err
+	}
 
-	// resp.VideoList = videos
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved favorite video list"
+	resp.VideoList = videoList
+	resp.TotalCount = int64(len(videoList))
 	return resp, nil
 }
 
@@ -481,17 +482,18 @@ func (s *VideoServiceImpl) GetFavoriteListV2(ctx context.Context, req *videos.Ge
 	resp = new(videos.GetFavoriteListResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement get favorite list logic
-	// favorites, err := service.NewVideoFavoritesService(ctx).GetFavoriteList(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to get favorite list"
-	// 	return resp, err
-	// }
+	favoriteList, err := service.NewVideoFavoritesService(ctx).GetFavoriteList(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetFavoriteList failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get favorite list"
+		return resp, err
+	}
 
-	// resp.FavoriteList = favorites
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved favorite list"
+	resp.FavoriteList = favoriteList
+	resp.TotalCount = int64(len(favoriteList))
 	return resp, nil
 }
 

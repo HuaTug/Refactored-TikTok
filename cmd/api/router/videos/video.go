@@ -57,8 +57,10 @@ func Register(r *server.Hertz) {
 			_popular.GET("/", videos.VideoPopular)
 		}
 
+		// ========== V1版本API（收藏夹系统） ==========
+		_v1 := root.Group("/v1", _v2Mw()...)
 		{
-			_favorite := _v2.Group("/favorite")
+			_favorite := _v1.Group("/favorite")
 			_favorite.POST("/create", append(_createFavoriteMv(), videos.CreateFavoriteVideo)...)
 			_favorite.GET("/list", append(_getFavoriteListMv(), videos.GetFavoroteList)...)
 			_favorite.GET("/video/list", append(_getFavoriteVideoMv(), videos.GetFavoriteVideoList)...)
