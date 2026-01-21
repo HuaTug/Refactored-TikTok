@@ -3,6 +3,7 @@ package oss
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/minio/minio-go/v7"
@@ -31,14 +32,40 @@ func InitMinio() error {
 	hlog.Info("Connect Minio Success")
 
 	// Set public read policy for all buckets that need cross-origin access
-	bucketsToSetPolicy := []string{"tiktok-user-content", "video", "picture", "tiktok-cache-hot"}
-	for _, bucketName := range bucketsToSetPolicy {
-		if err := SetBucketPublicReadPolicy(bucketName); err != nil {
-			hlog.Warnf("Failed to set policy for %s bucket: %v", bucketName, err)
+	// Run this in a goroutine to avoid blocking the main initialization
+	go func() {
+		bucketsToSetPolicy := []string{"tiktok-user-content", "video", "picture", "tiktok-cache-hot"}
+		for _, bucketName := range bucketsToSetPolicy {
+			// Add retry logic with exponential backoff
+			if err := SetBucketPublicReadPolicyWithRetry(bucketName, 3); err != nil {
+				hlog.Warnf("Failed to set policy for %s bucket after retries: %v", bucketName, err)
+			}
+			// Add delay between bucket operations to avoid rate limiting
+			time.Sleep(500 * time.Millisecond)
 		}
-	}
+	}()
 
 	return nil
+}
+
+// SetBucketPublicReadPolicyWithRetry sets public read policy with retry logic
+func SetBucketPublicReadPolicyWithRetry(bucketName string, maxRetries int) error {
+	var lastErr error
+	for i := 0; i < maxRetries; i++ {
+		if i > 0 {
+			// Exponential backoff: 1s, 2s, 4s...
+			backoff := time.Duration(1<<uint(i)) * time.Second
+			hlog.Infof("Retrying set policy for bucket %s in %v (attempt %d/%d)", bucketName, backoff, i+1, maxRetries)
+			time.Sleep(backoff)
+		}
+
+		lastErr = SetBucketPublicReadPolicy(bucketName)
+		if lastErr == nil {
+			return nil
+		}
+		hlog.Warnf("Attempt %d failed for bucket %s: %v", i+1, bucketName, lastErr)
+	}
+	return lastErr
 }
 
 // SetBucketPublicReadPolicy sets public read policy for a bucket to allow cross-origin video access
