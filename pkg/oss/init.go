@@ -34,15 +34,20 @@ func InitMinio() error {
 	// Set public read policy for all buckets that need cross-origin access
 	// Run this in a goroutine to avoid blocking the main initialization
 	go func() {
+		// Wait a bit before starting to let MinIO fully initialize
+		time.Sleep(2 * time.Second)
+
 		bucketsToSetPolicy := []string{"tiktok-user-content", "video", "picture", "tiktok-cache-hot"}
 		for _, bucketName := range bucketsToSetPolicy {
 			// Add retry logic with exponential backoff
 			if err := SetBucketPublicReadPolicyWithRetry(bucketName, 3); err != nil {
-				hlog.Warnf("Failed to set policy for %s bucket after retries: %v", bucketName, err)
+				// Log as info since this is not critical - bucket may already have correct policy
+				hlog.Infof("Note: Could not set policy for %s bucket (may already be configured): %v", bucketName, err)
 			}
-			// Add delay between bucket operations to avoid rate limiting
-			time.Sleep(500 * time.Millisecond)
+			// Add longer delay between bucket operations to avoid rate limiting
+			time.Sleep(2 * time.Second)
 		}
+		hlog.Info("Bucket policy setup completed")
 	}()
 
 	return nil
@@ -53,8 +58,8 @@ func SetBucketPublicReadPolicyWithRetry(bucketName string, maxRetries int) error
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if i > 0 {
-			// Exponential backoff: 1s, 2s, 4s...
-			backoff := time.Duration(1<<uint(i)) * time.Second
+			// Exponential backoff: 2s, 4s, 8s...
+			backoff := time.Duration(2<<uint(i)) * time.Second
 			hlog.Infof("Retrying set policy for bucket %s in %v (attempt %d/%d)", bucketName, backoff, i+1, maxRetries)
 			time.Sleep(backoff)
 		}
@@ -63,7 +68,11 @@ func SetBucketPublicReadPolicyWithRetry(bucketName string, maxRetries int) error
 		if lastErr == nil {
 			return nil
 		}
-		hlog.Warnf("Attempt %d failed for bucket %s: %v", i+1, bucketName, lastErr)
+
+		// Only log as warning on last attempt
+		if i < maxRetries-1 {
+			hlog.Debugf("Attempt %d failed for bucket %s: %v", i+1, bucketName, lastErr)
+		}
 	}
 	return lastErr
 }

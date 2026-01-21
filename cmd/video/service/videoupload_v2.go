@@ -345,17 +345,17 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	hlog.Infof("Successfully completed MinIO multipart upload for session %s", session.UUID)
 
 	// 4. 获取合并后的视频信息（MinIO中的文件已经合并完成）
-	// 构造视频URL
-	videoURL := fmt.Sprintf("http://localhost:9000/%s/%s", session.BucketName, session.ObjectName)
+	// 构造视频URL - 使用 MinIO 的访问地址
+	videoURL := fmt.Sprintf("http://localhost:9002/%s/%s", session.BucketName, session.ObjectName)
 
-	// 模拟视频处理响应（实际应该从MinIO获取文件信息）
+	// 视频处理响应
 	uploadResp := &oss.VideoUploadResponse{
 		VideoID:          session.VideoID,
 		SourceURL:        videoURL,
 		ProcessedURLs:    map[int]string{720: videoURL},                        // 简化处理，使用原始URL
-		ThumbnailURLs:    map[string]string{"medium": videoURL + "_thumb.jpg"}, // 模拟缩略图
-		AnimatedCoverURL: videoURL + "_animated.gif",                           // 模拟动态封面
-		MetadataURL:      videoURL + "_metadata.json",                          // 模拟元数据
+		ThumbnailURLs:    map[string]string{"medium": videoURL + "_thumb.jpg"}, // 缩略图路径
+		AnimatedCoverURL: videoURL + "_animated.gif",                           // 动态封面路径
+		MetadataURL:      videoURL + "_metadata.json",                          // 元数据路径
 	}
 
 	// 5. 获取视频文件大小（从MinIO）

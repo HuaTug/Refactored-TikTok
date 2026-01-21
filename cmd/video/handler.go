@@ -106,6 +106,9 @@ func (s *VideoServiceImpl) VideoPublishStartV2(ctx context.Context, req *videos.
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishStart (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		resp.Base.Code = consts.StatusInternalServerError
+		resp.Base.Msg = "Failed to start video upload: " + err.Error()
+		return resp, err
 	}
 
 	// 获取用户存储配额信息
