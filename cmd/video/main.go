@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 
+	"HuaTug.com/config/cache"
 	"HuaTug.com/config/jaeger"
 	"HuaTug.com/kitex_gen/videos/videoservice"
 
@@ -26,6 +27,7 @@ func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
 	config.Init() // 首先加载配置
 	dal.Init()    // 然后初始化数据库（需要使用配置）
+	cache.Init()  // 初始化缓存
 	redis.Load()
 	oss.InitMinio()
 	client.Init()
