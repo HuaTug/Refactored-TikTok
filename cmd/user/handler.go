@@ -33,6 +33,8 @@ type UserServiceImpl struct{}
 
 // CreateUser implements the UserServiceImpl interface.
 func (s *UserServiceImpl) CreateUser(ctx context.Context, req *users.CreateUserRequest) (resp *users.CreateUserResponse, err error) {
+	hlog.CtxInfof(ctx, "CreateUser RPC called - UserName: %s, Email: %s", req.UserName, req.Email)
+
 	resp = new(users.CreateUserResponse)
 	resp.Base = &base.Status{}
 

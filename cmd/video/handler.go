@@ -192,12 +192,22 @@ func (s *VideoServiceImpl) VideoPublishCompleteV2(ctx context.Context, req *vide
 
 	// 优先使用新的TikTok风格上传服务V2
 	uploadServiceV2 := service.NewVideoUploadServiceV2(ctx)
-	err = uploadServiceV2.CompleteUpload(req)
+	completeResp, err := uploadServiceV2.CompleteUpload(req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishComplete (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		// 设置错误状态
+		resp.Base.Code = consts.StatusInternalServerError
+		resp.Base.Msg = "Video publish completion failed: " + err.Error()
+		return resp, nil
 	}
 
+	// 如果成功完成，返回完整响应
+	if completeResp != nil {
+		return completeResp, nil
+	}
+
+	// 回退到简单成功响应（不应该发生，但作为后备）
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Video Publish Completed Successfully (V2 TikTok Style)"
 	return resp, nil

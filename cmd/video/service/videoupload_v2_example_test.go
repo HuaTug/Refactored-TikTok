@@ -106,7 +106,7 @@ func TestMinIOChunkedUpload(t *testing.T) {
 		UserId:            12345,
 	}
 
-	err = service.CompleteUpload(completeReq)
+	_, err = service.CompleteUpload(completeReq)
 	if err != nil {
 		t.Fatalf("完成上传失败: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestRealVideoUpload(t *testing.T) {
 		UserId:            12345,
 	}
 
-	err = service.CompleteUpload(completeReq)
+	_, err = service.CompleteUpload(completeReq)
 	if err != nil {
 		t.Fatalf("完成上传失败: %v", err)
 	}

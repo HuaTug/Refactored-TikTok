@@ -79,7 +79,7 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV
 	}
 
 	// 3. 生成video_id
-	videoID, err := db.GetMaxVideoId(s.ctx)
+	videoID, err := db.GetMaxVideoId(s.ctx, req.UserId)
 	if err != nil {
 		hlog.Errorf("Failed to generate video_id for user %d: %v", req.UserId, err)
 		return nil, fmt.Errorf("failed to generate video_id: %w", err)
@@ -261,14 +261,14 @@ func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequ
 }
 
 // CompleteUpload 完成上传（TikTok风格处理）
-func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRequestV2) error {
+func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRequestV2) (*videos.VideoPublishCompleteResponseV2, error) {
 	hlog.Infof("Starting complete upload for session %s, user %d", req.UploadSessionUuid, req.UserId)
 
 	// 1. 获取上传会话
 	session, err := s.getUploadSession(req.UploadSessionUuid, req.UserId)
 	if err != nil {
 		hlog.Errorf("Failed to get upload session %s: %v", req.UploadSessionUuid, err)
-		return fmt.Errorf("failed to get upload session: %w", err)
+		return nil, fmt.Errorf("failed to get upload session: %w", err)
 	}
 
 	uploadedCount := s.countUploadedChunks(session.UploadedChunks)
@@ -291,7 +291,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		}
 		hlog.Errorf("Missing chunks for session %s: %v", session.UUID, missingChunks)
 
-		return fmt.Errorf("not all chunks have been uploaded: %d/%d uploaded, missing chunks: %v",
+		return nil, fmt.Errorf("not all chunks have been uploaded: %d/%d uploaded, missing chunks: %v",
 			uploadedCount, session.TotalChunks, missingChunks)
 	}
 
@@ -321,7 +321,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 				i, session.UUID, getUploadedPartsKeys(session.UploadedParts))
 			session.Status = "failed"
 			s.saveUploadSession(session)
-			return fmt.Errorf("missing part %d in uploaded parts", i)
+			return nil, fmt.Errorf("missing part %d in uploaded parts", i)
 		}
 	}
 
@@ -339,7 +339,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		session.Status = "failed"
 		s.saveUploadSession(session)
 		hlog.Errorf("Failed to complete MinIO multipart upload for session %s: %v", session.UUID, err)
-		return fmt.Errorf("failed to complete multipart upload: %w", err)
+		return nil, fmt.Errorf("failed to complete multipart upload: %w", err)
 	}
 
 	hlog.Infof("Successfully completed MinIO multipart upload for session %s", session.UUID)
@@ -414,7 +414,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		session.Status = "failed"
 		s.saveUploadSession(session)
 		hlog.Errorf("Failed to save video record for session %s: %v", session.UUID, err)
-		return fmt.Errorf("failed to save video record: %w", err)
+		return nil, fmt.Errorf("failed to save video record: %w", err)
 	}
 
 	// 8. 更新用户存储配额
@@ -432,7 +432,31 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	}()
 
 	hlog.Infof("Successfully completed upload for session %s, video %d", session.UUID, session.VideoID)
-	return nil
+
+	// 获取用户存储配额信息
+	quota, err := s.GetUserStorageQuota(session.UserID)
+	if err != nil {
+		hlog.Warnf("Failed to get user storage quota: %v", err)
+		quota = &videos.UserStorageQuota{} // 返回空配额
+	}
+
+	// 返回完整的响应对象
+	resp := &videos.VideoPublishCompleteResponseV2{
+		Base: &base.Status{
+			Code: 200,
+			Msg:  "Video Publish Completed Successfully (V2 TikTok Style)",
+		},
+		VideoId:            session.VideoID,
+		VideoSourceUrl:     uploadResp.SourceURL,
+		ProcessedVideoUrls: convertToInt32Map(uploadResp.ProcessedURLs),
+		ThumbnailUrls:      uploadResp.ThumbnailURLs,
+		AnimatedCoverUrl:   uploadResp.AnimatedCoverURL,
+		MetadataUrl:        uploadResp.MetadataURL,
+		ProcessingStatus:   "completed",
+		ProcessingJobId:    0, // 暂时没有处理任务ID
+		UpdatedQuota:       quota,
+	}
+	return resp, nil
 }
 
 // CancelUpload 取消上传
@@ -842,4 +866,13 @@ func (s *VideoUploadServiceV2) countUploadedChunks(uploadedChunks []bool) int {
 		}
 	}
 	return count
+}
+
+// convertToInt32Map 将map[int]string转换为map[int32]string
+func convertToInt32Map(m map[int]string) map[int32]string {
+	result := make(map[int32]string)
+	for k, v := range m {
+		result[int32(k)] = v
+	}
+	return result
 }

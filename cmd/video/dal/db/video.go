@@ -105,16 +105,16 @@ func InsertVideo(ctx context.Context, video *base.Video) error {
 	}
 	return nil
 }
-func GetMaxVideoId(ctx context.Context) (string, error) {
+func GetMaxVideoId(ctx context.Context, userID int64) (string, error) {
 	var maxId *int64
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Select("MAX(video_id)").Scan(&maxId).Error; err != nil {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id = ?", userID).Select("MAX(video_id)").Scan(&maxId).Error; err != nil {
 		return "", err
 	}
 	if maxId == nil {
 		return "1", nil
 	}
 
-	return fmt.Sprint(*maxId), nil
+	return fmt.Sprint(*maxId + 1), nil
 }
 func GetVideo(ctx context.Context, vid int64) (*base.Video, error) {
 	var data base.Video
