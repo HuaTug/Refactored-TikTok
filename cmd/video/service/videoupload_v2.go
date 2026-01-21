@@ -345,8 +345,8 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	hlog.Infof("Successfully completed MinIO multipart upload for session %s", session.UUID)
 
 	// 4. 获取合并后的视频信息（MinIO中的文件已经合并完成）
-	// 构造视频URL - 使用 MinIO 的访问地址
-	videoURL := fmt.Sprintf("http://localhost:9002/%s/%s", session.BucketName, session.ObjectName)
+	// 构造视频URL - 使用相对路径，前端通过 Vite 代理访问 MinIO
+	videoURL := fmt.Sprintf("/%s/%s", session.BucketName, session.ObjectName)
 
 	// 视频处理响应
 	uploadResp := &oss.VideoUploadResponse{
