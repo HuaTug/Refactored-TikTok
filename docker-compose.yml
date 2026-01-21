@@ -1,7 +1,7 @@
 services:
   mysql:
     image: mysql:8.0.35
-    container_name: kitex_mysql    
+    container_name: kitex_mysql
     volumes:
       - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
       - ./config/mysql/my.cnf:/etc/mysql/my.cnf
@@ -101,6 +101,7 @@ services:
     environment:
       MINIO_ROOT_USER: tiktok_minio_admin
       MINIO_ROOT_PASSWORD: MainMinIO@TikTok#2025!SecurePass
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     command: server /data --console-address ":9001"
     volumes:
       - ./config/minio/data:/data
@@ -186,20 +187,20 @@ services:
       ZOOKEEPER_INIT_LIMIT: 10
       ZOOKEEPER_SYNC_LIMIT: 5
       ZOOKEEPER_MAX_CLIENT_CNXNS: 60
-      
+
       # 安全配置 - 启用SASL认证
       ZOOKEEPER_AUTH_PROVIDER_SASL: org.apache.zookeeper.server.auth.SASLAuthenticationProvider
       ZOOKEEPER_REQUIRE_CLIENT_AUTH_SCHEME: sasl
       ZOOKEEPER_JAAS_LOGIN_RENEW: 3600000
-      
+
       # JVM配置
       KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
       KAFKA_JVM_PERFORMANCE_OPTS: "-server -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35"
-      
+
       # 日志配置
       ZOOKEEPER_LOG4J_ROOT_LOGLEVEL: INFO
       ZOOKEEPER_LOG4J_LOGGERS: "org.apache.zookeeper=INFO"
-      
+
       # 安全选项
       KAFKA_OPTS: >-
         -Djava.security.auth.login.config=/etc/kafka/secrets/zookeeper_jaas.conf
@@ -234,7 +235,7 @@ services:
     networks:
       - docker_net
     restart: unless-stopped
-    
+
   work:
     image: work:latest
     container_name: Micro_Server
@@ -247,7 +248,7 @@ services:
       - etcd
       - minio
       - kafka
-    profiles: 
+    profiles:
       - release
     ports:
       - 8000:8888

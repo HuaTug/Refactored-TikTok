@@ -1,6 +1,7 @@
 package oss
 
 import (
+	"context"
 	"os"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -28,6 +29,48 @@ func InitMinio() error {
 	}
 
 	hlog.Info("Connect Minio Success")
+
+	// Set CORS for the video content bucket to allow cross-origin access
+	if err := SetBucketCORS("tiktok-user-content"); err != nil {
+		hlog.Warnf("Failed to set CORS for tiktok-user-content bucket: %v", err)
+	}
+
+	return nil
+}
+
+// SetBucketCORS sets CORS configuration for a bucket to allow cross-origin video access
+func SetBucketCORS(bucketName string) error {
+	ctx := context.Background()
+
+	// Check if bucket exists first
+	exists, err := minioClient.BucketExists(ctx, bucketName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		hlog.Infof("Bucket %s does not exist yet, skipping CORS setup", bucketName)
+		return nil
+	}
+
+	// Set bucket policy to allow public read access for videos
+	policy := `{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Effect": "Allow",
+				"Principal": {"AWS": ["*"]},
+				"Action": ["s3:GetObject"],
+				"Resource": ["arn:aws:s3:::` + bucketName + `/*"]
+			}
+		]
+	}`
+
+	err = minioClient.SetBucketPolicy(ctx, bucketName, policy)
+	if err != nil {
+		return err
+	}
+
+	hlog.Infof("Successfully set public read policy for bucket: %s", bucketName)
 	return nil
 }
 

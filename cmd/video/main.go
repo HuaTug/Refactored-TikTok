@@ -59,7 +59,7 @@ func main() {
 	suite, closer := jaeger.NewServerSuite().Init("Video")
 	defer closer.Close()
 
-	ip := "localhost"
+  ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8891")
 	if err != nil {
 		panic(err)
