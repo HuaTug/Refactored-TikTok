@@ -47,18 +47,18 @@ func Register(r *server.Hertz) {
 			_video.GET("/analytics", append(_getvideoanalyticsV2Mw(), videos.GetVideoAnalyticsV2)...)
 		}
 
-		// ========== 通用功能（迁移到V2路径） ==========
-		_v2.POST("/stream", append(_videoStreamVideoMv(), videos.VideoStream)...)
-		_v2.GET("/recommend/video", append(_videorecommendvideoMw(), videos.RecommendVideo)...)
+		// ========== V1版本API ==========
+		_v1 := root.Group("/v1", _v2Mw()...)
 
-		//自己添加路由 - 迁移到V2
+		// ========== 通用功能（迁移到V1路径） ==========
+		_v1.POST("/stream", append(_videoStreamVideoMv(), videos.VideoStream)...)
+		_v1.GET("/recommend/video", append(_videorecommendvideoMw(), videos.RecommendVideo)...)
+
+		//自己添加路由 - 迁移到V1
 		{
-			_popular := _v2.Group("/popular")
+			_popular := _v1.Group("/popular")
 			_popular.GET("/", videos.VideoPopular)
 		}
-
-		// ========== V1版本API（收藏夹系统） ==========
-		_v1 := root.Group("/v1", _v2Mw()...)
 		{
 			_favorite := _v1.Group("/favorite")
 			_favorite.POST("/create", append(_createFavoriteMv(), videos.CreateFavoriteVideo)...)
@@ -71,12 +71,12 @@ func Register(r *server.Hertz) {
 		}
 
 		{
-			_shared := _v2.Group("/share")
+			_shared := _v1.Group("/share")
 			_shared.POST("/video", append(_sharedVideoMv(), videos.SharedVideo)...)
 		}
 
 		{
-			_video := _v2.Group("/video", _videoMw()...)
+			_video := _v1.Group("/video", _videoMw()...)
 			_video.GET("/feed", append(_feedserviceMw(), videos.FeedService)...)
 			_video.GET("/list", append(_videofeedlistMw(), videos.VideoFeedList)...)
 			_video.GET("/popular", append(_videopopularMw(), videos.VideoPopular)...)
@@ -86,14 +86,14 @@ func Register(r *server.Hertz) {
 
 		{
 			// 视频流和资源代理路由
-			_stream := _v2.Group("/stream")
+			_stream := _v1.Group("/stream")
 			_stream.GET("/video", videos.VideoStreamProxy)        // 视频流代理
 			_stream.GET("/thumbnail", videos.VideoThumbnailProxy) // 缩略图代理
 			_stream.GET("/metadata", videos.VideoMetadataProxy)   // 视频元数据
 		}
 
 		{
-			_visit := _v2.Group("/visit", _visitMw()...)
+			_visit := _v1.Group("/visit", _visitMw()...)
 			_visit.POST("/:id", append(_videoidlistMw(), videos.VideoVisit)...)
 		}
 	}
