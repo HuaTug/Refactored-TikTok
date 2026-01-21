@@ -21,6 +21,12 @@ func (v *VideoListService) VideoList(req *videos.VideoFeedListRequestV2) (video 
 	if video, count, err = db.Videolist(v.ctx, req); err != nil {
 		return video, count, errors.WithMessage(err, "dao.VideoList failed")
 	}
+
+	// Fix cover URLs: replace fake thumbnail URLs with video URLs
+	for _, vid := range video {
+		vid.CoverUrl = fixCoverUrl(vid.CoverUrl, vid.VideoUrl)
+	}
+
 	return video, count, err
 }
 
@@ -29,5 +35,9 @@ func (v *VideoListService) VideoInfo(req *videos.VideoInfoRequestV2) (data *base
 	if err != nil {
 		return nil, err
 	}
+
+	// Fix cover URL for single video info
+	data.CoverUrl = fixCoverUrl(data.CoverUrl, data.VideoUrl)
+
 	return data, nil
 }

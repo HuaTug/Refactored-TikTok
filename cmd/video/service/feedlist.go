@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
@@ -41,6 +42,31 @@ func (v *FeedListService) FeedList(req *videos.VideoFeedListRequestV2) (res []*b
 	if err != nil {
 		return nil, err
 	}
+
+	// Fix cover URLs: replace fake thumbnail URLs with video URLs
+	for _, video := range res {
+		video.CoverUrl = fixCoverUrl(video.CoverUrl, video.VideoUrl)
+	}
+
 	VideoFiles = res
 	return res, nil
+}
+
+// fixCoverUrl fixes cover URLs that point to non-existent thumbnail files
+// If cover_url ends with _thumb.jpg or other fake suffixes, replace it with video URL
+func fixCoverUrl(coverUrl, videoUrl string) string {
+	if coverUrl == "" {
+		return videoUrl
+	}
+
+	// Check if cover URL is a fake thumbnail path (ends with _thumb.jpg, _animated.gif, etc.)
+	fakeSuffixes := []string{"_thumb.jpg", "_animated.gif", "_metadata.json"}
+	for _, suffix := range fakeSuffixes {
+		if strings.HasSuffix(coverUrl, suffix) {
+			// Return video URL as fallback cover
+			return videoUrl
+		}
+	}
+
+	return coverUrl
 }

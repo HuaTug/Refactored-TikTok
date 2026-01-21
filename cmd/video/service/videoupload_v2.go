@@ -349,13 +349,15 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	videoURL := fmt.Sprintf("/%s/%s", session.BucketName, session.ObjectName)
 
 	// 视频处理响应
+	// 注意：缩略图、动态封面等需要后端视频处理模块(FFmpeg)真正生成
+	// 目前暂时使用视频URL作为缩略图占位，前端可用video元素的poster属性或canvas截取第一帧
 	uploadResp := &oss.VideoUploadResponse{
 		VideoID:          session.VideoID,
 		SourceURL:        videoURL,
-		ProcessedURLs:    map[int]string{720: videoURL},                        // 简化处理，使用原始URL
-		ThumbnailURLs:    map[string]string{"medium": videoURL + "_thumb.jpg"}, // 缩略图路径
-		AnimatedCoverURL: videoURL + "_animated.gif",                           // 动态封面路径
-		MetadataURL:      videoURL + "_metadata.json",                          // 元数据路径
+		ProcessedURLs:    map[int]string{720: videoURL},         // 简化处理，使用原始URL
+		ThumbnailURLs:    map[string]string{"medium": videoURL}, // 暂用视频URL，前端自行截取封面帧
+		AnimatedCoverURL: videoURL,                              // 暂用视频URL
+		MetadataURL:      "",                                    // 暂不生成元数据文件
 	}
 
 	// 5. 获取视频文件大小（从MinIO）
