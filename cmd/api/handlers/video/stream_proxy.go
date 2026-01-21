@@ -68,8 +68,8 @@ func VideoStreamProxy(ctx context.Context, c *app.RequestContext) {
 		if strings.HasPrefix(params.Path, "http") {
 			targetURL = params.Path
 		} else {
-			// 假设是MinIO路径，构建完整URL
-			targetURL = fmt.Sprintf("http://localhost:9091/browser/video/%s", params.Path)
+			// 假设是MinIO路径，构建完整URL using MinIO API endpoint
+			targetURL = fmt.Sprintf("%s/video/%s", oss.GetMinIOEndpoint(), params.Path)
 		}
 	} else {
 		c.JSON(consts.StatusBadRequest, map[string]interface{}{

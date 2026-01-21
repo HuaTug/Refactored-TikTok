@@ -30,16 +30,19 @@ func InitMinio() error {
 
 	hlog.Info("Connect Minio Success")
 
-	// Set CORS for the video content bucket to allow cross-origin access
-	if err := SetBucketCORS("tiktok-user-content"); err != nil {
-		hlog.Warnf("Failed to set CORS for tiktok-user-content bucket: %v", err)
+	// Set public read policy for all buckets that need cross-origin access
+	bucketsToSetPolicy := []string{"tiktok-user-content", "video", "picture", "tiktok-cache-hot"}
+	for _, bucketName := range bucketsToSetPolicy {
+		if err := SetBucketPublicReadPolicy(bucketName); err != nil {
+			hlog.Warnf("Failed to set policy for %s bucket: %v", bucketName, err)
+		}
 	}
 
 	return nil
 }
 
-// SetBucketCORS sets CORS configuration for a bucket to allow cross-origin video access
-func SetBucketCORS(bucketName string) error {
+// SetBucketPublicReadPolicy sets public read policy for a bucket to allow cross-origin video access
+func SetBucketPublicReadPolicy(bucketName string) error {
 	ctx := context.Background()
 
 	// Check if bucket exists first
@@ -48,8 +51,14 @@ func SetBucketCORS(bucketName string) error {
 		return err
 	}
 	if !exists {
-		hlog.Infof("Bucket %s does not exist yet, skipping CORS setup", bucketName)
-		return nil
+		hlog.Infof("Bucket %s does not exist yet, creating it...", bucketName)
+		// Create the bucket if it doesn't exist
+		err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: "us-east-1"})
+		if err != nil {
+			hlog.Warnf("Failed to create bucket %s: %v", bucketName, err)
+			return err
+		}
+		hlog.Infof("Successfully created bucket: %s", bucketName)
 	}
 
 	// Set bucket policy to allow public read access for videos

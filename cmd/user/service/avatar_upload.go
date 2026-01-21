@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"HuaTug.com/pkg/oss"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
@@ -25,9 +26,9 @@ func (s *AvatarUploadService) GetAvatarUploadUrl(userId int64, fileExtension str
 	// 生成唯一的上传标识
 	uploadToken := fmt.Sprintf("upload_%d_%d", userId, time.Now().Unix())
 
-	// 返回模拟的上传URL和访问URL
+	// 返回模拟的上传URL和访问URL - Use MinIO API endpoint
 	uploadUrl = fmt.Sprintf("http://localhost:8080/upload/avatar?token=%s&ext=%s", uploadToken, fileExtension)
-	accessUrl = fmt.Sprintf("http://localhost:9091/browser/picture/avatar/%d%s", userId, fileExtension)
+	accessUrl = fmt.Sprintf("%s/picture/avatar/%d%s", oss.GetMinIOEndpoint(), userId, fileExtension)
 
 	hlog.Infof("为用户 %d 生成头像上传URL: %s", userId, uploadUrl)
 	return uploadUrl, accessUrl, expiresIn, nil

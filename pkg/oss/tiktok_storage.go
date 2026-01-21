@@ -322,9 +322,9 @@ func (ts *TikTokStorage) uploadMetadata(ctx context.Context, bucketName, objectN
 	return err
 }
 
-// 生成URL
+// 生成URL - Use MinIO API URL format for direct access
 func (ts *TikTokStorage) generateURL(bucketName, objectName string) string {
-	return fmt.Sprintf("http://localhost:9091/browser/%s/%s", bucketName, objectName)
+	return fmt.Sprintf("%s/%s/%s", GetMinIOEndpoint(), bucketName, objectName)
 }
 
 // 为处理后的视频生成URL映射

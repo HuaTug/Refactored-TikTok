@@ -18,6 +18,18 @@ var (
 	minioClient *minio.Client
 )
 
+// GetMinIOEndpoint returns the MinIO API endpoint for URL generation
+func GetMinIOEndpoint() string {
+	// Use the same endpoint as configured in InitMinio
+	endpoint := getEnvOrDefault("MINIO_ENDPOINT", "localhost:9002")
+	useSSL := getEnvOrDefault("MINIO_USE_SSL", "false") == "true"
+	scheme := "http"
+	if useSSL {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s", scheme, endpoint)
+}
+
 func UploadAvatar(data *[]byte, dataSize int64, uid string, tag string) (string, error) {
 	// 在上传头像时需要满足 先删除旧的头像后 再上传新的头像
 	deleteAvatar(uid)
@@ -52,7 +64,8 @@ func UploadAvatar(data *[]byte, dataSize int64, uid string, tag string) (string,
 		return "", err
 	}
 
-	return fmt.Sprintf("http://%s/%s/%s", "localhost:9091/browser", bucketName, objectName), nil
+	// Use MinIO API URL format for direct access
+	return fmt.Sprintf("%s/%s/%s", GetMinIOEndpoint(), bucketName, objectName), nil
 }
 
 func deleteAvatar(uid string) {
@@ -95,8 +108,8 @@ func UploadVideo(path, vid string) (string, error) {
 		return "", err
 	}
 
-	// 返回视频的 URL
-	return fmt.Sprintf("http://%s/%s/%s", "localhost:9091/browser", bucketName, objectName), nil
+	// 返回视频的 URL - Use MinIO API URL format for direct access
+	return fmt.Sprintf("%s/%s/%s", GetMinIOEndpoint(), bucketName, objectName), nil
 }
 
 // ToDo: 上传视频封面时 也可以让用户自定义封面
@@ -122,8 +135,8 @@ func UploadVideoCover(path, vid string) (string, error) {
 		return "", err
 	}
 
-	// 返回封面的 URL
-	return fmt.Sprintf("http://%s/%s/%s", "localhost:9091/browser", bucketName, objectName), nil
+	// 返回封面的 URL - Use MinIO API URL format for direct access
+	return fmt.Sprintf("%s/%s/%s", GetMinIOEndpoint(), bucketName, objectName), nil
 }
 
 // 生成了下载的预签名地址，然后下载视频
