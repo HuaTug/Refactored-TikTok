@@ -24,5 +24,8 @@ relations:
 
 go:env build
 
+init-db:
+	docker-compose exec -T mysql mysql -u root -p'TikTok@MySQL#2025!Secure' < config/mysql/init.sql
+
 clean:
-	rm -f message
+	-rm -f message
