@@ -26,7 +26,6 @@ func UpdateUser(ctx context.Context, c *app.RequestContext) {
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	}
-	password, _ := utils.Crypt(update.PassWord)
 
 	// 获取上传的文件
 	uploadData, err := c.FormFile("file")
@@ -48,13 +47,25 @@ func UpdateUser(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	resp, err := rpc.UpdateUser(ctx, &users.UpdateUserRequest{
+	// 构建UpdateUserRequest，只传递必要的字段
+	req := &users.UpdateUserRequest{
 		UserId:   userId,
-		UserName: update.UserName,
-		Password: password,
 		Data:     fileContent,
 		Filesize: uploadData.Size,
-	})
+	}
+
+	// 只有当用户名非空时才更新用户名
+	if update.UserName != "" {
+		req.UserName = update.UserName
+	}
+
+	// 只有当密码非空时才更新密码
+	if update.PassWord != "" {
+		password, _ := utils.Crypt(update.PassWord)
+		req.Password = password
+	}
+
+	resp, err := rpc.UpdateUser(ctx, req)
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return

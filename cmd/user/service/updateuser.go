@@ -25,18 +25,31 @@ func NewUpdateUserService(ctx context.Context) *UpdateUserService {
 }
 
 func (v *UpdateUserService) UpdateUser(req *users.UpdateUserRequest) (err error) {
-	if avatarUrl, err := v.uploadAvatarToOss(fmt.Sprint(req.UserId), req.Data, req.Filesize); err != nil {
-		return errors.WithMessage(err, "DataProcess failed")
-	} else {
-		user := &base.User{
-			UserId:    req.UserId,
-			UserName:  req.UserName,
-			UpdatedAt: time.Now().Format(constants.DataFormate),
-			AvatarUrl: avatarUrl,
+	// 上传头像到OSS
+	var avatarUrl string
+	if req.Data != nil && req.Filesize > 0 {
+		if avatarUrl, err = v.uploadAvatarToOss(fmt.Sprint(req.UserId), req.Data, req.Filesize); err != nil {
+			return errors.WithMessage(err, "uploadAvatarToOss failed")
 		}
-		if err := db.UpdateUser(v.ctx, user); err != nil {
-			return errors.WithMessage(err, "dao.UpdateUser failed")
-		}
+	}
+
+	// 构建用户更新对象，只包含非空字段
+	user := &base.User{
+		UserId:    req.UserId,
+		UpdatedAt: time.Now().Format(constants.DataFormate),
+	}
+
+	// 只有当字段非空时才更新
+	if req.UserName != "" {
+		user.UserName = req.UserName
+	}
+	if avatarUrl != "" {
+		user.AvatarUrl = avatarUrl
+	}
+
+	// 调用数据库更新
+	if err := db.UpdateUser(v.ctx, user); err != nil {
+		return errors.WithMessage(err, "dao.UpdateUser failed")
 	}
 	return nil
 }

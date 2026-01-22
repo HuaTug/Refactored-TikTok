@@ -131,11 +131,25 @@ func DeleteUser(ctx context.Context, userId int64) error {
 
 func UpdateUser(ctx context.Context, user *base.User) error {
 	updates := map[string]interface{}{
-		"user_name":  user.UserName,
-		"email":      user.Email,
-		"sex":        user.Sex,
-		"avatar_url": user.AvatarUrl,
 		"updated_at": time.Now(),
+	}
+
+	// 只更新非空字段
+	if user.UserName != "" {
+		updates["user_name"] = user.UserName
+	}
+	if user.Email != "" {
+		updates["email"] = user.Email
+	}
+	if user.Sex != 0 {
+		updates["sex"] = user.Sex
+	}
+	if user.AvatarUrl != "" {
+		updates["avatar_url"] = user.AvatarUrl
+	}
+
+	if len(updates) == 1 { // 只有updated_at，没有其他字段需要更新
+		return nil
 	}
 
 	if err := DB.WithContext(ctx).Model(&UserWithPassword{}).Where("user_id=?", user.UserId).Updates(updates).Error; err != nil {

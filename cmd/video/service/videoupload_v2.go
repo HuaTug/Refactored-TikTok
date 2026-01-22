@@ -427,7 +427,6 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		UpdatedAt:   time.Now().Format(constants.DataFormate),
 		VideoUrl:    uploadResp.ProcessedURLs[720], // 默认使用720p
 		CoverUrl:    uploadResp.ThumbnailURLs["medium"],
-		DeletedAt:   "0",
 	}
 
 	if err := db.InsertVideo(s.ctx, video); err != nil {

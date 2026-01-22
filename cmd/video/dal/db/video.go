@@ -100,7 +100,7 @@ func FindVideo(ctx context.Context, videoId int64) (video *base.Video, err error
 }
 
 func InsertVideo(ctx context.Context, video *base.Video) error {
-	if err := DB.WithContext(ctx).Create(video).Error; err != nil {
+	if err := DB.WithContext(ctx).Omit("deleted_at").Create(video).Error; err != nil {
 		return err
 	}
 	return nil
