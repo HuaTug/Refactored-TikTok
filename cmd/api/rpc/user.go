@@ -119,3 +119,19 @@ func SendCode(ctx context.Context, req *users.SendCodeRequest) (resp *users.Send
 	}
 	return resp, nil
 }
+
+func GetAvatarUploadUrl(ctx context.Context, req *users.GetAvatarUploadUrlRequest) (resp *users.GetAvatarUploadUrlResponse, err error) {
+	resp, err = UserClient.GetAvatarUploadUrl(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, nil
+}
+
+func UpdateAvatar(ctx context.Context, req *users.UpdateAvatarRequest) (resp *users.UpdateAvatarResponse, err error) {
+	resp, err = UserClient.UpdateAvatar(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, nil
+}

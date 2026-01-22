@@ -37,6 +37,12 @@ func Register(r *server.Hertz) {
 				_query := _user.Group("/query", _queryMw()...)
 				_query.POST("/", append(_queryuserMw(), users.QueryUser)...)
 			}
+			{
+				// 头像相关路由
+				_avatar := _user.Group("/avatar", _avatarMw()...)
+				_avatar.POST("/upload-url", append(_avatarUploadUrlMw(), users.GetAvatarUploadUrl)...)
+				_avatar.POST("/update", append(_avatarUpdateMw(), users.UpdateAvatar)...)
+			}
 		}
 	}
 }

@@ -77,3 +77,18 @@ func _queryuserMw() []app.HandlerFunc {
 	// your code...
 	return authfunc.Auth()
 }
+
+func _avatarMw() []app.HandlerFunc {
+	// your code...
+	return nil
+}
+
+func _avatarUploadUrlMw() []app.HandlerFunc {
+	// your code...
+	return authfunc.Auth()
+}
+
+func _avatarUpdateMw() []app.HandlerFunc {
+	// your code...
+	return authfunc.Auth()
+}
