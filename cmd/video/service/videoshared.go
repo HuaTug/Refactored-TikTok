@@ -11,7 +11,6 @@ import (
 	"HuaTug.com/cmd/video/infras/redis"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
-	"HuaTug.com/pkg/constants"
 
 	"github.com/pkg/errors"
 )
@@ -64,7 +63,7 @@ func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequestV2) error
 		UserId:    req.UserId,
 		VideoId:   req.VideoId,
 		ToUserId:  req.ToUserId,
-		CreatedAt: time.Now().Format(constants.DataFormate),
+		CreatedAt: time.Now(),
 	}); err != nil {
 		return errors.WithMessage(err, "Failed to shared video")
 	}
@@ -72,7 +71,7 @@ func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequestV2) error
 		UserId:       req.UserId,
 		VideoId:      req.VideoId,
 		BehaviorType: "share",
-		BehaviorTime: time.Now().Format(constants.DataFormate),
+		BehaviorTime: time.Now(),
 	}
 	go redis.IncrVideoShareInfo(fmt.Sprint(req.VideoId))
 	go db.AddUserShareBehavior(s.ctx, share)

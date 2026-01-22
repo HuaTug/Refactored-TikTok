@@ -347,3 +347,220 @@ func AddUserShareBehavior(ctx context.Context, behavior *model.UserBehavior) err
 	}
 	return nil
 }
+
+// ========================================
+// Video Counter Operations (for high concurrency)
+// ========================================
+
+// GetOrCreateVideoCounter gets or creates a video counter record
+func GetOrCreateVideoCounter(ctx context.Context, videoId int64) (*model.VideoCounter, error) {
+	var counter model.VideoCounter
+	err := DB.WithContext(ctx).Where("video_id = ?", videoId).First(&counter).Error
+	if err != nil {
+		// Create new counter
+		counter = model.VideoCounter{
+			VideoId: videoId,
+		}
+		if err := DB.WithContext(ctx).Create(&counter).Error; err != nil {
+			return nil, errors.WithMessage(err, "Failed to create VideoCounter")
+		}
+	}
+	return &counter, nil
+}
+
+// IncrementVideoCounter increments a specific counter field
+func IncrementVideoCounter(ctx context.Context, videoId int64, field string, delta int64) error {
+	var updateExpr string
+	switch field {
+	case "visit_count":
+		updateExpr = "visit_count + ?"
+	case "like_count":
+		updateExpr = "like_count + ?"
+	case "comment_count":
+		updateExpr = "comment_count + ?"
+	case "share_count":
+		updateExpr = "share_count + ?"
+	case "favorite_count":
+		updateExpr = "favorite_count + ?"
+	case "download_count":
+		updateExpr = "download_count + ?"
+	default:
+		return errors.Errorf("invalid field: %s", field)
+	}
+
+	if err := DB.WithContext(ctx).Model(&model.VideoCounter{}).
+		Where("video_id = ?", videoId).
+		UpdateColumn(field, DB.Raw(updateExpr, delta)).Error; err != nil {
+		return errors.WithMessage(err, "Failed to increment VideoCounter")
+	}
+	return nil
+}
+
+// SyncVideoCountersToMainTable syncs counter values to main video table (batch operation)
+func SyncVideoCountersToMainTable(ctx context.Context, videoId int64) error {
+	var counter model.VideoCounter
+	if err := DB.WithContext(ctx).Where("video_id = ?", videoId).First(&counter).Error; err != nil {
+		return errors.WithMessage(err, "Failed to get VideoCounter")
+	}
+
+	updates := map[string]interface{}{
+		"visit_count":     counter.VisitCount,
+		"likes_count":     counter.LikeCount,
+		"comment_count":   counter.CommentCount,
+		"share_count":     counter.ShareCount,
+		"favorites_count": counter.FavoriteCount,
+	}
+
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Updates(updates).Error; err != nil {
+		return errors.WithMessage(err, "Failed to sync VideoCounters")
+	}
+	return nil
+}
+
+// ========================================
+// Campus Video Operations
+// ========================================
+
+// GetVideosBySchool gets videos by school_id
+func GetVideosBySchool(ctx context.Context, schoolId int64, page, pageSize int64) ([]*base.Video, int64, error) {
+	db := DB.WithContext(ctx).Model(&base.Video{}).Where("school_id = ? AND deleted_at IS NULL AND audit_status = 1 AND open = 1", schoolId)
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to count videos by school")
+	}
+
+	var videos []*base.Video
+	if err := db.Order("created_at DESC").Limit(int(pageSize)).Offset(int(pageSize * (page - 1))).Find(&videos).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to get videos by school")
+	}
+
+	return videos, total, nil
+}
+
+// UpdateVideoSchool updates video school_id
+func UpdateVideoSchool(ctx context.Context, videoId, schoolId int64) error {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Update("school_id", schoolId).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update video school")
+	}
+	return nil
+}
+
+// UpdateVideoMetadata updates video metadata fields
+func UpdateVideoMetadata(ctx context.Context, videoId int64, duration, width, height uint, fileSize uint64) error {
+	updates := map[string]interface{}{
+		"duration":  duration,
+		"width":     width,
+		"height":    height,
+		"file_size": fileSize,
+	}
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Updates(updates).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update video metadata")
+	}
+	return nil
+}
+
+// UpdateVideoPermissions updates video permission settings
+func UpdateVideoPermissions(ctx context.Context, videoId int64, allowComment, allowDuet, allowDownload int8) error {
+	updates := map[string]interface{}{
+		"allow_comment":  allowComment,
+		"allow_duet":     allowDuet,
+		"allow_download": allowDownload,
+	}
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Updates(updates).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update video permissions")
+	}
+	return nil
+}
+
+// UpdateVideoLocation updates video publish location
+func UpdateVideoLocation(ctx context.Context, videoId int64, location string) error {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Update("location", location).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update video location")
+	}
+	return nil
+}
+
+// UpdateVideoAuditStatus updates video audit status
+func UpdateVideoAuditStatus(ctx context.Context, videoId int64, auditStatus int8) error {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Update("audit_status", auditStatus).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update video audit status")
+	}
+	return nil
+}
+
+// GetPendingAuditVideos gets videos pending audit (for admin)
+func GetPendingAuditVideos(ctx context.Context, page, pageSize int64) ([]*base.Video, int64, error) {
+	db := DB.WithContext(ctx).Model(&base.Video{}).Where("audit_status = 0 AND deleted_at IS NULL")
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to count pending audit videos")
+	}
+
+	var videos []*base.Video
+	if err := db.Order("created_at ASC").Limit(int(pageSize)).Offset(int(pageSize * (page - 1))).Find(&videos).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to get pending audit videos")
+	}
+
+	return videos, total, nil
+}
+
+// UpdateFavoriteVideoCount updates the video count in a favorites folder
+func UpdateFavoriteVideoCount(ctx context.Context, favoriteId int64, delta int) error {
+	if err := DB.WithContext(ctx).Model(&model.Favorite{}).
+		Where("favorite_id = ?", favoriteId).
+		UpdateColumn("video_count", DB.Raw("video_count + ?", delta)).Error; err != nil {
+		return errors.WithMessage(err, "Failed to update favorite video count")
+	}
+	return nil
+}
+
+// GetUserVideoWatchHistory gets user's video watch history
+func GetUserVideoWatchHistory(ctx context.Context, userId int64, page, pageSize int64) ([]*model.UserVideoWatchHistory, int64, error) {
+	db := DB.WithContext(ctx).Model(&model.UserVideoWatchHistory{}).Where("user_id = ? AND deleted_at IS NULL", userId)
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to count watch history")
+	}
+
+	var history []*model.UserVideoWatchHistory
+	if err := db.Order("watch_time DESC").Limit(int(pageSize)).Offset(int(pageSize * (page - 1))).Find(&history).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to get watch history")
+	}
+
+	return history, total, nil
+}
+
+// UpdateWatchHistory updates or creates watch history record
+func UpdateWatchHistory(ctx context.Context, userId, videoId int64, watchDuration uint, completionRate float64) error {
+	var history model.UserVideoWatchHistory
+	err := DB.WithContext(ctx).Where("user_id = ? AND video_id = ?", userId, videoId).First(&history).Error
+
+	if err != nil {
+		// Create new record
+		history = model.UserVideoWatchHistory{
+			UserId:         userId,
+			VideoId:        videoId,
+			WatchDuration:  watchDuration,
+			CompletionRate: completionRate,
+		}
+		return DB.WithContext(ctx).Create(&history).Error
+	}
+
+	// Update existing record
+	updates := map[string]interface{}{
+		"watch_duration":  watchDuration,
+		"completion_rate": completionRate,
+	}
+	return DB.WithContext(ctx).Model(&model.UserVideoWatchHistory{}).Where("user_video_watch_history_id = ?", history.UserVideoWatchHistoryId).Updates(updates).Error
+}
+
+// ClearUserWatchHistory clears user's watch history
+func ClearUserWatchHistory(ctx context.Context, userId int64) error {
+	if err := DB.WithContext(ctx).Where("user_id = ?", userId).Delete(&model.UserVideoWatchHistory{}).Error; err != nil {
+		return errors.WithMessage(err, "Failed to clear watch history")
+	}
+	return nil
+}

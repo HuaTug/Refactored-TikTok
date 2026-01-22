@@ -42,8 +42,9 @@ func (cs *CommentServiceWithIndex) CreateCommentWithIndex(ctx context.Context, c
 
 	// 3. 在对应分片创建评论
 	err := cs.shardingManager.ExecuteInShard(ctx, comment.VideoId, true, func(db *gorm.DB, tableName string) error {
-		comment.CreatedAt = time.Now().Format("2006-01-02 15:04:05")
-		comment.UpdatedAt = comment.CreatedAt
+		now := time.Now()
+		comment.CreatedAt = now
+		comment.UpdatedAt = now
 		return db.WithContext(ctx).Table(tableName).Create(comment).Error
 	})
 

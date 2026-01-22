@@ -58,7 +58,7 @@ func (s *ShardedCommentDB) CreateCommentWithTransaction(ctx context.Context, com
 	}
 
 	// 设置时间戳
-	now := time.Now().Format("2006-01-02 15:04:05")
+	now := time.Now()
 	comment.CreatedAt = now
 	comment.UpdatedAt = now
 
@@ -161,7 +161,7 @@ func (s *ShardedCommentDB) UpdateComment(ctx context.Context, comment *model.Com
 		return errors.New("comment id cannot be zero")
 	}
 
-	comment.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+	comment.UpdatedAt = time.Now()
 
 	// 使用视频ID作为分片键更新对应分片
 	return s.shardingManager.ExecuteInShard(ctx, comment.VideoId, true, func(db *gorm.DB, tableName string) error {
@@ -248,7 +248,7 @@ func (s *ShardedCommentDB) CreateCommentLikeWithSharding(ctx context.Context, co
 	like := &model.CommentLike{
 		UserId:    userID,
 		CommentId: commentID,
-		CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
+		CreatedAt: time.Now(),
 	}
 
 	// 使用评论的视频ID作为分片键
@@ -377,7 +377,7 @@ func CreateCommentWithTransaction(ctx context.Context, comment *model.Comment) e
 	}
 
 	// 设置时间戳
-	now := time.Now().Format("2006-01-02 15:04:05")
+	now := time.Now()
 	comment.CreatedAt = now
 	comment.UpdatedAt = now
 

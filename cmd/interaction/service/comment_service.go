@@ -216,9 +216,9 @@ func (service *CommentService) CreateComment(ctx context.Context, req *interacti
 		ParentId:         parentId,
 		UserId:           uid,
 		Content:          strings.TrimSpace(req.Content),
-		CreatedAt:        time.Now().Format(constants.DataFormate),
-		UpdatedAt:        time.Now().Format(constants.DataFormate),
-		DeletedAt:        "",
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		DeletedAt:        nil,
 		ReplyToCommentId: replyToCommentId, // 记录实际回复目标
 	}
 
@@ -247,7 +247,7 @@ func (service *CommentService) CreateComment(ctx context.Context, req *interacti
 		UserId:       uid,
 		VideoId:      videoId,
 		BehaviorType: "comment",
-		BehaviorTime: time.Now().Format(constants.DataFormate),
+		BehaviorTime: time.Now(),
 	}
 
 	// Use goroutine with proper error handling and context
@@ -317,7 +317,7 @@ func (service *CommentService) sortCommentsByHot(commentIds []int64, pageNum, pa
 			CommentId: commentId,
 			Score:     hotScore,
 			LikeCount: likeCount,
-			CreatedAt: commentInfo.CreatedAt,
+			CreatedAt: commentInfo.CreatedAt.Format(constants.DataFormate),
 		})
 	}
 
@@ -345,12 +345,8 @@ func (service *CommentService) sortCommentsByHot(commentIds []int64, pageNum, pa
 }
 
 // calculateTimeFactor calculates time-based factor for hot sorting
-func (service *CommentService) calculateTimeFactor(createdAt string) float64 {
-	// Parse creation time
-	createdTime, err := time.Parse(constants.DataFormate, createdAt)
-	if err != nil {
-		return 0.0
-	}
+func (service *CommentService) calculateTimeFactor(createdAt time.Time) float64 {
+	createdTime := createdAt
 
 	// Calculate hours since creation
 	hoursSinceCreation := time.Since(createdTime).Hours()
@@ -400,10 +396,17 @@ func (service *CommentService) buildCommentData(commentId int64) (*base.Comment,
 
 	wg.Wait()
 
-	select {
-	case err := <-errChan:
-		return nil, err
-	default:
+	// Check for errors
+	if len(errChan) > 0 {
+		return nil, <-errChan
+	}
+
+	// Convert time.Time to string for base.Comment
+	createdAtStr := res.CreatedAt.Format(constants.DataFormate)
+	updatedAtStr := res.UpdatedAt.Format(constants.DataFormate)
+	var deletedAtStr string
+	if res.DeletedAt != nil {
+		deletedAtStr = res.DeletedAt.Format(constants.DataFormate)
 	}
 
 	return &base.Comment{
@@ -414,9 +417,9 @@ func (service *CommentService) buildCommentData(commentId int64) (*base.Comment,
 		LikeCount:        likeCount,
 		ChildCount:       childCount,
 		Content:          res.Content,
-		CreatedAt:        res.CreatedAt,
-		UpdatedAt:        res.UpdatedAt,
-		DeletedAt:        res.DeletedAt,
+		CreatedAt:        createdAtStr,
+		UpdatedAt:        updatedAtStr,
+		DeletedAt:        deletedAtStr,
 		ReplyToCommentId: res.ReplyToCommentId,
 	}, nil
 }
@@ -579,6 +582,13 @@ func (service *CommentService) GetVideoComment(req *interactions.ListCommentRequ
 			return nil, result
 		default:
 		}
+		// Convert time.Time to string for base.Comment
+		createdAtStr := res.CreatedAt.Format(constants.DataFormate)
+		updatedAtStr := res.UpdatedAt.Format(constants.DataFormate)
+		var deletedAtStr string
+		if res.DeletedAt != nil {
+			deletedAtStr = res.DeletedAt.Format(constants.DataFormate)
+		}
 		data = append(data, &base.Comment{
 			CommentId:        res.CommentId,
 			VideoId:          res.VideoId,
@@ -587,9 +597,9 @@ func (service *CommentService) GetVideoComment(req *interactions.ListCommentRequ
 			LikeCount:        likeCount,
 			ChildCount:       childCount,
 			Content:          res.Content,
-			CreatedAt:        res.CreatedAt,
-			UpdatedAt:        res.UpdatedAt,
-			DeletedAt:        res.DeletedAt,
+			CreatedAt:        createdAtStr,
+			UpdatedAt:        updatedAtStr,
+			DeletedAt:        deletedAtStr,
 			ReplyToCommentId: res.ReplyToCommentId,
 		})
 	}
@@ -639,6 +649,15 @@ func (service *CommentService) GetCommentComment(req *interactions.ListCommentRe
 			return nil, result
 		default:
 		}
+
+		// Convert time.Time to string for base.Comment
+		createdAtStr := res.CreatedAt.Format(constants.DataFormate)
+		updatedAtStr := res.UpdatedAt.Format(constants.DataFormate)
+		var deletedAtStr string
+		if res.DeletedAt != nil {
+			deletedAtStr = res.DeletedAt.Format(constants.DataFormate)
+		}
+
 		data = append(data, &base.Comment{
 			CommentId:        res.CommentId,
 			VideoId:          res.VideoId,
@@ -647,9 +666,9 @@ func (service *CommentService) GetCommentComment(req *interactions.ListCommentRe
 			LikeCount:        likeCount,
 			ChildCount:       childCount,
 			Content:          res.Content,
-			CreatedAt:        res.CreatedAt,
-			UpdatedAt:        res.UpdatedAt,
-			DeletedAt:        res.DeletedAt,
+			CreatedAt:        createdAtStr,
+			UpdatedAt:        updatedAtStr,
+			DeletedAt:        deletedAtStr,
 			ReplyToCommentId: res.ReplyToCommentId,
 		})
 	}

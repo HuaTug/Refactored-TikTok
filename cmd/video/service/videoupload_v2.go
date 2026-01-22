@@ -28,14 +28,19 @@ import (
 type VideoUploadServiceV2 struct {
 	ctx           context.Context
 	tikTokStorage *oss.TikTokStorage
-	sessionCache  sync.Map // 会话缓存，避免重复创建MinIO UploadID
+	sessionCache  sync.Map      // 会话缓存，避免重复创建MinIO UploadID
+	cleanupStopCh chan struct{} // 停止清理任务的通道
 }
 
 func NewVideoUploadServiceV2(ctx context.Context) *VideoUploadServiceV2 {
-	return &VideoUploadServiceV2{
+	service := &VideoUploadServiceV2{
 		ctx:           ctx,
 		tikTokStorage: oss.NewTikTokStorage(),
+		cleanupStopCh: make(chan struct{}),
 	}
+	// 启动后台清理任务
+	go service.startCleanupTask()
+	return service
 }
 
 // UploadSession 上传会话
@@ -105,6 +110,13 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV
 	// 6. 计算最优分片大小（假设每个分片5MB）
 	chunkSize := int64(5 * 1024 * 1024) // 5MB
 
+	// 7. 创建临时目录
+	tempDir := s.createTempDir(req.UserId, genUUID)
+	if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
+		hlog.Errorf("Failed to create temp directory %s: %v", tempDir, err)
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+
 	session := &UploadSession{
 		UUID:           genUUID,
 		UserID:         req.UserId,
@@ -115,7 +127,7 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV
 		Tags:           strings.Join(req.Tags, ","),
 		TotalChunks:    int(req.ChunkTotalNumber),
 		UploadedChunks: make([]bool, req.ChunkTotalNumber),
-		TempDir:        s.createTempDir(req.UserId, genUUID),
+		TempDir:        tempDir,
 		CreatedAt:      time.Now(),
 		ExpiresAt:      time.Now().Add(24 * time.Hour), // 24小时过期
 		Status:         "pending",
@@ -137,12 +149,9 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV
 
 	// 8. 保存会话到Redis
 	if err := s.saveUploadSession(session); err != nil {
+		// 保存失败时立即清理临时目录
+		go s.cleanupTempFiles(tempDir)
 		return nil, fmt.Errorf("failed to save upload session: %w", err)
-	}
-
-	// 9. 创建临时目录
-	if err := os.MkdirAll(session.TempDir, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
 	hlog.Infof("Started upload session %s for user %d, video %d, MinIO UploadID: %s",
@@ -228,6 +237,14 @@ func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequ
 	)
 	if err != nil {
 		hlog.Errorf("Failed to upload chunk %d to MinIO for session %s: %v", req.ChunkNumber, req.UploadSessionUuid, err)
+		// 如果这是第一个分片且上传失败，可能是会话配置错误，标记会话为失败
+		if req.ChunkNumber == 1 {
+			session.Status = "failed"
+			s.saveUploadSession(session)
+			// 异步清理临时目录
+			go s.cleanupTempFiles(session.TempDir)
+			go s.deleteUploadSession(session.UUID, session.UserID)
+		}
 		return fmt.Errorf("failed to upload chunk to MinIO: %w", err)
 	}
 
@@ -700,9 +717,19 @@ func (s *VideoUploadServiceV2) updateUserStorageUsage(userID int64, fileSize int
 }
 
 func (s *VideoUploadServiceV2) cleanupTempFiles(tempDir string) {
+	// 检查目录是否存在
+	if _, err := os.Stat(tempDir); os.IsNotExist(err) {
+		hlog.Infof("Temp directory %s does not exist, skipping cleanup", tempDir)
+		return
+	}
+
+	// 尝试删除目录
 	if err := os.RemoveAll(tempDir); err != nil {
 		hlog.Errorf("Failed to cleanup temp directory %s: %v", tempDir, err)
+		return
 	}
+
+	hlog.Infof("Successfully cleaned up temp directory: %s", tempDir)
 }
 
 func parseVideoID(vid string) int64 {
@@ -877,4 +904,104 @@ func convertToInt32Map(m map[int]string) map[int32]string {
 		result[int32(k)] = v
 	}
 	return result
+}
+
+// startCleanupTask 启动后台清理任务，定期清理过期的临时目录
+func (s *VideoUploadServiceV2) startCleanupTask() {
+	ticker := time.NewTicker(1 * time.Hour) // 每小时执行一次清理
+	defer ticker.Stop()
+
+	hlog.Info("Started temp directory cleanup task (runs every hour)")
+
+	for {
+		select {
+		case <-ticker.C:
+			s.cleanupExpiredTempDirs()
+		case <-s.cleanupStopCh:
+			hlog.Info("Stopped temp directory cleanup task")
+			return
+		case <-s.ctx.Done():
+			hlog.Info("Context cancelled, stopping cleanup task")
+			return
+		}
+	}
+}
+
+// cleanupExpiredTempDirs 清理过期的临时目录
+func (s *VideoUploadServiceV2) cleanupExpiredTempDirs() {
+	hlog.Info("Starting cleanup of expired temp directories")
+
+	// 读取当前工作目录
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		hlog.Errorf("Failed to read current directory for cleanup: %v", err)
+		return
+	}
+
+	now := time.Now()
+	cleanedCount := 0
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// 跳过非临时目录（临时目录格式：{uid}_v2_{timestamp}_{random} 或 {uid}_{uuid}）
+		name := entry.Name()
+		if !s.isTempDir(name) {
+			continue
+		}
+
+		// 获取目录信息
+		info, err := entry.Info()
+		if err != nil {
+			hlog.Warnf("Failed to get info for directory %s: %v", name, err)
+			continue
+		}
+
+		// 检查是否过期（超过24小时未修改）
+		if now.Sub(info.ModTime()) > 24*time.Hour {
+			if err := os.RemoveAll(name); err != nil {
+				hlog.Errorf("Failed to remove expired temp directory %s: %v", name, err)
+			} else {
+				hlog.Infof("Cleaned up expired temp directory: %s (age: %v)", name, now.Sub(info.ModTime()))
+				cleanedCount++
+			}
+		}
+	}
+
+	hlog.Infof("Cleanup completed: cleaned %d expired temp directories", cleanedCount)
+}
+
+// isTempDir 判断是否是临时目录
+func (s *VideoUploadServiceV2) isTempDir(name string) bool {
+	// 匹配格式：{uid}_v2_{timestamp}_{random} 或 {uid}_{uuid}
+	// 例如：1_v2_1769001157405_457000 或 1_uuid123
+
+	parts := strings.Split(name, "_")
+	if len(parts) < 2 {
+		return false
+	}
+
+	// 第一部分应该是数字（用户ID）
+	if _, err := strconv.ParseInt(parts[0], 10, 64); err != nil {
+		return false
+	}
+
+	// 检查第二部分是否包含 "v2" 或者是 UUID 格式
+	if parts[1] == "v2" {
+		return len(parts) >= 3 // 至少有三部分：uid_v2_...
+	}
+
+	// 简单的UUID检查：长度大于5且包含数字和字母
+	if len(parts[1]) > 5 {
+		return true
+	}
+
+	return false
+}
+
+// StopCleanupTask 停止清理任务（可在服务关闭时调用）
+func (s *VideoUploadServiceV2) StopCleanupTask() {
+	close(s.cleanupStopCh)
 }

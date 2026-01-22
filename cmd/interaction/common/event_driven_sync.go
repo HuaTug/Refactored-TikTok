@@ -299,7 +299,7 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 		UserId:       event.UserID,
 		VideoId:      event.ResourceID,
 		BehaviorType: "like",
-		BehaviorTime: eventTime.Format("2006-01-02 15:04:05"),
+		BehaviorTime: eventTime,
 	}
 
 	if err := tx.Create(behavior).Error; err != nil {
@@ -313,11 +313,11 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 
 	if err == nil {
 		// 记录已存在，检查是否是软删除状态
-		if existingLike.DeletedAt != "" {
+		if existingLike.DeletedAt != nil {
 			// 如果是软删除状态，恢复它
 			if err := tx.Model(&existingLike).Updates(map[string]interface{}{
-				"deleted_at": "",
-				"created_at": eventTime.Format("2006-01-02 15:04:05"),
+				"deleted_at": nil,
+				"created_at": eventTime,
 			}).Error; err != nil {
 				return fmt.Errorf("failed to restore video like: %w", err)
 			}
@@ -334,8 +334,8 @@ func (s *EventDrivenSyncService) processVideoLike(ctx context.Context, tx *gorm.
 			VideoLikesId: int64(uuid),
 			UserId:       event.UserID,
 			VideoId:      event.ResourceID,
-			CreatedAt:    eventTime.Format("2006-01-02 15:04:05"),
-			DeletedAt:    "", // 空字符串表示未删除
+			CreatedAt:    eventTime,
+			DeletedAt:    nil,
 		}
 
 		if err := tx.Create(videoLike).Error; err != nil {
@@ -399,7 +399,7 @@ func (s *EventDrivenSyncService) processCommentLike(ctx context.Context, tx *gor
 	commentLike := &model.CommentLike{
 		UserId:    event.UserID,
 		CommentId: event.ResourceID,
-		CreatedAt: time.Unix(event.Timestamp, 0).Format("2006-01-02 15:04:05"),
+		CreatedAt: time.Unix(event.Timestamp, 0),
 	}
 
 	if err := tx.Create(commentLike).Error; err != nil {

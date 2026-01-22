@@ -7,12 +7,12 @@ create table `sys_settings`(
     `id` bigint not null auto_increment,
     `audit_policy` longtext not null,
     `audit_open` tinyint not null default '0' comment '0:disable 1:enable',
-    `hot_limit` varchar(255) not null default '100',
+    `hot_limit` int not null default 100,
     `allow_ip` varchar(255) not null,
     `auth` tinyint not null default '0' comment '0:disable 1:enable',
     `value` varchar(255) not null,
-    `created_at` varchar(255) not null,
-    `updated_at` varchar(255) not null,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     primary key (id)
 )engine = InnoDB  auto_increment=1 default  charset = utf8mb4;
 
@@ -39,14 +39,31 @@ create table   `users`(
     `user_id` bigint not null auto_increment ,
     `user_name` varchar(255) not null ,
     `password` varchar(255) not null ,
-    `email` varchar(30) not null,
+    `phone` varchar(20) default null comment 'phone number',
+    `email` varchar(50) not null,
     `sex` tinyint(1) not null, -- 0:female 1:male
     `avatar_url` varchar(255) ,
-    `created_at` varchar(255) not null,
-    `updated_at` varchar(255) not null,
-    `deleted_at` varchar(255) ,
+    `background_url` varchar(255) default null comment 'profile background image',
+    `bio` varchar(500) default '' comment 'user bio',
+    `birthday` date default null comment 'birthday',
+    `location` varchar(100) default null comment 'location',
+    `school_id` bigint default null comment 'school id',
+    `following_count` int unsigned default 0 comment 'following count',
+    `follower_count` int unsigned default 0 comment 'follower count',
+    `like_count` bigint unsigned default 0 comment 'total likes received',
+    `video_count` int unsigned default 0 comment 'video count',
+    `status` tinyint default 1 comment '1:normal 2:muted 3:banned',
+    `last_login_at` TIMESTAMP null comment 'last login time',
+    `last_login_ip` varchar(45) default null comment 'last login IP',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
     primary key (user_id) ,
-    key `username_password_index` (user_name,password) using btree
+    key `username_password_index` (user_name,password) using btree,
+    key `idx_phone` (phone) using btree,
+    key `idx_email` (email) using btree,
+    key `idx_school_id` (school_id) using btree,
+    key `idx_status` (status) using btree
 ) engine = InnoDB  auto_increment=1 default  charset = utf8mb4;
 
 -- -- 创建其他分表 users_1, users_2, users_3
@@ -69,8 +86,8 @@ create table `user_behaviors`(
     `user_id` bigint not null,
     `video_id` bigint not null,
     `behavior_type` varchar(50) not null, -- 'view' 'like' 'share' 'comment'
-    `behavior_time` varchar(255) not null,
-    `created_at` timestamp default current_timestamp,
+    `behavior_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Remove unique constraint to allow multiple comments per user per video
     -- unique key(user_id,video_id,behavior_type),
     primary key (user_behavior_id),
@@ -83,26 +100,39 @@ drop table if exists `videos`;
 create table `videos`(
     `video_id` bigint not null auto_increment,
     `user_id` bigint not null ,
-    `video_url` varchar(255) not null ,
-    `cover_url` varchar(255) not null ,
+    `video_url` varchar(512) not null ,
+    `cover_url` varchar(512) not null ,
     `title` varchar(255) not null ,
-    `description` varchar(255) not null ,
-    `visit_count` varchar(255) default '0' not null,
-    `share_count` varchar(255) default '0' not null ,
-    `likes_count` varchar(255) default '0' not null,
-    `favorites_count` varchar(255) default '0' not null,
-    `comment_count` varchar(255) default '0' not null,
-    `history_count` varchar(255) default '0' not null,
-    `open` tinyint not null default '0' comment '0:private 1:public',
-    `audit_status` tinyint not null default '0' comment '0:unreviewed 1:reviewed',
-    `label_names` varchar(255) default '' not null,
-    `category` varchar(255) default '' not null,
-    `created_at` varchar(255) not null ,
-    `updated_at` varchar(255) not null ,
-    `deleted_at` varchar(255) ,
+    `description` text not null ,
+    `duration` int unsigned default 0 comment 'video duration in seconds',
+    `width` int unsigned default 0 comment 'video width',
+    `height` int unsigned default 0 comment 'video height',
+    `file_size` bigint unsigned default 0 comment 'file size in bytes',
+    `visit_count` bigint unsigned default 0 not null,
+    `share_count` bigint unsigned default 0 not null ,
+    `likes_count` bigint unsigned default 0 not null,
+    `favorites_count` bigint unsigned default 0 not null,
+    `comment_count` bigint unsigned default 0 not null,
+    `history_count` bigint unsigned default 0 not null,
+    `open` tinyint not null default '0' comment '0:private 1:public 2:friends only',
+    `audit_status` tinyint not null default '0' comment '0:unreviewed 1:approved 2:rejected',
+    `school_id` bigint default null comment 'school exclusive video',
+    `location` varchar(100) default null comment 'publish location',
+    `allow_comment` tinyint default 1 comment 'allow comments',
+    `allow_duet` tinyint default 1 comment 'allow duet',
+    `allow_download` tinyint default 1 comment 'allow download',
+    `label_names` varchar(500) default '' not null,
+    `category` varchar(100) default '' not null,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
     primary key (video_id),
-    key `time` (created_at) using btree ,
-    key `author` (user_id) using btree
+    key `idx_created_at` (created_at) using btree ,
+    key `idx_user_id` (user_id) using btree,
+    key `idx_school_id` (school_id) using btree,
+    key `idx_category` (category) using btree,
+    key `idx_audit_status` (audit_status) using btree,
+    FULLTEXT KEY `ft_title_desc` (title, description)
 )engine InnoDB auto_increment=1  default  charset=utf8mb4;
 
 
@@ -112,10 +142,13 @@ create table `user_video_watch_histories`(
     `user_video_watch_history_id` bigint not null auto_increment,
     `user_id` bigint not null,
     `video_id` bigint not null,
-    `watch_time` varchar(255) not null,
-    `deleted_at` varchar(255),
+    `watch_duration` int unsigned default 0 comment 'watch duration in seconds',
+    `completion_rate` decimal(5,2) default 0.00 comment 'completion rate percentage',
+    `watch_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
     primary key (user_video_watch_history_id),
-    unique key( user_id,video_id)
+    unique key( user_id,video_id),
+    key `idx_watch_time` (watch_time)
 )engine InnoDB auto_increment=1  default  charset=utf8mb4;
 
 -- Table structure of video_likes --
@@ -124,8 +157,8 @@ create table `video_likes`(
     `video_likes_id` bigint not null ,
     `user_id` bigint not null ,
     `video_id` bigint not null ,
-    `created_at` varchar(255) not null ,
-    `deleted_at` varchar(255)  ,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
     primary key (video_likes_id),
     unique key `user_id_video_id_no_duplicate` (user_id,video_id),
     key `user_id_video_id_index`(user_id,video_id) using btree ,
@@ -137,12 +170,17 @@ create table `video_likes`(
 drop table if exists `video_shares`;
 create table `video_shares`(
     `video_share_id` bigint not null auto_increment,
-    `user_id` bigint not null, -- 分享者
-    `video_id` bigint not null, -- 被分享的视频
-    `to_user_id` bigint not null, -- 被分享的用户
-    `created_at` varchar(255) not null,
-    `deleted_at` varchar(255),
-    primary key (video_share_id)
+    `user_id` bigint not null, -- sharer
+    `video_id` bigint not null, -- shared video
+    `to_user_id` bigint not null, -- target user
+    `share_type` tinyint default 1 comment '1:private 2:moments 3:external',
+    `platform` varchar(50) default null comment 'share platform: wechat/qq/weibo',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
+    primary key (video_share_id),
+    key `idx_user_id` (user_id),
+    key `idx_video_id` (video_id),
+    key `idx_to_user_id` (to_user_id)
 )engine = InnoDB auto_increment=1 default charset = utf8mb4;
 
 -- Table structure of favorites --
@@ -151,20 +189,25 @@ create table `favorites`(
     `favorite_id` bigint not null auto_increment,
     `user_id` bigint not null,
     `name` varchar(255) not null,
-    `description` varchar(255) default ''  not null,
-    `cover_url` varchar(255) default '' not null,
-    `created_at` varchar(255) not null,
-    `deleted_at` varchar(255),
-    primary key (favorite_id)
+    `description` varchar(500) default ''  not null,
+    `cover_url` varchar(512) default '' not null,
+    `video_count` int unsigned default 0 comment 'video count in this folder',
+    `is_public` tinyint default 0 comment '0:private 1:public',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
+    primary key (favorite_id),
+    key `idx_user_id` (user_id)
 )engine = InnoDB auto_increment=1 default charset = utf8mb4;
 
 -- Table structure of favorites_videos --
 drop table if exists `favorites_videos`;
 create table `favorites_videos`(
     `favorite_video_id` bigint not null auto_increment,
-    `favorite_id` bigint not null, -- 收藏夹id
-    `video_id` bigint not null, -- 被收藏的视频
+    `favorite_id` bigint not null, -- favorite folder id
+    `video_id` bigint not null, -- favorited video
     `user_id` bigint not null,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     primary key (favorite_video_id),
     unique key `fav_vid_usr_index` (favorite_id,video_id,user_id) using btree,
     key  `fav_usr_index` (user_id,favorite_id) using btree
@@ -173,10 +216,285 @@ create table `favorites_videos`(
 -- Table structure of user_perferences --
 drop table if exists `user_perferences`;
 create table `user_perferences`(
-    `user_id` bigint not null,
-    `label_names` varchar(255) not null   -- 以逗号分隔的用户偏好标签字符串
-);
+    `id` bigint not null auto_increment,
+    `user_id` bigint not null unique,
+    `label_names` varchar(500) not null comment 'comma separated preference labels',
+    `preferred_categories` varchar(500) default '' comment 'preferred video categories',
+    `language` varchar(10) default 'zh-CN' comment 'preferred language',
+    `push_enabled` tinyint default 1 comment 'push notification enabled',
+    `private_account` tinyint default 0 comment 'private account mode',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (id),
+    key `idx_user_id` (user_id)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4;
 
+-- ========================================
+-- Campus Feature Tables (校园特色功能表)
+-- ========================================
+
+-- Table structure of schools --
+drop table if exists `schools`;
+create table `schools`(
+    `school_id` bigint not null auto_increment,
+    `school_name` varchar(100) not null,
+    `school_code` varchar(20) not null unique comment 'school code',
+    `province` varchar(50) not null,
+    `city` varchar(50) not null,
+    `address` varchar(255) default null,
+    `school_type` tinyint not null default 1 comment '1:university 2:college 3:high school 4:other',
+    `logo_url` varchar(512) default null,
+    `cover_url` varchar(512) default null comment 'school cover image',
+    `student_count` int unsigned default 0 comment 'registered student count',
+    `video_count` int unsigned default 0 comment 'school video count',
+    `is_active` tinyint not null default 1,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (school_id),
+    key `idx_province_city` (province, city),
+    key `idx_school_type` (school_type),
+    key `idx_is_active` (is_active)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='School Information Table';
+
+-- Table structure of user_verifications (校园认证) --
+drop table if exists `user_verifications`;
+create table `user_verifications`(
+    `id` bigint not null auto_increment,
+    `user_id` bigint not null unique,
+    `school_id` bigint not null comment 'school id',
+    `student_id` varchar(50) not null comment 'student number',
+    `real_name` varchar(50) not null comment 'real name',
+    `id_card_hash` varchar(64) default null comment 'hashed ID card (for privacy)',
+    `department` varchar(100) default null comment 'department/college',
+    `major` varchar(100) default null comment 'major',
+    `enrollment_year` int default null comment 'enrollment year',
+    `graduation_year` int default null comment 'expected graduation year',
+    `verification_status` tinyint not null default 0 comment '0:unverified 1:pending 2:verified 3:failed 4:expired',
+    `rejection_reason` varchar(255) default null comment 'rejection reason if failed',
+    `verified_at` TIMESTAMP null,
+    `expire_at` TIMESTAMP null comment 'verification expiry time (after graduation)',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (id),
+    key `idx_school_id` (school_id),
+    key `idx_verification_status` (verification_status),
+    key `idx_expire_at` (expire_at)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='User Campus Verification Table';
+
+-- Table structure of topics (话题/挑战) --
+drop table if exists `topics`;
+create table `topics`(
+    `topic_id` bigint not null auto_increment,
+    `title` varchar(100) not null,
+    `description` text default null,
+    `cover_url` varchar(512) default null,
+    `creator_id` bigint not null comment 'topic creator',
+    `topic_type` tinyint not null default 1 comment '1:normal topic 2:challenge 3:campus activity 4:official',
+    `school_id` bigint default null comment 'school exclusive topic (null for public)',
+    `participate_count` bigint unsigned default 0,
+    `view_count` bigint unsigned default 0,
+    `status` tinyint not null default 1 comment '1:normal 2:hot 3:banned 4:ended',
+    `start_time` TIMESTAMP null comment 'activity start time',
+    `end_time` TIMESTAMP null comment 'activity end time',
+    `prize_info` text default null comment 'prize info for challenges',
+    `rules` text default null comment 'activity rules',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (topic_id),
+    key `idx_topic_type` (topic_type),
+    key `idx_school_id` (school_id),
+    key `idx_status` (status),
+    key `idx_creator_id` (creator_id),
+    FULLTEXT KEY `ft_title` (title)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Topics and Challenges Table';
+
+-- Table structure of video_topics (视频话题关联) --
+drop table if exists `video_topics`;
+create table `video_topics`(
+    `id` bigint not null auto_increment,
+    `video_id` bigint not null,
+    `topic_id` bigint not null,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    primary key (id),
+    unique key `uk_video_topic` (video_id, topic_id),
+    key `idx_topic_id` (topic_id)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Video Topic Association Table';
+
+
+-- ========================================
+-- Social Feature Tables (社交功能表)
+-- ========================================
+
+-- Table structure of direct_messages (私信) --
+drop table if exists `direct_messages`;
+create table `direct_messages`(
+    `message_id` bigint not null auto_increment,
+    `conversation_id` bigint not null comment 'conversation id',
+    `sender_id` bigint not null,
+    `receiver_id` bigint not null,
+    `content` text not null,
+    `message_type` tinyint not null default 1 comment '1:text 2:image 3:video 4:share 5:emoji',
+    `related_video_id` bigint default null comment 'related video id when sharing',
+    `is_read` tinyint not null default 0,
+    `read_at` TIMESTAMP null comment 'read time',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP null,
+    primary key (message_id),
+    key `idx_conversation` (conversation_id, created_at),
+    key `idx_sender` (sender_id),
+    key `idx_receiver` (receiver_id, is_read),
+    key `idx_created_at` (created_at)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Direct Messages Table';
+
+-- Table structure of conversations (会话) --
+drop table if exists `conversations`;
+create table `conversations`(
+    `conversation_id` bigint not null auto_increment,
+    `user_id_1` bigint not null comment 'smaller user id',
+    `user_id_2` bigint not null comment 'larger user id',
+    `last_message_id` bigint default null,
+    `last_message_content` varchar(255) default null comment 'last message preview',
+    `last_message_time` TIMESTAMP null,
+    `user_1_unread_count` int unsigned default 0,
+    `user_2_unread_count` int unsigned default 0,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (conversation_id),
+    unique key `uk_user_pair` (user_id_1, user_id_2),
+    key `idx_user_id_1` (user_id_1, last_message_time),
+    key `idx_user_id_2` (user_id_2, last_message_time)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Conversations Table';
+
+-- Table structure of notifications (通知) --
+drop table if exists `notifications`;
+create table `notifications`(
+    `notification_id` bigint not null auto_increment,
+    `user_id` bigint not null comment 'receiver user',
+    `sender_id` bigint default null comment 'sender user (null for system)',
+    `notification_type` tinyint not null comment '1:like 2:comment 3:follow 4:mention 5:system 6:activity',
+    `target_type` tinyint default null comment '1:video 2:comment 3:user',
+    `target_id` bigint default null,
+    `title` varchar(100) default null comment 'notification title',
+    `content` varchar(500) default null,
+    `extra_data` json default null comment 'extra data in json',
+    `is_read` tinyint not null default 0,
+    `read_at` TIMESTAMP null,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    primary key (notification_id),
+    key `idx_user_read` (user_id, is_read),
+    key `idx_user_type` (user_id, notification_type),
+    key `idx_created_at` (created_at)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Notifications Table';
+
+-- Table structure of blacklists (黑名单) --
+drop table if exists `blacklists`;
+create table `blacklists`(
+    `id` bigint not null auto_increment,
+    `user_id` bigint not null,
+    `blocked_user_id` bigint not null,
+    `reason` varchar(255) default null comment 'block reason',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    primary key (id),
+    unique key `uk_user_blocked` (user_id, blocked_user_id),
+    key `idx_blocked_user` (blocked_user_id)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Blacklist Table';
+
+-- Table structure of reports (举报) --
+drop table if exists `reports`;
+create table `reports`(
+    `report_id` bigint not null auto_increment,
+    `reporter_id` bigint not null comment 'reporter user',
+    `target_type` tinyint not null comment '1:video 2:comment 3:user 4:message',
+    `target_id` bigint not null comment 'reported target id',
+    `reason_type` tinyint not null comment '1:porn 2:violence 3:illegal 4:spam 5:fraud 6:other',
+    `reason_detail` text default null,
+    `evidence_urls` json default null comment 'evidence screenshots',
+    `status` tinyint not null default 0 comment '0:pending 1:processing 2:resolved 3:rejected',
+    `handler_id` bigint default null comment 'handler admin id',
+    `handle_result` text default null,
+    `handle_action` tinyint default null comment '1:warning 2:delete 3:ban user 4:no action',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `handled_at` TIMESTAMP null,
+    primary key (report_id),
+    key `idx_target` (target_type, target_id),
+    key `idx_status` (status),
+    key `idx_reporter` (reporter_id),
+    key `idx_created_at` (created_at)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Reports Table';
+
+-- Table structure of search_histories (搜索历史) --
+drop table if exists `search_histories`;
+create table `search_histories`(
+    `id` bigint not null auto_increment,
+    `user_id` bigint not null,
+    `keyword` varchar(100) not null,
+    `search_type` tinyint not null default 1 comment '1:all 2:user 3:video 4:topic 5:school',
+    `result_count` int unsigned default 0 comment 'search result count',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    primary key (id),
+    key `idx_user_created` (user_id, created_at),
+    key `idx_keyword` (keyword),
+    key `idx_search_type` (search_type)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Search History Table';
+
+-- Table structure of hot_searches (热门搜索) --
+drop table if exists `hot_searches`;
+create table `hot_searches`(
+    `id` bigint not null auto_increment,
+    `keyword` varchar(100) not null unique,
+    `search_count` bigint unsigned default 0,
+    `heat_score` decimal(10,2) default 0.00 comment 'calculated heat score',
+    `category` varchar(50) default null comment 'search category',
+    `is_promoted` tinyint default 0 comment 'is promoted/pinned',
+    `rank_position` int default null comment 'display rank',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (id),
+    key `idx_heat_score` (heat_score desc),
+    key `idx_rank` (rank_position)
+)engine = InnoDB auto_increment=1 default charset = utf8mb4 comment='Hot Search Table';
+
+-- ========================================
+-- Counter Tables (独立计数器表，解决高并发热点问题)
+-- ========================================
+
+-- Table structure of video_counters (视频计数器) --
+drop table if exists `video_counters`;
+create table `video_counters`(
+    `video_id` bigint not null,
+    `visit_count` bigint unsigned not null default 0,
+    `like_count` bigint unsigned not null default 0,
+    `comment_count` bigint unsigned not null default 0,
+    `share_count` bigint unsigned not null default 0,
+    `favorite_count` bigint unsigned not null default 0,
+    `download_count` bigint unsigned not null default 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (video_id)
+)engine = InnoDB default charset = utf8mb4 comment='Video Counters Table (for high concurrency)';
+
+-- Table structure of user_counters (用户计数器) --
+drop table if exists `user_counters`;
+create table `user_counters`(
+    `user_id` bigint not null,
+    `following_count` int unsigned not null default 0,
+    `follower_count` int unsigned not null default 0,
+    `like_count` bigint unsigned not null default 0 comment 'total likes received',
+    `video_count` int unsigned not null default 0,
+    `favorite_count` int unsigned not null default 0 comment 'total favorites received',
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (user_id)
+)engine = InnoDB default charset = utf8mb4 comment='User Counters Table (for high concurrency)';
+
+-- Table structure of topic_counters (话题计数器) --
+drop table if exists `topic_counters`;
+create table `topic_counters`(
+    `topic_id` bigint not null,
+    `participate_count` bigint unsigned not null default 0,
+    `view_count` bigint unsigned not null default 0,
+    `video_count` bigint unsigned not null default 0,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    primary key (topic_id)
+)engine = InnoDB default charset = utf8mb4 comment='Topic Counters Table (for high concurrency)';
 
 -- Table structure of system_logs --
 DROP TABLE IF EXISTS `system_logs`;
@@ -185,7 +503,7 @@ CREATE TABLE `system_logs` (
     `log_type` varchar(50) NOT NULL,
     `message` text NOT NULL,
     `level` varchar(20) NOT NULL DEFAULT 'INFO',
-    `created_at` varchar(255) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_log_type` (`log_type`) USING BTREE,
     KEY `idx_level` (`level`) USING BTREE,
@@ -193,8 +511,8 @@ CREATE TABLE `system_logs` (
 ) ENGINE=InnoDB AUTO_INCREMENT=1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 插入初始化完成日志
-INSERT INTO system_logs (log_type, message, level, created_at) 
-VALUES ('system_init', 'Multi-database comment system initialization completed - 4 databases with 4 tables each (16 total tables)', 'INFO', DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'));
+INSERT INTO system_logs (log_type, message, level)
+VALUES ('system_init', 'Multi-database comment system initialization completed - 4 databases with 4 tables each (16 total tables)', 'INFO');
 
 -- ========================================
 -- Relation分库分表初始化脚本
@@ -329,19 +647,19 @@ CREATE TABLE IF NOT EXISTS `relation_db_connections` (
     `password` varchar(255) NOT NULL DEFAULT '' COMMENT '密码',
     `max_connections` int NOT NULL DEFAULT 100 COMMENT '最大连接数',
     `is_active` tinyint NOT NULL DEFAULT 1 COMMENT '是否激活',
-    `created_at` varchar(255) NOT NULL,
-    `updated_at` varchar(255) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_db_index` (`db_index`),
     KEY `idx_is_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关系分库连接配置表';
 
 -- 插入分库连接配置
-INSERT INTO `relation_db_connections` (`db_index`, `db_name`, `host`, `port`, `username`, `password`, `max_connections`, `created_at`, `updated_at`) VALUES
-(0, 'relation_db_0', 'localhost', 3306, 'root', '', 100, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'), DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s')),
-(1, 'relation_db_1', 'localhost', 3306, 'root', '', 100, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'), DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s')),
-(2, 'relation_db_2', 'localhost', 3306, 'root', '', 100, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'), DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s')),
-(3, 'relation_db_3', 'localhost', 3306, 'root', '', 100, DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'), DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'));
+INSERT INTO `relation_db_connections` (`db_index`, `db_name`, `host`, `port`, `username`, `password`, `max_connections`) VALUES
+(0, 'relation_db_0', 'localhost', 3306, 'root', '', 100),
+(1, 'relation_db_1', 'localhost', 3306, 'root', '', 100),
+(2, 'relation_db_2', 'localhost', 3306, 'root', '', 100),
+(3, 'relation_db_3', 'localhost', 3306, 'root', '', 100);
 
 -- 创建全局关系统计表
 CREATE TABLE IF NOT EXISTS `global_relation_stats` (
@@ -365,7 +683,7 @@ CREATE TABLE IF NOT EXISTS `global_user_relation_index` (
     `relation_type` varchar(20) NOT NULL COMMENT 'follow/friend/mutual',
     `db_index` tinyint NOT NULL COMMENT '分库索引 0-3',
     `table_index` tinyint NOT NULL COMMENT '分表索引 0-3',
-    `created_at` varchar(255) NOT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_relation` (`user_id`, `relation_id`, `relation_type`),
     KEY `idx_user_id_created` (`user_id`, `created_at`),
@@ -376,9 +694,9 @@ CREATE TABLE IF NOT EXISTS `global_user_relation_index` (
 
 
 -- 创建初始化完成日志
-INSERT INTO system_logs (log_type, message, level, created_at) 
-VALUES ('relation_shard_init', 'Relation sharding system initialization completed - 4 databases with 4 tables each (16 total tables)', 'INFO', DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i:%s'))
-ON DUPLICATE KEY UPDATE `created_at` = VALUES(`created_at`);
+INSERT INTO system_logs (log_type, message, level)
+VALUES ('relation_shard_init', 'Relation sharding system initialization completed - 4 databases with 4 tables each (16 total tables)', 'INFO')
+ON DUPLICATE KEY UPDATE `created_at` = CURRENT_TIMESTAMP;
 
 
 
@@ -387,25 +705,25 @@ CREATE TABLE IF NOT EXISTS `video_storage_mapping` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL COMMENT '用户ID',
     `video_id` BIGINT NOT NULL COMMENT '视频ID',
-    
+
     -- 存储路径信息
     `source_path` VARCHAR(512) NOT NULL COMMENT '原始文件路径',
     `processed_paths` JSON COMMENT '处理后文件路径映射 {"480": "path1", "720": "path2", "1080": "path3"}',
     `thumbnail_paths` JSON COMMENT '缩略图路径映射 {"small": "path1", "medium": "path2", "large": "path3"}',
     `animated_cover_path` VARCHAR(512) COMMENT '动态封面路径',
     `metadata_path` VARCHAR(512) COMMENT '元数据文件路径',
-    
+
     -- 存储状态
     `storage_status` ENUM('uploading', 'processing', 'completed', 'failed') DEFAULT 'uploading' COMMENT '存储状态',
     `hot_storage` BOOLEAN DEFAULT FALSE COMMENT '是否在热点存储',
     `bucket_name` VARCHAR(128) DEFAULT 'tiktok-user-content' COMMENT '存储桶名称',
-    
+
     -- 访问统计
     `access_count` BIGINT DEFAULT 0 COMMENT '访问次数',
     `last_accessed_at` TIMESTAMP NULL COMMENT '最后访问时间',
     `play_count` BIGINT DEFAULT 0 COMMENT '播放次数',
     `download_count` BIGINT DEFAULT 0 COMMENT '下载次数',
-    
+
     -- 存储元信息
     `file_size` BIGINT COMMENT '文件大小（字节）',
     `duration` INT COMMENT '视频时长（秒）',
@@ -414,11 +732,11 @@ CREATE TABLE IF NOT EXISTS `video_storage_mapping` (
     `format` VARCHAR(16) DEFAULT 'mp4' COMMENT '视频格式',
     `codec` VARCHAR(32) COMMENT '视频编码',
     `bitrate` INT COMMENT '比特率',
-    
+
     -- 时间戳
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    
+
     -- 索引
     INDEX `idx_user_video` (`user_id`, `video_id`),
     INDEX `idx_storage_status` (`storage_status`),
@@ -432,32 +750,32 @@ CREATE TABLE IF NOT EXISTS `video_storage_mapping` (
 CREATE TABLE IF NOT EXISTS `user_storage_quota` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
     `user_id` BIGINT NOT NULL UNIQUE COMMENT '用户ID',
-    
+
     -- 配额限制
     `max_storage_bytes` BIGINT DEFAULT 10737418240 COMMENT '最大存储空间（字节）10GB',
     `max_video_count` INT DEFAULT 1000 COMMENT '最大视频数量',
     `max_video_duration` INT DEFAULT 600 COMMENT '单个视频最大时长（秒）10分钟',
     `max_video_size` BIGINT DEFAULT 1073741824 COMMENT '单个视频最大大小（字节）1GB',
-    
+
     -- 当前使用情况
     `used_storage_bytes` BIGINT DEFAULT 0 COMMENT '已使用存储空间',
     `video_count` INT DEFAULT 0 COMMENT '当前视频数量',
     `draft_count` INT DEFAULT 0 COMMENT '草稿数量',
-    
+
     -- 配额状态
     `quota_exceeded` BOOLEAN DEFAULT FALSE COMMENT '是否超出配额',
     `warning_sent` BOOLEAN DEFAULT FALSE COMMENT '是否已发送警告',
     `quota_level` ENUM('basic', 'premium', 'vip', 'unlimited') DEFAULT 'basic' COMMENT '配额等级',
-    
+
     -- 统计信息
     `total_upload_bytes` BIGINT DEFAULT 0 COMMENT '总上传流量',
     `total_download_bytes` BIGINT DEFAULT 0 COMMENT '总下载流量',
     `last_upload_at` TIMESTAMP NULL COMMENT '最后上传时间',
-    
+
     -- 时间戳
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    
+
     -- 索引
     INDEX `idx_quota_exceeded` (`quota_exceeded`),
     INDEX `idx_quota_level` (`quota_level`),
@@ -477,7 +795,7 @@ CREATE TABLE IF NOT EXISTS `video_access_log` (
     `duration_played` INT DEFAULT 0 COMMENT '播放时长（秒）',
     `completion_rate` DECIMAL(5,2) DEFAULT 0.00 COMMENT '完播率（百分比）',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '访问时间',
-    
+
     -- 索引
     INDEX `idx_video_id` (`video_id`),
     INDEX `idx_user_id` (`user_id`),
@@ -496,17 +814,17 @@ CREATE TABLE IF NOT EXISTS `hot_video_cache` (
     `cache_path` VARCHAR(512) COMMENT '缓存路径',
     `cache_status` ENUM('pending', 'cached', 'expired', 'failed') DEFAULT 'pending' COMMENT '缓存状态',
     `expire_at` TIMESTAMP NULL COMMENT '过期时间',
-    
+
     -- 统计数据（用于计算热度）
     `view_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内观看次数',
     `like_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内点赞次数',
     `share_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内分享次数',
     `comment_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内评论次数',
-    
+
     -- 时间戳
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    
+
     -- 索引
     INDEX `idx_hot_score` (`hot_score` DESC),
     INDEX `idx_cache_status` (`cache_status`),
@@ -528,11 +846,11 @@ CREATE TABLE IF NOT EXISTS `storage_bucket_config` (
     `cold_retention_days` INT DEFAULT 365 COMMENT '冷数据保留天数',
     `archive_after_days` INT DEFAULT 1095 COMMENT '归档天数',
     `is_active` BOOLEAN DEFAULT TRUE COMMENT '是否激活',
-    
+
     -- 时间戳
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    
+
     -- 索引
     INDEX `idx_bucket_type` (`bucket_type`),
     INDEX `idx_is_active` (`is_active`)
@@ -565,7 +883,7 @@ CREATE TABLE IF NOT EXISTS `sync_events` (
     `processed_at` TIMESTAMP NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    
+
     -- 索引
     INDEX `idx_event_type` (`event_type`),
     INDEX `idx_resource_id` (`resource_id`),
@@ -585,7 +903,7 @@ CREATE TABLE IF NOT EXISTS `sync_metrics` (
     `tags` TEXT,
     `timestamp` TIMESTAMP NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
+
     INDEX `idx_metric_type` (`metric_type`),
     INDEX `idx_timestamp` (`timestamp`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -598,7 +916,7 @@ CREATE TABLE IF NOT EXISTS `idempotency_records` (
     `result` TEXT,
     `expires_at` TIMESTAMP NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    
+
     UNIQUE INDEX `idx_idempotency_key` (`idempotency_key`),
     INDEX `idx_event_id` (`event_id`),
     INDEX `idx_expires_at` (`expires_at`)
@@ -625,9 +943,9 @@ CREATE TABLE IF NOT EXISTS `comments_0` (
     `like_count` bigint NOT NULL DEFAULT 0,
     `child_count` bigint NOT NULL DEFAULT 0,
     `content` text NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `updated_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
     `reply_to_comment_id` bigint NOT NULL DEFAULT 0,
     PRIMARY KEY (`comment_id`),
     KEY `idx_video_id` (`video_id`) USING BTREE,
@@ -649,8 +967,8 @@ CREATE TABLE IF NOT EXISTS `comment_likes` (
     `comment_likes_id` bigint NOT NULL,
     `user_id` bigint NOT NULL,
     `comment_id` bigint NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `deleted_at` TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (`comment_likes_id`),
     UNIQUE KEY `uk_user_comment` (`user_id`, `comment_id`),
     KEY `idx_comment_id` (`comment_id`) USING BTREE,
@@ -664,47 +982,14 @@ CREATE TABLE IF NOT EXISTS `comment_likes` (
 CREATE DATABASE IF NOT EXISTS comment_db_1 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 USE comment_db_1;
 
--- 创建分表 comments_0 到 comments_3
-CREATE TABLE IF NOT EXISTS `comments_0` (
-    `comment_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `video_id` bigint NOT NULL,
-    `parent_id` bigint NOT NULL DEFAULT -1,
-    `like_count` bigint NOT NULL DEFAULT 0,
-    `child_count` bigint NOT NULL DEFAULT 0,
-    `content` text NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `updated_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    `reply_to_comment_id` bigint NOT NULL DEFAULT 0,
-    PRIMARY KEY (`comment_id`),
-    KEY `idx_video_id` (`video_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_parent_id` (`parent_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE,
-    KEY `idx_video_created` (`video_id`, `created_at`) USING BTREE,
-    KEY `idx_video_like_count` (`video_id`, `like_count`) USING BTREE,
-    KEY `idx_deleted_at` (`deleted_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-PARTITION BY HASH(comment_id) PARTITIONS 4;
-
-CREATE TABLE IF NOT EXISTS `comments_1` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_2` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_3` LIKE `comments_0`;
+-- 创建分表 (使用 comment_db_0 作为模板)
+CREATE TABLE IF NOT EXISTS `comments_0` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_1` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_2` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_3` LIKE comment_db_0.comments_0;
 
 -- 创建评论点赞表
-CREATE TABLE IF NOT EXISTS `comment_likes` (
-    `comment_likes_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `comment_id` bigint NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    PRIMARY KEY (`comment_likes_id`),
-    UNIQUE KEY `uk_user_comment` (`user_id`, `comment_id`),
-    KEY `idx_comment_id` (`comment_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `comment_likes` LIKE comment_db_0.comment_likes;
 
 -- ========================================
 -- 创建分库 comment_db_2
@@ -712,47 +997,14 @@ CREATE TABLE IF NOT EXISTS `comment_likes` (
 CREATE DATABASE IF NOT EXISTS comment_db_2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 USE comment_db_2;
 
--- 创建分表 comments_0 到 comments_3
-CREATE TABLE IF NOT EXISTS `comments_0` (
-    `comment_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `video_id` bigint NOT NULL,
-    `parent_id` bigint NOT NULL DEFAULT -1,
-    `like_count` bigint NOT NULL DEFAULT 0,
-    `child_count` bigint NOT NULL DEFAULT 0,
-    `content` text NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `updated_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    `reply_to_comment_id` bigint NOT NULL DEFAULT 0,
-    PRIMARY KEY (`comment_id`),
-    KEY `idx_video_id` (`video_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_parent_id` (`parent_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE,
-    KEY `idx_video_created` (`video_id`, `created_at`) USING BTREE,
-    KEY `idx_video_like_count` (`video_id`, `like_count`) USING BTREE,
-    KEY `idx_deleted_at` (`deleted_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-PARTITION BY HASH(comment_id) PARTITIONS 4;
-
-CREATE TABLE IF NOT EXISTS `comments_1` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_2` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_3` LIKE `comments_0`;
+-- 创建分表 (使用 comment_db_0 作为模板)
+CREATE TABLE IF NOT EXISTS `comments_0` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_1` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_2` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_3` LIKE comment_db_0.comments_0;
 
 -- 创建评论点赞表
-CREATE TABLE IF NOT EXISTS `comment_likes` (
-    `comment_likes_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `comment_id` bigint NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    PRIMARY KEY (`comment_likes_id`),
-    UNIQUE KEY `uk_user_comment` (`user_id`, `comment_id`),
-    KEY `idx_comment_id` (`comment_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `comment_likes` LIKE comment_db_0.comment_likes;
 
 -- ========================================
 -- 创建分库 comment_db_3
@@ -760,47 +1012,14 @@ CREATE TABLE IF NOT EXISTS `comment_likes` (
 CREATE DATABASE IF NOT EXISTS comment_db_3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 USE comment_db_3;
 
--- 创建分表 comments_0 到 comments_3
-CREATE TABLE IF NOT EXISTS `comments_0` (
-    `comment_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `video_id` bigint NOT NULL,
-    `parent_id` bigint NOT NULL DEFAULT -1,
-    `like_count` bigint NOT NULL DEFAULT 0,
-    `child_count` bigint NOT NULL DEFAULT 0,
-    `content` text NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `updated_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    `reply_to_comment_id` bigint NOT NULL DEFAULT 0,
-    PRIMARY KEY (`comment_id`),
-    KEY `idx_video_id` (`video_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_parent_id` (`parent_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE,
-    KEY `idx_video_created` (`video_id`, `created_at`) USING BTREE,
-    KEY `idx_video_like_count` (`video_id`, `like_count`) USING BTREE,
-    KEY `idx_deleted_at` (`deleted_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-PARTITION BY HASH(comment_id) PARTITIONS 4;
-
-CREATE TABLE IF NOT EXISTS `comments_1` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_2` LIKE `comments_0`;
-CREATE TABLE IF NOT EXISTS `comments_3` LIKE `comments_0`;
+-- 创建分表 (使用 comment_db_0 作为模板)
+CREATE TABLE IF NOT EXISTS `comments_0` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_1` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_2` LIKE comment_db_0.comments_0;
+CREATE TABLE IF NOT EXISTS `comments_3` LIKE comment_db_0.comments_0;
 
 -- 创建评论点赞表
-CREATE TABLE IF NOT EXISTS `comment_likes` (
-    `comment_likes_id` bigint NOT NULL,
-    `user_id` bigint NOT NULL,
-    `comment_id` bigint NOT NULL,
-    `created_at` varchar(255) NOT NULL,
-    `deleted_at` varchar(255) DEFAULT '',
-    PRIMARY KEY (`comment_likes_id`),
-    UNIQUE KEY `uk_user_comment` (`user_id`, `comment_id`),
-    KEY `idx_comment_id` (`comment_id`) USING BTREE,
-    KEY `idx_user_id` (`user_id`) USING BTREE,
-    KEY `idx_created_at` (`created_at`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS `comment_likes` LIKE comment_db_0.comment_likes;
 
 -- ========================================
 -- 回到主库创建全局管理表

@@ -154,13 +154,13 @@ func (ecs *EnhancedConsistencyService) checkVideoLikeConsistency(report *Consist
 			}
 
 			// 比较数据库和缓存的值
-			if cacheCount != video.LikeCount {
+			if int64(cacheCount) != int64(video.LikesCount) {
 				record := InconsistencyRecord{
 					ResourceType:  "video",
 					ResourceID:    video.VideoId,
 					CacheValue:    cacheCount,
-					DatabaseValue: video.LikeCount,
-					Difference:    cacheCount - video.LikeCount,
+					DatabaseValue: int64(video.LikesCount),
+					Difference:    cacheCount - int64(video.LikesCount),
 					DetectedAt:    time.Now(),
 					Status:        "detected",
 				}
@@ -168,7 +168,7 @@ func (ecs *EnhancedConsistencyService) checkVideoLikeConsistency(report *Consist
 				report.Details = append(report.Details, record)
 
 				// 尝试修复不一致
-				if err := ecs.fixVideoLikeInconsistency(video.VideoId, cacheCount, video.LikeCount); err != nil {
+				if err := ecs.fixVideoLikeInconsistency(video.VideoId, cacheCount, int64(video.LikesCount)); err != nil {
 					hlog.Errorf("Failed to fix video %d inconsistency: %v", video.VideoId, err)
 					record.Status = "failed"
 					report.FailedCount++
