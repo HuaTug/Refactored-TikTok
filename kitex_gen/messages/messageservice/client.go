@@ -3,8 +3,10 @@
 package messageservice
 
 import (
-	messages "HuaTug.com/kitex_gen/messages"
 	"context"
+
+	messages "HuaTug.com/kitex_gen/messages"
+
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
 )

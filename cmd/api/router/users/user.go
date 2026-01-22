@@ -4,6 +4,7 @@ package users
 
 import (
 	users "HuaTug.com/cmd/api/handlers/user"
+
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 
@@ -25,7 +26,7 @@ func Register(r *server.Hertz) {
 			_user.GET("/get", append(_getuserinfoMw(), users.GetUserInfo)...)
 			_user.POST("/login", append(_loginuserMw(), users.LoginUser)...)
 			_user.POST("/update", append(_updateuserMw(), users.UpdateUser)...)
-			_user.POST("/check",append(_checkUserExistsByIdMv(),users.CheckUserExistsById)...)
+			_user.POST("/check", append(_checkUserExistsByIdMv(), users.CheckUserExistsById)...)
 			_user.POST("/sendcode", append(_sendcodeMw(), users.SendCode)...)
 			_user.POST("/verifycode", append(_verifycodeMw(), users.VerifyCode)...)
 			{

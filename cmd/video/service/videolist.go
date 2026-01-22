@@ -6,6 +6,7 @@ import (
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
+
 	"github.com/pkg/errors"
 )
 

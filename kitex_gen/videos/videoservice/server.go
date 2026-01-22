@@ -3,6 +3,7 @@ package videoservice
 
 import (
 	videos "HuaTug.com/kitex_gen/videos"
+
 	server "github.com/cloudwego/kitex/server"
 )
 

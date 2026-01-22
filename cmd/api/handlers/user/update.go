@@ -9,6 +9,7 @@ import (
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/utils"
+
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
@@ -58,6 +59,6 @@ func UpdateUser(ctx context.Context, c *app.RequestContext) {
 		SendResponse(c, errno.ConvertErr(err), nil)
 		return
 	}
-	
+
 	SendResponse(c, errno.Success, resp)
 }

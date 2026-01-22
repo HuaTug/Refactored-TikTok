@@ -5,6 +5,7 @@ import (
 
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/pkg/utils"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -28,6 +29,7 @@ type UserWithPassword struct {
 func (u *UserWithPassword) TableName() string {
 	return TableName
 }
+
 /*
 这里需要注意的是这个TableName()方法其实是GORM框架的一个接口约定，在GORM中有一个接口定义
 type Tabler interface {
@@ -52,7 +54,6 @@ func (u *UserWithPassword) convertToBaseUser() *base.User {
 		DeletedAt: u.DeletedAt,
 	}
 }
-
 
 func CreateUser(ctx context.Context, user *base.User) error {
 	userWithPassword := &UserWithPassword{

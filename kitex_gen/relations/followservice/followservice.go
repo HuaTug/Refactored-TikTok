@@ -3,9 +3,11 @@
 package followservice
 
 import (
-	relations "HuaTug.com/kitex_gen/relations"
 	"context"
 	"errors"
+
+	relations "HuaTug.com/kitex_gen/relations"
+
 	client "github.com/cloudwego/kitex/client"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"
 )

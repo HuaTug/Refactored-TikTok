@@ -3,6 +3,7 @@ package followservice
 
 import (
 	relations "HuaTug.com/kitex_gen/relations"
+
 	server "github.com/cloudwego/kitex/server"
 )
 

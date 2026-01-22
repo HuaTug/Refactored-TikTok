@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/model"
-
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/cmd/video/infras/client"
 	"HuaTug.com/cmd/video/infras/redis"
-
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
+
 	"github.com/pkg/errors"
 )
 
@@ -26,7 +25,6 @@ func NewSharedVideoService(ctx context.Context) *SharedVideoService {
 }
 
 func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequestV2) error {
-
 	userExistsCh := make(chan bool)
 	videoExistsCh := make(chan bool)
 

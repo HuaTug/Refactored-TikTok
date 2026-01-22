@@ -6,6 +6,7 @@ import (
 
 	"HuaTug.com/cmd/user/dal/db"
 	"HuaTug.com/kitex_gen/base"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 )

@@ -3,8 +3,10 @@
 package followservice
 
 import (
-	relations "HuaTug.com/kitex_gen/relations"
 	"context"
+
+	relations "HuaTug.com/kitex_gen/relations"
+
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
 )

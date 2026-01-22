@@ -6,6 +6,7 @@ import (
 
 	"HuaTug.com/cmd/relation/dal/db"
 	"HuaTug.com/config"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 

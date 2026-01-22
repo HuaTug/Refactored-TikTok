@@ -5,6 +5,7 @@ import (
 
 	"HuaTug.com/config"
 	"HuaTug.com/kitex_gen/users/userservice"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/retry"

@@ -2,6 +2,7 @@ package redis
 
 import (
 	"HuaTug.com/config"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/go-redis/redis"
 )

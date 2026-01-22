@@ -9,6 +9,7 @@ import (
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/pkg/mq"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/google/uuid" // 添加这一行
 )

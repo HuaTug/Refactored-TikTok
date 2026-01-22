@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-
 	"strconv"
 
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/oss"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
@@ -24,9 +24,9 @@ type StreamVideoService struct {
 func NewStreamVideoService(ctx context.Context) *StreamVideoService {
 	return &StreamVideoService{ctx: ctx}
 }
-func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequestV2) (string, error) {
 
-	//db.UpdateVideoUrl(s.ctx, url, "", fmt.Sprint(VideoFiles[index].VideoId))
+func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequestV2) (string, error) {
+	// db.UpdateVideoUrl(s.ctx, url, "", fmt.Sprint(VideoFiles[index].VideoId))
 	if req.VideoId == "" {
 		return "", fmt.Errorf("Missing video ID")
 	}
@@ -51,7 +51,7 @@ func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequestV2) (stri
 
 	hlog.Info(index)
 	hlog.Info(VideoFiles)
-	//通过这个预签名的url，可以来访问minio中的视频文件
+	// 通过这个预签名的url，可以来访问minio中的视频文件
 	url, err := oss.GeneratePreUrl("video", "video/"+fmt.Sprint(VideoFiles[index].VideoId)+"/video.mp4", fmt.Sprint(VideoFiles[index].VideoId))
 	if err != nil {
 		hlog.Info(err)
@@ -60,7 +60,7 @@ func (s *StreamVideoService) VideoStream(req *videos.StreamVideoRequestV2) (stri
 	hlog.Info(url)
 
 	videoFilePath := "../../Download_video/videos" + fmt.Sprint(VideoFiles[index].VideoId) + ".mp4"
-	//videoFile, err := os.Open(VideoFiles[index].VideoUrl)
+	// videoFile, err := os.Open(VideoFiles[index].VideoUrl)
 	videoFile, err := os.Open(videoFilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open video file: %v", err)

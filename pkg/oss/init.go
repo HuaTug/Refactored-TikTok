@@ -37,7 +37,7 @@ func InitMinio() error {
 		// Wait a bit before starting to let MinIO fully initialize
 		time.Sleep(2 * time.Second)
 
-		bucketsToSetPolicy := []string{"tiktok-user-content", "video", "picture", "tiktok-cache-hot"}
+		bucketsToSetPolicy := GetAllBucketsNeedingPublicPolicy()
 		for _, bucketName := range bucketsToSetPolicy {
 			// Add retry logic with exponential backoff
 			if err := SetBucketPublicReadPolicyWithRetry(bucketName, 3); err != nil {

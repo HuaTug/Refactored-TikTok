@@ -9,6 +9,7 @@ import (
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/utils"
+
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
@@ -28,7 +29,7 @@ func VideoPublishStartV2(ctx context.Context, c *app.RequestContext) {
 	} else {
 		UserId = utils.Transfer(v)
 	}
-	
+
 	// 处理标签，将lab_name转换为标签数组
 	var tags []string
 	if VideoPublish.LabName != "" {

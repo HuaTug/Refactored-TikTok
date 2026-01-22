@@ -3,9 +3,11 @@
 package messageservice
 
 import (
-	messages "HuaTug.com/kitex_gen/messages"
 	"context"
 	"errors"
+
+	messages "HuaTug.com/kitex_gen/messages"
+
 	client "github.com/cloudwego/kitex/client"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"
 )

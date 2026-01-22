@@ -3,9 +3,10 @@
 package users
 
 import (
-	"HuaTug.com/kitex_gen/base"
 	"context"
 	"fmt"
+
+	"HuaTug.com/kitex_gen/base"
 )
 
 type CreateUserRequest struct {

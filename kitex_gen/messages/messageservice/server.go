@@ -3,6 +3,7 @@ package messageservice
 
 import (
 	messages "HuaTug.com/kitex_gen/messages"
+
 	server "github.com/cloudwego/kitex/server"
 )
 

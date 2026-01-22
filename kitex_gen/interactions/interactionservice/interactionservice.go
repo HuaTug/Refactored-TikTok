@@ -3,9 +3,11 @@
 package interactionservice
 
 import (
-	interactions "HuaTug.com/kitex_gen/interactions"
 	"context"
 	"errors"
+
+	interactions "HuaTug.com/kitex_gen/interactions"
+
 	client "github.com/cloudwego/kitex/client"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"
 )

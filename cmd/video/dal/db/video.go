@@ -3,12 +3,12 @@ package db
 import (
 	"context"
 	"fmt"
-
 	"sync"
 
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

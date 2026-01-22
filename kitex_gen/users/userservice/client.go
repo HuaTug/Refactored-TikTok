@@ -3,8 +3,10 @@
 package userservice
 
 import (
-	users "HuaTug.com/kitex_gen/users"
 	"context"
+
+	users "HuaTug.com/kitex_gen/users"
+
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
 )

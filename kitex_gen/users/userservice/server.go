@@ -3,6 +3,7 @@ package userservice
 
 import (
 	users "HuaTug.com/kitex_gen/users"
+
 	server "github.com/cloudwego/kitex/server"
 )
 

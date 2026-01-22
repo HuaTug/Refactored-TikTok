@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -14,19 +15,14 @@ import (
 	"strings"
 	"time"
 
+	"HuaTug.com/pkg/utils"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/minio/minio-go/v7"
 )
 
-// 存储桶常量
-const (
-	BUCKET_USER_CONTENT  = "tiktok-user-content"  // 用户生成内容
-	BUCKET_SYSTEM_ASSETS = "tiktok-system-assets" // 系统资源
-	BUCKET_CACHE_HOT     = "tiktok-cache-hot"     // 热点缓存
-	BUCKET_CACHE_WARM    = "tiktok-cache-warm"    // 温数据缓存
-	BUCKET_CACHE_COLD    = "tiktok-cache-cold"    // 冷数据存储
-	BUCKET_ANALYTICS     = "tiktok-analytics"     // 分析数据
-)
+// 存储桶常量（已迁移到storage_config.go，保留此引用以保持兼容性）
+// 旧的常量定义已移至 storage_config.go
 
 // TikTokStorage 新的存储服务
 type TikTokStorage struct {
@@ -103,20 +99,13 @@ func NewTikTokStorage() *TikTokStorage {
 	}
 }
 
-// 初始化存储桶
+// 初始化存储桶 - 使用统一的存储桶配置
 func (ts *TikTokStorage) InitializeBuckets(ctx context.Context) error {
 	if ts.client == nil {
 		return fmt.Errorf("MinIO client is not initialized")
 	}
 
-	buckets := []string{
-		BUCKET_USER_CONTENT,
-		BUCKET_SYSTEM_ASSETS,
-		BUCKET_CACHE_HOT,
-		BUCKET_CACHE_WARM,
-		BUCKET_CACHE_COLD,
-		BUCKET_ANALYTICS,
-	}
+	buckets := GetAllBuckets()
 
 	hlog.Infof("Starting to initialize %d TikTok storage buckets", len(buckets))
 
@@ -219,33 +208,33 @@ func (ts *TikTokStorage) UploadVideoTikTokStyle(ctx context.Context, req *VideoU
 	return response, nil
 }
 
-// 路径生成方法
+// 路径生成方法 - 使用统一路径模板
 func (ts *TikTokStorage) getSourceVideoPath(userID, videoID int64) string {
-	return fmt.Sprintf("users/%d/videos/%d/source/original.mp4", userID, videoID)
+	return fmt.Sprintf(VIDEO_SOURCE_TEMPLATE, userID, videoID)
 }
 
 func (ts *TikTokStorage) getProcessedVideoPath(userID, videoID int64, quality int) string {
-	return fmt.Sprintf("users/%d/videos/%d/processed/video_%dp.mp4", userID, videoID, quality)
+	return fmt.Sprintf(VIDEO_PROCESSED_TEMPLATE, userID, videoID, quality)
 }
 
 func (ts *TikTokStorage) GetThumbnailPath(userID, videoID int64, size string) string {
-	return fmt.Sprintf("users/%d/videos/%d/thumbnails/thumb_%s.jpg", userID, videoID, size)
+	return fmt.Sprintf(VIDEO_THUMBNAIL_TEMPLATE, userID, videoID, size)
 }
 
 func (ts *TikTokStorage) getAnimatedCoverPath(userID, videoID int64) string {
-	return fmt.Sprintf("users/%d/videos/%d/thumbnails/animated_cover.gif", userID, videoID)
+	return fmt.Sprintf(VIDEO_ANIMATED_COVER_TEMPLATE, userID, videoID)
 }
 
 func (ts *TikTokStorage) getVideoMetadataPath(userID, videoID int64) string {
-	return fmt.Sprintf("users/%d/videos/%d/metadata/info.json", userID, videoID)
+	return fmt.Sprintf(VIDEO_METADATA_TEMPLATE, userID, videoID)
 }
 
 func (ts *TikTokStorage) getUserAvatarPath(userID int64, size string) string {
-	return fmt.Sprintf("users/%d/profile/avatar/avatar_%s.jpg", userID, size)
+	return fmt.Sprintf(USER_AVATAR_TEMPLATE, userID, size, ".jpg")
 }
 
 func (ts *TikTokStorage) getUserBackgroundPath(userID int64) string {
-	return fmt.Sprintf("users/%d/profile/background/bg_image.jpg", userID)
+	return fmt.Sprintf(USER_BACKGROUND_TEMPLATE, userID)
 }
 
 // 生成缩略图路径映射
@@ -260,13 +249,13 @@ func (ts *TikTokStorage) generateThumbnailPaths(userID, videoID int64) map[strin
 	return paths
 }
 
-// 确保用户目录结构存在
+// 确保用户目录结构存在 - 使用统一路径模板
 func (ts *TikTokStorage) ensureUserDirectoryStructure(ctx context.Context, userID int64) error {
 	directories := []string{
-		fmt.Sprintf("users/%d/profile/avatar/", userID),
-		fmt.Sprintf("users/%d/profile/background/", userID),
-		fmt.Sprintf("users/%d/videos/", userID),
-		fmt.Sprintf("users/%d/drafts/", userID),
+		fmt.Sprintf(USER_AVATAR_DIR_TEMPLATE, userID),
+		fmt.Sprintf(USER_BACKGROUND_DIR_TEMPLATE, userID),
+		fmt.Sprintf(USER_VIDEOS_DIR_TEMPLATE, userID),
+		fmt.Sprintf(USER_DRAFTS_DIR_TEMPLATE, userID),
 	}
 
 	for _, dir := range directories {
@@ -411,17 +400,17 @@ func (ts *TikTokStorage) getVideoMetadata(ctx context.Context, metadataPath stri
 	return &metadata, nil
 }
 
-// 热度分层存储：将热门视频提升到热点缓存
+// 热度分层存储：将热门视频提升到热点缓存 - 使用统一路径模板
 func (ts *TikTokStorage) PromoteToHotStorage(ctx context.Context, userID, videoID int64) error {
 	sourcePath := ts.getProcessedVideoPath(userID, videoID, 720)
-	hotPath := fmt.Sprintf("hot/users/%d/videos/%d/video_720p.mp4", userID, videoID)
+	hotPath := fmt.Sprintf(HOT_VIDEO_TEMPLATE, userID, videoID)
 
 	return ts.copyObject(ctx, BUCKET_USER_CONTENT, sourcePath, BUCKET_CACHE_HOT, hotPath)
 }
 
-// 检查视频是否在热点存储中
+// 检查视频是否在热点存储中 - 使用统一路径模板
 func (ts *TikTokStorage) IsInHotStorage(ctx context.Context, userID, videoID int64) (bool, error) {
-	hotPath := fmt.Sprintf("hot/users/%d/videos/%d/video_720p.mp4", userID, videoID)
+	hotPath := fmt.Sprintf(HOT_VIDEO_TEMPLATE, userID, videoID)
 
 	_, err := ts.client.StatObject(ctx, BUCKET_CACHE_HOT, hotPath, minio.StatObjectOptions{})
 	if err != nil {
@@ -445,7 +434,7 @@ func (ts *TikTokStorage) GeneratePresignedURL(bucketName, objectName string, exp
 	return presignedURL.String(), nil
 }
 
-// UploadUserAvatar 上传用户头像（TikTok风格）
+// UploadUserAvatar 上传用户头像（TikTok风格）- 使用统一路径模板
 func (ts *TikTokStorage) UploadUserAvatar(ctx context.Context, userID int64, data []byte, contentType string) (map[string]string, error) {
 	// 确保用户目录存在
 	if err := ts.ensureUserDirectoryStructure(ctx, userID); err != nil {
@@ -470,7 +459,7 @@ func (ts *TikTokStorage) UploadUserAvatar(ctx context.Context, userID int64, dat
 	avatarURLs := make(map[string]string)
 
 	for _, size := range sizes {
-		avatarPath := fmt.Sprintf("users/%d/profile/avatar/avatar_%s%s", userID, size, suffix)
+		avatarPath := fmt.Sprintf(USER_AVATAR_TEMPLATE, userID, size, suffix)
 
 		_, err := ts.client.PutObject(ctx, BUCKET_USER_CONTENT, avatarPath, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
 			ContentType: contentType,
@@ -502,7 +491,7 @@ func (ts *TikTokStorage) deleteUserAvatars(ctx context.Context, userID int64) {
 	}
 }
 
-// GetOptimalVideoPath 根据设备类型和网络状况选择最优视频路径
+// GetOptimalVideoPath 根据设备类型和网络状况选择最优视频路径 - 使用统一路径模板
 func (ts *TikTokStorage) GetOptimalVideoPath(userID, videoID int64, userAgent string, quality string) (string, error) {
 	// 检查是否在热点存储
 	inHotStorage, err := ts.IsInHotStorage(context.Background(), userID, videoID)
@@ -515,7 +504,7 @@ func (ts *TikTokStorage) GetOptimalVideoPath(userID, videoID int64, userAgent st
 
 	var objectPath string
 	if inHotStorage {
-		objectPath = fmt.Sprintf("hot/users/%d/videos/%d/video_%dp.mp4", userID, videoID, selectedQuality)
+		objectPath = fmt.Sprintf(HOT_VIDEO_TEMPLATE, userID, videoID, selectedQuality)
 	} else {
 		objectPath = ts.getProcessedVideoPath(userID, videoID, selectedQuality)
 	}
@@ -625,10 +614,10 @@ func (ts *TikTokStorage) AbortMultipartUpload(ctx context.Context, bucketName, o
 	return nil
 }
 
-// ListParts 列出已上传的分片
+// ListParts 列出已上传的分片 - 使用统一路径模板
 func (ts *TikTokStorage) ListParts(ctx context.Context, bucketName, objectName, uploadID string) ([]MinIOObjectPart, error) {
 	// 列出临时分片目录下的所有对象
-	prefix := fmt.Sprintf("temp_parts/%s/", uploadID)
+	prefix := fmt.Sprintf(TEMP_PART_DIR_TEMPLATE, uploadID)
 	objectsCh := ts.client.ListObjects(ctx, bucketName, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
@@ -658,7 +647,9 @@ func (ts *TikTokStorage) ListParts(ctx context.Context, bucketName, objectName, 
 	}
 
 	return parts, nil
-} // CalculateOptimalChunkSize 计算最优分片大小
+}
+
+// CalculateOptimalChunkSize 计算最优分片大小
 func (ts *TikTokStorage) CalculateOptimalChunkSize(fileSize int64, maxChunks int) int64 {
 	const minChunkSize = 5 * 1024 * 1024   // 5MB - MinIO最小分片大小
 	const maxChunkSize = 100 * 1024 * 1024 // 100MB - 推荐最大分片大小
@@ -677,9 +668,11 @@ func (ts *TikTokStorage) CalculateOptimalChunkSize(fileSize int64, maxChunks int
 	return calculatedSize
 }
 
-// GenerateVideoObjectName 生成视频对象名称
+// GenerateVideoObjectName 生成视频对象名称（已弃用，请使用getSourceVideoPath）
+// 保留此方法以向后兼容
 func (ts *TikTokStorage) GenerateVideoObjectName(userID, videoID int64) string {
-	return fmt.Sprintf("videos/user_%d/video_%d/source.mp4", userID, videoID)
+	// 现在使用统一的路径模板
+	return fmt.Sprintf(VIDEO_SOURCE_TEMPLATE, userID, videoID)
 }
 
 // GetObjectInfo 获取对象信息
@@ -692,9 +685,9 @@ func (ts *TikTokStorage) GetObjectInfo(ctx context.Context, bucketName, objectNa
 	return &objectInfo, nil
 }
 
-// cleanupTempParts 清理临时分片文件
+// cleanupTempParts 清理临时分片文件 - 使用统一路径模板
 func (ts *TikTokStorage) cleanupTempParts(ctx context.Context, bucketName, uploadID string, maxParts int) {
-	prefix := fmt.Sprintf("temp_parts/%s/", uploadID)
+	prefix := fmt.Sprintf(TEMP_PART_DIR_TEMPLATE, uploadID)
 
 	// 如果maxParts为0，清理所有分片
 	if maxParts == 0 {
@@ -718,7 +711,7 @@ func (ts *TikTokStorage) cleanupTempParts(ctx context.Context, bucketName, uploa
 	} else {
 		// 删除指定数量的分片
 		for i := 1; i <= maxParts; i++ {
-			tempObjectName := fmt.Sprintf("temp_parts/%s/part_%d", uploadID, i)
+			tempObjectName := fmt.Sprintf(TEMP_PART_TEMPLATE, uploadID, i)
 			err := ts.client.RemoveObject(ctx, bucketName, tempObjectName, minio.RemoveObjectOptions{})
 			if err != nil {
 				hlog.Errorf("删除临时分片 %s 失败: %v", tempObjectName, err)
@@ -727,4 +720,160 @@ func (ts *TikTokStorage) cleanupTempParts(ctx context.Context, bucketName, uploa
 	}
 
 	hlog.Infof("已清理上传ID %s 的临时分片", uploadID)
+}
+
+// ============== 缩略图生成和上传功能 ==============
+
+// GenerateAndUploadThumbnails 从视频文件生成多尺寸缩略图并上传
+// videoFile: 本地视频文件路径
+// userID: 用户ID
+// videoID: 视频ID
+// timeOffset: 时间偏移（秒），-1表示自动选择最佳帧
+func (ts *TikTokStorage) GenerateAndUploadThumbnails(ctx context.Context, videoFile string, userID, videoID int64, timeOffset int) (map[string]string, error) {
+	// 创建临时目录
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("thumbnails_%d_%d", userID, videoID))
+	defer os.RemoveAll(tempDir) // 清理临时文件
+
+	// 生成多尺寸缩略图
+	sizes := []utils.ThumbnailSize{
+		utils.ThumbnailSmall,
+		utils.ThumbnailMedium,
+		utils.ThumbnailLarge,
+	}
+
+	thumbnailFiles, err := utils.GetVideoThumbnails(videoFile, tempDir, timeOffset, sizes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate thumbnails: %w", err)
+	}
+
+	// 上传所有缩略图
+	thumbnailURLs := make(map[string]string)
+
+	for size, filePath := range thumbnailFiles {
+		// 生成存储路径
+		thumbnailPath := ts.GetThumbnailPath(userID, videoID, size)
+
+		// 读取文件内容
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read thumbnail %s: %w", size, err)
+		}
+
+		// 上传到存储
+		_, err = ts.client.PutObject(
+			ctx,
+			BUCKET_USER_CONTENT,
+			thumbnailPath,
+			bytes.NewReader(data),
+			int64(len(data)),
+			minio.PutObjectOptions{
+				ContentType: "image/jpeg",
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload thumbnail %s: %w", size, err)
+		}
+
+		// 生成访问URL
+		thumbnailURLs[size] = ts.generateURL(BUCKET_USER_CONTENT, thumbnailPath)
+
+		hlog.Infof("Successfully uploaded thumbnail %s for video %d", size, videoID)
+	}
+
+	return thumbnailURLs, nil
+}
+
+// GenerateAndUploadAnimatedCover 从视频生成动态封面（GIF）并上传
+// videoFile: 本地视频文件路径
+// userID: 用户ID
+// videoID: 视频ID
+// startTime: 开始时间（秒）
+// duration: 持续时间（秒）
+func (ts *TikTokStorage) GenerateAndUploadAnimatedCover(ctx context.Context, videoFile string, userID, videoID int64, startTime, duration int) (string, error) {
+	// 创建临时目录
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("animated_cover_%d_%d", userID, videoID))
+	defer os.RemoveAll(tempDir)
+
+	// 生成动态封面
+	animatedCoverFile, err := utils.GetAnimatedCover(videoFile, tempDir, startTime, duration, 5, 320)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate animated cover: %w", err)
+	}
+
+	// 读取文件内容
+	data, err := os.ReadFile(animatedCoverFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read animated cover: %w", err)
+	}
+
+	// 生成存储路径
+	animatedCoverPath := ts.getAnimatedCoverPath(userID, videoID)
+
+	// 上传到存储
+	_, err = ts.client.PutObject(
+		ctx,
+		BUCKET_USER_CONTENT,
+		animatedCoverPath,
+		bytes.NewReader(data),
+		int64(len(data)),
+		minio.PutObjectOptions{
+			ContentType: "image/gif",
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload animated cover: %w", err)
+	}
+
+	// 生成访问URL
+	url := ts.generateURL(BUCKET_USER_CONTENT, animatedCoverPath)
+
+	hlog.Infof("Successfully uploaded animated cover for video %d", videoID)
+	return url, nil
+}
+
+// ExtractBestThumbnail 从视频自动选择最佳帧作为缩略图
+// videoFile: 本地视频文件路径
+// userID: 用户ID
+// videoID: 视频ID
+// 返回中等尺寸缩略图URL
+func (ts *TikTokStorage) ExtractBestThumbnail(ctx context.Context, videoFile string, userID, videoID int64) (string, error) {
+	// 自动选择最佳帧（从视频中间位置抽取）
+	tempDir := filepath.Join(os.TempDir(), fmt.Sprintf("best_thumbnail_%d_%d", userID, videoID))
+	defer os.RemoveAll(tempDir)
+
+	// 生成中等尺寸缩略图
+	thumbnailFile, err := utils.GetVideoThumbnail(videoFile, tempDir, -1, 320, 180)
+	if err != nil {
+		return "", fmt.Errorf("failed to extract best thumbnail: %w", err)
+	}
+
+	// 读取文件内容
+	data, err := os.ReadFile(thumbnailFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read thumbnail: %w", err)
+	}
+
+	// 生成存储路径
+	thumbnailPath := ts.GetThumbnailPath(userID, videoID, "medium")
+
+	// 上传到存储
+	_, err = ts.client.PutObject(
+		ctx,
+		BUCKET_USER_CONTENT,
+		thumbnailPath,
+		bytes.NewReader(data),
+		int64(len(data)),
+		minio.PutObjectOptions{
+			ContentType: "image/jpeg",
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to upload thumbnail: %w", err)
+	}
+
+	// 生成访问URL
+	url := ts.generateURL(BUCKET_USER_CONTENT, thumbnailPath)
+
+	hlog.Infof("Successfully extracted and uploaded best thumbnail for video %d", videoID)
+	return url, nil
 }

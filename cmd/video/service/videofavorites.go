@@ -9,6 +9,7 @@ import (
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
+
 	"github.com/pkg/errors"
 )
 

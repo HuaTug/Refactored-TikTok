@@ -4,18 +4,17 @@ import (
 	"net"
 	"time"
 
-	"HuaTug.com/config/cache"
-	"HuaTug.com/config/jaeger"
-	"HuaTug.com/kitex_gen/videos/videoservice"
-
 	"HuaTug.com/cmd/video/dal"
 	"HuaTug.com/cmd/video/infras/client"
 	"HuaTug.com/cmd/video/infras/redis"
-
 	"HuaTug.com/config"
+	"HuaTug.com/config/cache"
+	"HuaTug.com/config/jaeger"
+	"HuaTug.com/kitex_gen/videos/videoservice"
 	"HuaTug.com/pkg/bound"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/oss"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/limit"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
@@ -59,7 +58,7 @@ func main() {
 	suite, closer := jaeger.NewServerSuite().Init("Video")
 	defer closer.Close()
 
-  ip := "localhost"
+	ip := "localhost"
 	addr, err := net.ResolveTCPAddr("tcp", ip+":8891")
 	if err != nil {
 		panic(err)

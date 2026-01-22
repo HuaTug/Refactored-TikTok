@@ -12,9 +12,9 @@ import (
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
-
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/mq"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/google/uuid"
 )

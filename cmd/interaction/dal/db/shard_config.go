@@ -15,7 +15,6 @@ type ShardConfig struct {
 	DatabaseConfigs []DatabaseConfig
 }
 
-
 // DatabaseConfig 单个数据库配置
 type DatabaseConfig struct {
 	// 数据库名称

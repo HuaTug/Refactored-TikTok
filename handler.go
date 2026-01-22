@@ -1,8 +1,9 @@
 package main
 
 import (
-	videos "HuaTug.com/kitex_gen/videos"
 	"context"
+
+	videos "HuaTug.com/kitex_gen/videos"
 )
 
 // VideoServiceImpl implements the last service interface defined in the IDL.

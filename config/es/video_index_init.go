@@ -235,7 +235,7 @@ func (v *VideoIndex) UpdateTitle(newId int64, vid string) error {
 				在给定的代码示例中，结构体的字段名称和字段类型（在这种情况下是 Title string）与 Elasticsearch 文档的 Mapping 中的字段名称和字段类型应该是一致的。
 				此外，如果你在结构体字段上使用了标签（例如 json:"title"），这些标签可以帮助客户端库在序列化和反序列化时将 Golang 结构体与 Elasticsearch 文档正确地映射。
 				struct { ... }{ ... }: 这是一个匿名结构体，用于描述要更新的文档的内容。
-		
+
 			struct {
 				Info struct {
 					Title string `json:"title"`
@@ -249,7 +249,7 @@ func (v *VideoIndex) UpdateTitle(newId int64, vid string) error {
 			},
 		)*/
 		Doc(
-			struct{
+			struct {
 				AuthorId int64 `json:"author_id"`
 			}{
 				AuthorId: newId,

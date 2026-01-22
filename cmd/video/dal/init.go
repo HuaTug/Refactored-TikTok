@@ -1,6 +1,7 @@
 package dal
 
-import ("HuaTug.com/cmd/video/dal/db"
+import (
+	"HuaTug.com/cmd/video/dal/db"
 )
 
 func Init() {

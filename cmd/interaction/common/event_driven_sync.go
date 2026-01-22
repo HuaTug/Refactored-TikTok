@@ -10,6 +10,7 @@ import (
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/pkg/mq"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	redisClient "github.com/go-redis/redis"
 	"github.com/google/uuid"

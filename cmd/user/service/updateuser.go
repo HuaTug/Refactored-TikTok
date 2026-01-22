@@ -12,6 +12,7 @@ import (
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/oss"
+
 	"github.com/pkg/errors"
 )
 

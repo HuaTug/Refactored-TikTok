@@ -10,6 +10,7 @@ import (
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	amqp "github.com/rabbitmq/amqp091-go"
 )

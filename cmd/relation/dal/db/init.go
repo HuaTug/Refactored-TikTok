@@ -2,6 +2,7 @@ package db
 
 import (
 	"HuaTug.com/config"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormopentracing "gorm.io/plugin/opentracing"

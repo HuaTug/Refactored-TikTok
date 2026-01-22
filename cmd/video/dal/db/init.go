@@ -2,6 +2,7 @@ package db
 
 import (
 	"HuaTug.com/config"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

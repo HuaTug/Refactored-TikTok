@@ -8,6 +8,7 @@ import (
 
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/cmd/model"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"gorm.io/gorm"
 )
@@ -271,7 +272,7 @@ func (dcs *DataConsistencyService) handleInconsistency(result *ConsistencyCheckR
 	}
 }
 
-//ToDo: 补充点踩的计数
+// ToDo: 补充点踩的计数
 // fixVideoLikeConsistency 修复视频点赞数据一致性
 func (dcs *DataConsistencyService) fixVideoLikeConsistency(videoID int64, correctCount int64) {
 	if correctCount < 0 {

@@ -8,6 +8,7 @@ import (
 	"HuaTug.com/config/jaeger"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/users/userservice"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/retry"
@@ -30,7 +31,7 @@ func InitUserRpc() {
 		/* 		client.WithMiddleware(middleware.CommonMiddleware),
 		   		client.WithInstanceMW(middleware.ClientMiddleware), */
 		client.WithMuxConnection(3),                       // mux
-		client.WithRPCTimeout(50*time.Second),              // rpc timeout
+		client.WithRPCTimeout(50*time.Second),             // rpc timeout
 		client.WithConnectTimeout(50*time.Second),         // conn timeout
 		client.WithFailureRetry(retry.NewFailurePolicy()), // retry
 		//client.WithSuite(trace.NewDefaultClientSuite()),   // tracer

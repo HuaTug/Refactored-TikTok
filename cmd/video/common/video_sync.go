@@ -9,6 +9,7 @@ import (
 
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/cmd/video/infras/redis"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 

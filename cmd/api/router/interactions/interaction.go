@@ -4,6 +4,7 @@ package interactions
 
 import (
 	interactions "HuaTug.com/cmd/api/handlers/interaction"
+
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 

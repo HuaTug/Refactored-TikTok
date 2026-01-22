@@ -6,6 +6,7 @@ import (
 	"HuaTug.com/cmd/user/infras/redis"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/pkg/utils"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
@@ -18,7 +19,7 @@ func NewSendCodeService(ctx context.Context) *SendCodeService {
 }
 
 func (s *SendCodeService) SendCode(req *users.SendCodeRequest) (string, error) {
-  hlog.Info("from front req:" ,req.Email)
+	hlog.Info("from front req:", req.Email)
 	if code, err := utils.SendEmail(req.Email); err != nil {
 		hlog.Info(err)
 		return "", err

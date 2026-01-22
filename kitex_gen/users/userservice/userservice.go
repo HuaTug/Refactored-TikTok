@@ -3,9 +3,11 @@
 package userservice
 
 import (
-	users "HuaTug.com/kitex_gen/users"
 	"context"
 	"errors"
+
+	users "HuaTug.com/kitex_gen/users"
+
 	client "github.com/cloudwego/kitex/client"
 	kitex "github.com/cloudwego/kitex/pkg/serviceinfo"
 )

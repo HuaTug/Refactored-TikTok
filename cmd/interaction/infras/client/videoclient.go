@@ -6,6 +6,7 @@ import (
 
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/kitex_gen/videos/videoservice"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/retry"

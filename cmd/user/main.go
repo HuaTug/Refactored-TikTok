@@ -33,7 +33,6 @@ import (
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
-	//trace "github.com/kitex-contrib/tracer-opentracing"
 )
 
 func Init() {

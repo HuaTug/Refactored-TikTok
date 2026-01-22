@@ -1,9 +1,3 @@
 package oss
 
-var (
-	Bucket           string
-	AccessKey        string
-	SecretKey        string
-	Url              string
-	DefaultAvatarUrl string
-)
+// This file is deprecated. All configurations are now in storage_config.go

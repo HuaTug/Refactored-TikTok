@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/cloudwego/gopkg/protocol/thrift"
-
 	"HuaTug.com/kitex_gen/base"
+
+	"github.com/cloudwego/gopkg/protocol/thrift"
 )
 
 var (

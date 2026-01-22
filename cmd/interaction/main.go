@@ -11,19 +11,18 @@ import (
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/config/jaeger"
-
 	"HuaTug.com/config"
+	"HuaTug.com/config/jaeger"
 	interaction "HuaTug.com/kitex_gen/interactions/interactionservice"
 	"HuaTug.com/pkg/bound"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/mq"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/limit"
 	"github.com/cloudwego/kitex/pkg/rpcinfo"
 	"github.com/cloudwego/kitex/server"
 	etcd "github.com/kitex-contrib/registry-etcd"
-	//trace "github.com/kitex-contrib/tracer-opentracing"
 )
 
 // 全局变量

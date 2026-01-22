@@ -8,6 +8,7 @@ import (
 	"HuaTug.com/config/jaeger"
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/interactions/interactionservice"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/client"
 	"github.com/cloudwego/kitex/pkg/retry"

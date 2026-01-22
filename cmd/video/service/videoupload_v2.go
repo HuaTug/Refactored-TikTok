@@ -19,6 +19,7 @@ import (
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/oss"
+
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 )
@@ -536,7 +537,6 @@ func (s *VideoUploadServiceV2) saveUploadSession(session *UploadSession) error {
 		strconv.Itoa(session.TotalChunks),
 		session.Tags,
 		session.Category)
-
 	if err != nil {
 		hlog.Errorf("Failed to save upload session %s: %v", session.UUID, err)
 		return fmt.Errorf("failed to save upload session: %w", err)

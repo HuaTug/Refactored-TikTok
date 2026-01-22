@@ -3,6 +3,7 @@ package interactionservice
 
 import (
 	interactions "HuaTug.com/kitex_gen/interactions"
+
 	server "github.com/cloudwego/kitex/server"
 )
 

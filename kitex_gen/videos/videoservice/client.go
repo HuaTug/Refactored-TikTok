@@ -3,8 +3,10 @@
 package videoservice
 
 import (
-	videos "HuaTug.com/kitex_gen/videos"
 	"context"
+
+	videos "HuaTug.com/kitex_gen/videos"
+
 	client "github.com/cloudwego/kitex/client"
 	callopt "github.com/cloudwego/kitex/client/callopt"
 )

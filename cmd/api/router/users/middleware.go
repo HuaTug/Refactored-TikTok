@@ -4,6 +4,7 @@ package users
 
 import (
 	"HuaTug.com/cmd/api/router/authfunc"
+
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
