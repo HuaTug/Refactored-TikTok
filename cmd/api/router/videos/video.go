@@ -46,6 +46,24 @@ func Register(r *server.Hertz) {
 			_video := _v2.Group("/video", _videoV2Mw()...)
 			_video.POST("/transcode", append(_transcodevideoV2Mw(), videos.TranscodeVideoV2)...)
 			_video.GET("/analytics", append(_getvideoanalyticsV2Mw(), videos.GetVideoAnalyticsV2)...)
+			_video.POST("/visit", append(_videovisitV2Mw(), videos.VideoVisitV2)...)
+			_video.GET("/visit/count", append(_getvideovisitcountV2Mw(), videos.GetVideoVisitCountV2)...)
+
+			// 浏览历史功能
+			_history := _v2.Group("/history", _historyV2Mw()...)
+			_history.GET("/list", append(_getwatchhistoryV2Mw(), videos.GetWatchHistoryV2)...)
+			_history.POST("/add", append(_addwatchhistoryV2Mw(), videos.AddWatchHistoryV2)...)
+			_history.DELETE("/clear", append(_clearwatchhistoryV2Mw(), videos.ClearWatchHistoryV2)...)
+			_history.DELETE("/delete", append(_deletewatchhistoryitemV2Mw(), videos.DeleteWatchHistoryItemV2)...)
+
+			// V2收藏夹功能
+			_favoriteV2 := _v2.Group("/favorite", _favoriteV2Mw()...)
+			_favoriteV2.POST("/create", append(_createfavoriteV2Mw(), videos.CreateFavoriteV2)...)
+			_favoriteV2.GET("/list", append(_getfavoritelistV2Mw(), videos.GetFavoriteListV2)...)
+			_favoriteV2.GET("/video/list", append(_getfavoritevideolistV2Mw(), videos.GetFavoriteVideoListV2)...)
+			_favoriteV2.POST("/video/add", append(_addfavoritevideoV2Mw(), videos.AddFavoriteVideoV2)...)
+			_favoriteV2.DELETE("/delete", append(_deletefavoriteV2Mw(), videos.DeleteFavoriteV2)...)
+			_favoriteV2.DELETE("/video/delete", append(_deletevideofromfavoriteV2Mw(), videos.DeleteVideoFromFavoriteV2)...)
 		}
 
 		// ========== V1版本API ==========
@@ -69,6 +87,7 @@ func Register(r *server.Hertz) {
 			_favorite.POST("/video/add", append(_addFavoriteVideoMv(), videos.AddVideoToFavorite)...)
 			_favorite.DELETE("/delete", append(_deleteFavoriteMv(), videos.DeleteFavorite)...)
 			_favorite.DELETE("/video/delete", append(_deleteVideoFromFavoriteMv(), videos.DeleteVideoFromFavorite)...)
+			_favorite.POST("/batch_status", append(_getFavoriteListMv(), videos.BatchFavoriteStatus)...)
 		}
 
 		{

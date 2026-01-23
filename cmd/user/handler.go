@@ -18,12 +18,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"HuaTug.com/cmd/user/dal/db"
 	"HuaTug.com/cmd/user/service"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/users"
 
+	"github.com/bytedance/gopkg/cloud/metainfo"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/pkg/errors"
@@ -333,16 +335,18 @@ func (s *UserServiceImpl) GetAvatarUploadUrl(ctx context.Context, req *users.Get
 	resp = new(users.GetAvatarUploadUrlResponse)
 	resp.Base = &base.Status{}
 
-	// 从JWT token中获取用户ID
-	userIdValue := ctx.Value("user_id")
-	if userIdValue == nil {
+	// 从 metainfo 中获取用户ID
+	userIdStr, ok := metainfo.GetValue(ctx, "user_id")
+	if !ok || userIdStr == "" {
+		hlog.Warnf("GetAvatarUploadUrl: user_id not found in metainfo")
 		resp.Base.Code = consts.StatusUnauthorized
 		resp.Base.Msg = "用户未登录"
 		return resp, nil
 	}
 
-	userId, ok := userIdValue.(int64)
-	if !ok {
+	userId, err := strconv.ParseInt(userIdStr, 10, 64)
+	if err != nil {
+		hlog.Errorf("GetAvatarUploadUrl: invalid user_id format: %v", err)
 		resp.Base.Code = consts.StatusInternalServerError
 		resp.Base.Msg = "用户ID格式错误"
 		return resp, nil
@@ -369,16 +373,18 @@ func (s *UserServiceImpl) UpdateAvatar(ctx context.Context, req *users.UpdateAva
 	resp = new(users.UpdateAvatarResponse)
 	resp.Base = &base.Status{}
 
-	// 从JWT token中获取用户ID
-	userIdValue := ctx.Value("user_id")
-	if userIdValue == nil {
+	// 从 metainfo 中获取用户ID
+	userIdStr, ok := metainfo.GetValue(ctx, "user_id")
+	if !ok || userIdStr == "" {
+		hlog.Warnf("UpdateAvatar: user_id not found in metainfo")
 		resp.Base.Code = consts.StatusUnauthorized
 		resp.Base.Msg = "用户未登录"
 		return resp, nil
 	}
 
-	userId, ok := userIdValue.(int64)
-	if !ok {
+	userId, err := strconv.ParseInt(userIdStr, 10, 64)
+	if err != nil {
+		hlog.Errorf("UpdateAvatar: invalid user_id format: %v", err)
 		resp.Base.Code = consts.StatusInternalServerError
 		resp.Base.Msg = "用户ID格式错误"
 		return resp, nil

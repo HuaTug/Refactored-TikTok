@@ -13,6 +13,7 @@ import (
 type Client interface {
 	LikeAction(ctx context.Context, req *interactions.LikeActionRequest, callOptions ...callopt.Option) (r *interactions.LikeActionResponse, err error)
 	LikeList(ctx context.Context, req *interactions.LikeListRequest, callOptions ...callopt.Option) (r *interactions.LikeListResponse, err error)
+	BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest, callOptions ...callopt.Option) (r *interactions.BatchLikeStatusResponse, err error)
 	CreateComment(ctx context.Context, req *interactions.CreateCommentRequest, callOptions ...callopt.Option) (r *interactions.CreateCommentResponse, err error)
 	ListComment(ctx context.Context, req *interactions.ListCommentRequest, callOptions ...callopt.Option) (r *interactions.ListCommentResponse, err error)
 	DeleteComment(ctx context.Context, req *interactions.CommentDeleteRequest, callOptions ...callopt.Option) (r *interactions.CommentDeleteResponse, err error)
@@ -59,6 +60,11 @@ func (p *kInteractionServiceClient) LikeAction(ctx context.Context, req *interac
 func (p *kInteractionServiceClient) LikeList(ctx context.Context, req *interactions.LikeListRequest, callOptions ...callopt.Option) (r *interactions.LikeListResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.LikeList(ctx, req)
+}
+
+func (p *kInteractionServiceClient) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest, callOptions ...callopt.Option) (r *interactions.BatchLikeStatusResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.BatchLikeStatus(ctx, req)
 }
 
 func (p *kInteractionServiceClient) CreateComment(ctx context.Context, req *interactions.CreateCommentRequest, callOptions ...callopt.Option) (r *interactions.CreateCommentResponse, err error) {

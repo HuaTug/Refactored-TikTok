@@ -877,3 +877,40 @@ func (ts *TikTokStorage) ExtractBestThumbnail(ctx context.Context, videoFile str
 	hlog.Infof("Successfully extracted and uploaded best thumbnail for video %d", videoID)
 	return url, nil
 }
+
+// DownloadFile 从MinIO下载文件到本地路径
+func (ts *TikTokStorage) DownloadFile(ctx context.Context, bucketName, objectName, localPath string) error {
+	// 获取对象
+	object, err := ts.client.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to get object from MinIO: %w", err)
+	}
+	defer object.Close()
+
+	// 创建本地文件
+	localFile, err := os.Create(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to create local file: %w", err)
+	}
+	defer localFile.Close()
+
+	// 复制数据
+	_, err = io.Copy(localFile, object)
+	if err != nil {
+		return fmt.Errorf("failed to copy data to local file: %w", err)
+	}
+
+	return nil
+}
+
+// UploadBytes 上传字节数据到MinIO
+func (ts *TikTokStorage) UploadBytes(ctx context.Context, bucketName, objectName string, data []byte, contentType string) error {
+	reader := bytes.NewReader(data)
+	_, err := ts.client.PutObject(ctx, bucketName, objectName, reader, int64(len(data)), minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upload bytes to MinIO: %w", err)
+	}
+	return nil
+}

@@ -223,6 +223,34 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"GetWatchHistoryV2": kitex.NewMethodInfo(
+		getWatchHistoryV2Handler,
+		newVideoServiceGetWatchHistoryV2Args,
+		newVideoServiceGetWatchHistoryV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"AddWatchHistoryV2": kitex.NewMethodInfo(
+		addWatchHistoryV2Handler,
+		newVideoServiceAddWatchHistoryV2Args,
+		newVideoServiceAddWatchHistoryV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ClearWatchHistoryV2": kitex.NewMethodInfo(
+		clearWatchHistoryV2Handler,
+		newVideoServiceClearWatchHistoryV2Args,
+		newVideoServiceClearWatchHistoryV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteWatchHistoryItemV2": kitex.NewMethodInfo(
+		deleteWatchHistoryItemV2Handler,
+		newVideoServiceDeleteWatchHistoryItemV2Args,
+		newVideoServiceDeleteWatchHistoryItemV2Result,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -829,6 +857,78 @@ func newVideoServiceGetVideoAnalyticsV2Result() interface{} {
 	return videos.NewVideoServiceGetVideoAnalyticsV2Result()
 }
 
+func getWatchHistoryV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceGetWatchHistoryV2Args)
+	realResult := result.(*videos.VideoServiceGetWatchHistoryV2Result)
+	success, err := handler.(videos.VideoService).GetWatchHistoryV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceGetWatchHistoryV2Args() interface{} {
+	return videos.NewVideoServiceGetWatchHistoryV2Args()
+}
+
+func newVideoServiceGetWatchHistoryV2Result() interface{} {
+	return videos.NewVideoServiceGetWatchHistoryV2Result()
+}
+
+func addWatchHistoryV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceAddWatchHistoryV2Args)
+	realResult := result.(*videos.VideoServiceAddWatchHistoryV2Result)
+	success, err := handler.(videos.VideoService).AddWatchHistoryV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceAddWatchHistoryV2Args() interface{} {
+	return videos.NewVideoServiceAddWatchHistoryV2Args()
+}
+
+func newVideoServiceAddWatchHistoryV2Result() interface{} {
+	return videos.NewVideoServiceAddWatchHistoryV2Result()
+}
+
+func clearWatchHistoryV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceClearWatchHistoryV2Args)
+	realResult := result.(*videos.VideoServiceClearWatchHistoryV2Result)
+	success, err := handler.(videos.VideoService).ClearWatchHistoryV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceClearWatchHistoryV2Args() interface{} {
+	return videos.NewVideoServiceClearWatchHistoryV2Args()
+}
+
+func newVideoServiceClearWatchHistoryV2Result() interface{} {
+	return videos.NewVideoServiceClearWatchHistoryV2Result()
+}
+
+func deleteWatchHistoryItemV2Handler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*videos.VideoServiceDeleteWatchHistoryItemV2Args)
+	realResult := result.(*videos.VideoServiceDeleteWatchHistoryItemV2Result)
+	success, err := handler.(videos.VideoService).DeleteWatchHistoryItemV2(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newVideoServiceDeleteWatchHistoryItemV2Args() interface{} {
+	return videos.NewVideoServiceDeleteWatchHistoryItemV2Args()
+}
+
+func newVideoServiceDeleteWatchHistoryItemV2Result() interface{} {
+	return videos.NewVideoServiceDeleteWatchHistoryItemV2Result()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -1134,6 +1234,46 @@ func (p *kClient) GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnal
 	_args.Req = req
 	var _result videos.VideoServiceGetVideoAnalyticsV2Result
 	if err = p.c.Call(ctx, "GetVideoAnalyticsV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetWatchHistoryV2(ctx context.Context, req *videos.GetWatchHistoryRequestV2) (r *videos.GetWatchHistoryResponseV2, err error) {
+	var _args videos.VideoServiceGetWatchHistoryV2Args
+	_args.Req = req
+	var _result videos.VideoServiceGetWatchHistoryV2Result
+	if err = p.c.Call(ctx, "GetWatchHistoryV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) AddWatchHistoryV2(ctx context.Context, req *videos.AddWatchHistoryRequestV2) (r *videos.AddWatchHistoryResponseV2, err error) {
+	var _args videos.VideoServiceAddWatchHistoryV2Args
+	_args.Req = req
+	var _result videos.VideoServiceAddWatchHistoryV2Result
+	if err = p.c.Call(ctx, "AddWatchHistoryV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ClearWatchHistoryV2(ctx context.Context, req *videos.ClearWatchHistoryRequestV2) (r *videos.ClearWatchHistoryResponseV2, err error) {
+	var _args videos.VideoServiceClearWatchHistoryV2Args
+	_args.Req = req
+	var _result videos.VideoServiceClearWatchHistoryV2Result
+	if err = p.c.Call(ctx, "ClearWatchHistoryV2", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteWatchHistoryItemV2(ctx context.Context, req *videos.DeleteWatchHistoryItemRequestV2) (r *videos.DeleteWatchHistoryItemResponseV2, err error) {
+	var _args videos.VideoServiceDeleteWatchHistoryItemV2Args
+	_args.Req = req
+	var _result videos.VideoServiceDeleteWatchHistoryItemV2Result
+	if err = p.c.Call(ctx, "DeleteWatchHistoryItemV2", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

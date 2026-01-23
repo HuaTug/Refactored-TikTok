@@ -7,6 +7,7 @@ import (
 	"HuaTug.com/cmd/video/dal"
 	"HuaTug.com/cmd/video/infras/client"
 	"HuaTug.com/cmd/video/infras/redis"
+	"HuaTug.com/cmd/video/service"
 	"HuaTug.com/config"
 	"HuaTug.com/config/cache"
 	"HuaTug.com/config/jaeger"
@@ -31,6 +32,9 @@ func Init() {
 	oss.InitMinio()
 	client.Init()
 	// common.NewSyncSerivce().Run()
+
+	// 启动浏览量同步任务
+	service.StartVisitCountSyncTask()
 }
 
 func main() {

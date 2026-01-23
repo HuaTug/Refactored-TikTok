@@ -183,3 +183,31 @@ func GeneratePreUrl(bucketName, objectName, vid string) (string, error) {
 
 	return presignedURL.String(), nil
 }
+
+// GeneratePresignedPutURL 生成预签名上传 URL
+func GeneratePresignedPutURL(bucketName, objectName string, expires time.Duration) (string, error) {
+	if minioClient == nil {
+		return "", fmt.Errorf("MinIO client not initialized")
+	}
+
+	// 确保 bucket 存在
+	exists, err := minioClient.BucketExists(context.Background(), bucketName)
+	if err != nil {
+		return "", fmt.Errorf("check bucket error: %w", err)
+	}
+	if !exists {
+		err = minioClient.MakeBucket(context.Background(), bucketName, minio.MakeBucketOptions{Region: "us-east-1"})
+		if err != nil {
+			return "", fmt.Errorf("create bucket error: %w", err)
+		}
+		// 设置公开读取策略
+		SetBucketPublicReadPolicy(bucketName)
+	}
+
+	presignedURL, err := minioClient.PresignedPutObject(context.Background(), bucketName, objectName, expires)
+	if err != nil {
+		return "", fmt.Errorf("generate presigned URL error: %w", err)
+	}
+
+	return presignedURL.String(), nil
+}

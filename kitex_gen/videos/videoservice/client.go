@@ -41,6 +41,10 @@ type Client interface {
 	BatchOperateVideosV2(ctx context.Context, req *videos.BatchVideoOperationRequest, callOptions ...callopt.Option) (r *videos.BatchVideoOperationResponse, err error)
 	TranscodeVideoV2(ctx context.Context, req *videos.VideoTranscodingRequest, callOptions ...callopt.Option) (r *videos.VideoTranscodingResponse, err error)
 	GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest, callOptions ...callopt.Option) (r *videos.VideoAnalyticsResponse, err error)
+	GetWatchHistoryV2(ctx context.Context, req *videos.GetWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.GetWatchHistoryResponseV2, err error)
+	AddWatchHistoryV2(ctx context.Context, req *videos.AddWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.AddWatchHistoryResponseV2, err error)
+	ClearWatchHistoryV2(ctx context.Context, req *videos.ClearWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.ClearWatchHistoryResponseV2, err error)
+	DeleteWatchHistoryItemV2(ctx context.Context, req *videos.DeleteWatchHistoryItemRequestV2, callOptions ...callopt.Option) (r *videos.DeleteWatchHistoryItemResponseV2, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -220,4 +224,24 @@ func (p *kVideoServiceClient) TranscodeVideoV2(ctx context.Context, req *videos.
 func (p *kVideoServiceClient) GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest, callOptions ...callopt.Option) (r *videos.VideoAnalyticsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.GetVideoAnalyticsV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) GetWatchHistoryV2(ctx context.Context, req *videos.GetWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.GetWatchHistoryResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetWatchHistoryV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) AddWatchHistoryV2(ctx context.Context, req *videos.AddWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.AddWatchHistoryResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.AddWatchHistoryV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) ClearWatchHistoryV2(ctx context.Context, req *videos.ClearWatchHistoryRequestV2, callOptions ...callopt.Option) (r *videos.ClearWatchHistoryResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ClearWatchHistoryV2(ctx, req)
+}
+
+func (p *kVideoServiceClient) DeleteWatchHistoryItemV2(ctx context.Context, req *videos.DeleteWatchHistoryItemRequestV2, callOptions ...callopt.Option) (r *videos.DeleteWatchHistoryItemResponseV2, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteWatchHistoryItemV2(ctx, req)
 }

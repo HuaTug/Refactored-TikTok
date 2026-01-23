@@ -133,9 +133,21 @@ struct MarkNotificationReadResponse {
     2: i64 marked_count
 }
 
+// 批量检查点赞状态
+struct BatchLikeStatusRequest {
+    1: i64 user_id
+    2: list<i64> video_ids
+}
+
+struct BatchLikeStatusResponse {
+    1: base.Status base
+    2: map<i64, bool> like_status  // video_id -> is_liked
+}
+
 service InteractionService {
     LikeActionResponse LikeAction(1: LikeActionRequest req)(api.post="/v1/action/like")
     LikeListResponse LikeList(1: LikeListRequest req)(api.get="/v1/action/list")
+    BatchLikeStatusResponse BatchLikeStatus(1: BatchLikeStatusRequest req)(api.post="/v1/action/batch_status")
     CreateCommentResponse CreateComment(1:CreateCommentRequest req)(api.post="/v1/comment/publish")
     ListCommentResponse ListComment(1:ListCommentRequest req)(api.get="/v1/comment/list")
     CommentDeleteResponse DeleteComment(1:CommentDeleteRequest req)(api.delete="/v1/comment/delete")

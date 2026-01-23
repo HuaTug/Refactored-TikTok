@@ -4247,6 +4247,483 @@ var fieldIDToName_VideoAnalyticsResponse = map[int16]string{
 	5: "report_generated_at",
 }
 
+type WatchHistoryItem struct {
+	HistoryId      int64       `thrift:"history_id,1" frugal:"1,default,i64" json:"history_id"`
+	VideoId        int64       `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
+	UserId         int64       `thrift:"user_id,3" frugal:"3,default,i64" json:"user_id"`
+	WatchDuration  int32       `thrift:"watch_duration,4" frugal:"4,default,i32" json:"watch_duration"`
+	CompletionRate float64     `thrift:"completion_rate,5" frugal:"5,default,double" json:"completion_rate"`
+	WatchTime      string      `thrift:"watch_time,6" frugal:"6,default,string" json:"watch_time"`
+	VideoInfo      *base.Video `thrift:"video_info,7" frugal:"7,default,base.Video" json:"video_info"`
+}
+
+func NewWatchHistoryItem() *WatchHistoryItem {
+	return &WatchHistoryItem{}
+}
+
+func (p *WatchHistoryItem) InitDefault() {
+}
+
+func (p *WatchHistoryItem) GetHistoryId() (v int64) {
+	return p.HistoryId
+}
+
+func (p *WatchHistoryItem) GetVideoId() (v int64) {
+	return p.VideoId
+}
+
+func (p *WatchHistoryItem) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *WatchHistoryItem) GetWatchDuration() (v int32) {
+	return p.WatchDuration
+}
+
+func (p *WatchHistoryItem) GetCompletionRate() (v float64) {
+	return p.CompletionRate
+}
+
+func (p *WatchHistoryItem) GetWatchTime() (v string) {
+	return p.WatchTime
+}
+
+var WatchHistoryItem_VideoInfo_DEFAULT *base.Video
+
+func (p *WatchHistoryItem) GetVideoInfo() (v *base.Video) {
+	if !p.IsSetVideoInfo() {
+		return WatchHistoryItem_VideoInfo_DEFAULT
+	}
+	return p.VideoInfo
+}
+func (p *WatchHistoryItem) SetHistoryId(val int64) {
+	p.HistoryId = val
+}
+func (p *WatchHistoryItem) SetVideoId(val int64) {
+	p.VideoId = val
+}
+func (p *WatchHistoryItem) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *WatchHistoryItem) SetWatchDuration(val int32) {
+	p.WatchDuration = val
+}
+func (p *WatchHistoryItem) SetCompletionRate(val float64) {
+	p.CompletionRate = val
+}
+func (p *WatchHistoryItem) SetWatchTime(val string) {
+	p.WatchTime = val
+}
+func (p *WatchHistoryItem) SetVideoInfo(val *base.Video) {
+	p.VideoInfo = val
+}
+
+func (p *WatchHistoryItem) IsSetVideoInfo() bool {
+	return p.VideoInfo != nil
+}
+
+func (p *WatchHistoryItem) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WatchHistoryItem(%+v)", *p)
+}
+
+var fieldIDToName_WatchHistoryItem = map[int16]string{
+	1: "history_id",
+	2: "video_id",
+	3: "user_id",
+	4: "watch_duration",
+	5: "completion_rate",
+	6: "watch_time",
+	7: "video_info",
+}
+
+type GetWatchHistoryRequestV2 struct {
+	UserId     int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	PageNum    int64  `thrift:"page_num,2" frugal:"2,default,i64" json:"page_num"`
+	PageSize   int64  `thrift:"page_size,3" frugal:"3,default,i64" json:"page_size"`
+	DateFilter string `thrift:"date_filter,4" frugal:"4,default,string" json:"date_filter"`
+}
+
+func NewGetWatchHistoryRequestV2() *GetWatchHistoryRequestV2 {
+	return &GetWatchHistoryRequestV2{}
+}
+
+func (p *GetWatchHistoryRequestV2) InitDefault() {
+}
+
+func (p *GetWatchHistoryRequestV2) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *GetWatchHistoryRequestV2) GetPageNum() (v int64) {
+	return p.PageNum
+}
+
+func (p *GetWatchHistoryRequestV2) GetPageSize() (v int64) {
+	return p.PageSize
+}
+
+func (p *GetWatchHistoryRequestV2) GetDateFilter() (v string) {
+	return p.DateFilter
+}
+func (p *GetWatchHistoryRequestV2) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *GetWatchHistoryRequestV2) SetPageNum(val int64) {
+	p.PageNum = val
+}
+func (p *GetWatchHistoryRequestV2) SetPageSize(val int64) {
+	p.PageSize = val
+}
+func (p *GetWatchHistoryRequestV2) SetDateFilter(val string) {
+	p.DateFilter = val
+}
+
+func (p *GetWatchHistoryRequestV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetWatchHistoryRequestV2(%+v)", *p)
+}
+
+var fieldIDToName_GetWatchHistoryRequestV2 = map[int16]string{
+	1: "user_id",
+	2: "page_num",
+	3: "page_size",
+	4: "date_filter",
+}
+
+type GetWatchHistoryResponseV2 struct {
+	Base        *base.Status        `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	HistoryList []*WatchHistoryItem `thrift:"history_list,2" frugal:"2,default,list<WatchHistoryItem>" json:"history_list"`
+	TotalCount  int64               `thrift:"total_count,3" frugal:"3,default,i64" json:"total_count"`
+	HasMore     bool                `thrift:"has_more,4" frugal:"4,default,bool" json:"has_more"`
+}
+
+func NewGetWatchHistoryResponseV2() *GetWatchHistoryResponseV2 {
+	return &GetWatchHistoryResponseV2{}
+}
+
+func (p *GetWatchHistoryResponseV2) InitDefault() {
+}
+
+var GetWatchHistoryResponseV2_Base_DEFAULT *base.Status
+
+func (p *GetWatchHistoryResponseV2) GetBase() (v *base.Status) {
+	if !p.IsSetBase() {
+		return GetWatchHistoryResponseV2_Base_DEFAULT
+	}
+	return p.Base
+}
+
+func (p *GetWatchHistoryResponseV2) GetHistoryList() (v []*WatchHistoryItem) {
+	return p.HistoryList
+}
+
+func (p *GetWatchHistoryResponseV2) GetTotalCount() (v int64) {
+	return p.TotalCount
+}
+
+func (p *GetWatchHistoryResponseV2) GetHasMore() (v bool) {
+	return p.HasMore
+}
+func (p *GetWatchHistoryResponseV2) SetBase(val *base.Status) {
+	p.Base = val
+}
+func (p *GetWatchHistoryResponseV2) SetHistoryList(val []*WatchHistoryItem) {
+	p.HistoryList = val
+}
+func (p *GetWatchHistoryResponseV2) SetTotalCount(val int64) {
+	p.TotalCount = val
+}
+func (p *GetWatchHistoryResponseV2) SetHasMore(val bool) {
+	p.HasMore = val
+}
+
+func (p *GetWatchHistoryResponseV2) IsSetBase() bool {
+	return p.Base != nil
+}
+
+func (p *GetWatchHistoryResponseV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetWatchHistoryResponseV2(%+v)", *p)
+}
+
+var fieldIDToName_GetWatchHistoryResponseV2 = map[int16]string{
+	1: "base",
+	2: "history_list",
+	3: "total_count",
+	4: "has_more",
+}
+
+type AddWatchHistoryRequestV2 struct {
+	UserId         int64   `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	VideoId        int64   `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
+	WatchDuration  int32   `thrift:"watch_duration,3" frugal:"3,default,i32" json:"watch_duration"`
+	CompletionRate float64 `thrift:"completion_rate,4" frugal:"4,default,double" json:"completion_rate"`
+}
+
+func NewAddWatchHistoryRequestV2() *AddWatchHistoryRequestV2 {
+	return &AddWatchHistoryRequestV2{}
+}
+
+func (p *AddWatchHistoryRequestV2) InitDefault() {
+}
+
+func (p *AddWatchHistoryRequestV2) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *AddWatchHistoryRequestV2) GetVideoId() (v int64) {
+	return p.VideoId
+}
+
+func (p *AddWatchHistoryRequestV2) GetWatchDuration() (v int32) {
+	return p.WatchDuration
+}
+
+func (p *AddWatchHistoryRequestV2) GetCompletionRate() (v float64) {
+	return p.CompletionRate
+}
+func (p *AddWatchHistoryRequestV2) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *AddWatchHistoryRequestV2) SetVideoId(val int64) {
+	p.VideoId = val
+}
+func (p *AddWatchHistoryRequestV2) SetWatchDuration(val int32) {
+	p.WatchDuration = val
+}
+func (p *AddWatchHistoryRequestV2) SetCompletionRate(val float64) {
+	p.CompletionRate = val
+}
+
+func (p *AddWatchHistoryRequestV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AddWatchHistoryRequestV2(%+v)", *p)
+}
+
+var fieldIDToName_AddWatchHistoryRequestV2 = map[int16]string{
+	1: "user_id",
+	2: "video_id",
+	3: "watch_duration",
+	4: "completion_rate",
+}
+
+type AddWatchHistoryResponseV2 struct {
+	Base        *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	IsNewRecord bool         `thrift:"is_new_record,2" frugal:"2,default,bool" json:"is_new_record"`
+}
+
+func NewAddWatchHistoryResponseV2() *AddWatchHistoryResponseV2 {
+	return &AddWatchHistoryResponseV2{}
+}
+
+func (p *AddWatchHistoryResponseV2) InitDefault() {
+}
+
+var AddWatchHistoryResponseV2_Base_DEFAULT *base.Status
+
+func (p *AddWatchHistoryResponseV2) GetBase() (v *base.Status) {
+	if !p.IsSetBase() {
+		return AddWatchHistoryResponseV2_Base_DEFAULT
+	}
+	return p.Base
+}
+
+func (p *AddWatchHistoryResponseV2) GetIsNewRecord() (v bool) {
+	return p.IsNewRecord
+}
+func (p *AddWatchHistoryResponseV2) SetBase(val *base.Status) {
+	p.Base = val
+}
+func (p *AddWatchHistoryResponseV2) SetIsNewRecord(val bool) {
+	p.IsNewRecord = val
+}
+
+func (p *AddWatchHistoryResponseV2) IsSetBase() bool {
+	return p.Base != nil
+}
+
+func (p *AddWatchHistoryResponseV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AddWatchHistoryResponseV2(%+v)", *p)
+}
+
+var fieldIDToName_AddWatchHistoryResponseV2 = map[int16]string{
+	1: "base",
+	2: "is_new_record",
+}
+
+type ClearWatchHistoryRequestV2 struct {
+	UserId    int64  `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	DateRange string `thrift:"date_range,2" frugal:"2,default,string" json:"date_range"`
+}
+
+func NewClearWatchHistoryRequestV2() *ClearWatchHistoryRequestV2 {
+	return &ClearWatchHistoryRequestV2{}
+}
+
+func (p *ClearWatchHistoryRequestV2) InitDefault() {
+}
+
+func (p *ClearWatchHistoryRequestV2) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *ClearWatchHistoryRequestV2) GetDateRange() (v string) {
+	return p.DateRange
+}
+func (p *ClearWatchHistoryRequestV2) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *ClearWatchHistoryRequestV2) SetDateRange(val string) {
+	p.DateRange = val
+}
+
+func (p *ClearWatchHistoryRequestV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ClearWatchHistoryRequestV2(%+v)", *p)
+}
+
+var fieldIDToName_ClearWatchHistoryRequestV2 = map[int16]string{
+	1: "user_id",
+	2: "date_range",
+}
+
+type ClearWatchHistoryResponseV2 struct {
+	Base         *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	DeletedCount int64        `thrift:"deleted_count,2" frugal:"2,default,i64" json:"deleted_count"`
+}
+
+func NewClearWatchHistoryResponseV2() *ClearWatchHistoryResponseV2 {
+	return &ClearWatchHistoryResponseV2{}
+}
+
+func (p *ClearWatchHistoryResponseV2) InitDefault() {
+}
+
+var ClearWatchHistoryResponseV2_Base_DEFAULT *base.Status
+
+func (p *ClearWatchHistoryResponseV2) GetBase() (v *base.Status) {
+	if !p.IsSetBase() {
+		return ClearWatchHistoryResponseV2_Base_DEFAULT
+	}
+	return p.Base
+}
+
+func (p *ClearWatchHistoryResponseV2) GetDeletedCount() (v int64) {
+	return p.DeletedCount
+}
+func (p *ClearWatchHistoryResponseV2) SetBase(val *base.Status) {
+	p.Base = val
+}
+func (p *ClearWatchHistoryResponseV2) SetDeletedCount(val int64) {
+	p.DeletedCount = val
+}
+
+func (p *ClearWatchHistoryResponseV2) IsSetBase() bool {
+	return p.Base != nil
+}
+
+func (p *ClearWatchHistoryResponseV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ClearWatchHistoryResponseV2(%+v)", *p)
+}
+
+var fieldIDToName_ClearWatchHistoryResponseV2 = map[int16]string{
+	1: "base",
+	2: "deleted_count",
+}
+
+type DeleteWatchHistoryItemRequestV2 struct {
+	UserId  int64 `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	VideoId int64 `thrift:"video_id,2" frugal:"2,default,i64" json:"video_id"`
+}
+
+func NewDeleteWatchHistoryItemRequestV2() *DeleteWatchHistoryItemRequestV2 {
+	return &DeleteWatchHistoryItemRequestV2{}
+}
+
+func (p *DeleteWatchHistoryItemRequestV2) InitDefault() {
+}
+
+func (p *DeleteWatchHistoryItemRequestV2) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *DeleteWatchHistoryItemRequestV2) GetVideoId() (v int64) {
+	return p.VideoId
+}
+func (p *DeleteWatchHistoryItemRequestV2) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *DeleteWatchHistoryItemRequestV2) SetVideoId(val int64) {
+	p.VideoId = val
+}
+
+func (p *DeleteWatchHistoryItemRequestV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("DeleteWatchHistoryItemRequestV2(%+v)", *p)
+}
+
+var fieldIDToName_DeleteWatchHistoryItemRequestV2 = map[int16]string{
+	1: "user_id",
+	2: "video_id",
+}
+
+type DeleteWatchHistoryItemResponseV2 struct {
+	Base *base.Status `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+}
+
+func NewDeleteWatchHistoryItemResponseV2() *DeleteWatchHistoryItemResponseV2 {
+	return &DeleteWatchHistoryItemResponseV2{}
+}
+
+func (p *DeleteWatchHistoryItemResponseV2) InitDefault() {
+}
+
+var DeleteWatchHistoryItemResponseV2_Base_DEFAULT *base.Status
+
+func (p *DeleteWatchHistoryItemResponseV2) GetBase() (v *base.Status) {
+	if !p.IsSetBase() {
+		return DeleteWatchHistoryItemResponseV2_Base_DEFAULT
+	}
+	return p.Base
+}
+func (p *DeleteWatchHistoryItemResponseV2) SetBase(val *base.Status) {
+	p.Base = val
+}
+
+func (p *DeleteWatchHistoryItemResponseV2) IsSetBase() bool {
+	return p.Base != nil
+}
+
+func (p *DeleteWatchHistoryItemResponseV2) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("DeleteWatchHistoryItemResponseV2(%+v)", *p)
+}
+
+var fieldIDToName_DeleteWatchHistoryItemResponseV2 = map[int16]string{
+	1: "base",
+}
+
 type VideoService interface {
 	VideoPublishStartV2(ctx context.Context, req *VideoPublishStartRequestV2) (r *VideoPublishStartResponseV2, err error)
 
@@ -4307,6 +4784,14 @@ type VideoService interface {
 	TranscodeVideoV2(ctx context.Context, req *VideoTranscodingRequest) (r *VideoTranscodingResponse, err error)
 
 	GetVideoAnalyticsV2(ctx context.Context, req *VideoAnalyticsRequest) (r *VideoAnalyticsResponse, err error)
+
+	GetWatchHistoryV2(ctx context.Context, req *GetWatchHistoryRequestV2) (r *GetWatchHistoryResponseV2, err error)
+
+	AddWatchHistoryV2(ctx context.Context, req *AddWatchHistoryRequestV2) (r *AddWatchHistoryResponseV2, err error)
+
+	ClearWatchHistoryV2(ctx context.Context, req *ClearWatchHistoryRequestV2) (r *ClearWatchHistoryResponseV2, err error)
+
+	DeleteWatchHistoryItemV2(ctx context.Context, req *DeleteWatchHistoryItemRequestV2) (r *DeleteWatchHistoryItemResponseV2, err error)
 }
 
 type VideoServiceVideoPublishStartV2Args struct {
@@ -6586,5 +7071,309 @@ func (p *VideoServiceGetVideoAnalyticsV2Result) String() string {
 }
 
 var fieldIDToName_VideoServiceGetVideoAnalyticsV2Result = map[int16]string{
+	0: "success",
+}
+
+type VideoServiceGetWatchHistoryV2Args struct {
+	Req *GetWatchHistoryRequestV2 `thrift:"req,1" frugal:"1,default,GetWatchHistoryRequestV2" json:"req"`
+}
+
+func NewVideoServiceGetWatchHistoryV2Args() *VideoServiceGetWatchHistoryV2Args {
+	return &VideoServiceGetWatchHistoryV2Args{}
+}
+
+func (p *VideoServiceGetWatchHistoryV2Args) InitDefault() {
+}
+
+var VideoServiceGetWatchHistoryV2Args_Req_DEFAULT *GetWatchHistoryRequestV2
+
+func (p *VideoServiceGetWatchHistoryV2Args) GetReq() (v *GetWatchHistoryRequestV2) {
+	if !p.IsSetReq() {
+		return VideoServiceGetWatchHistoryV2Args_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *VideoServiceGetWatchHistoryV2Args) SetReq(val *GetWatchHistoryRequestV2) {
+	p.Req = val
+}
+
+func (p *VideoServiceGetWatchHistoryV2Args) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *VideoServiceGetWatchHistoryV2Args) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceGetWatchHistoryV2Args(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceGetWatchHistoryV2Args = map[int16]string{
+	1: "req",
+}
+
+type VideoServiceGetWatchHistoryV2Result struct {
+	Success *GetWatchHistoryResponseV2 `thrift:"success,0,optional" frugal:"0,optional,GetWatchHistoryResponseV2" json:"success,omitempty"`
+}
+
+func NewVideoServiceGetWatchHistoryV2Result() *VideoServiceGetWatchHistoryV2Result {
+	return &VideoServiceGetWatchHistoryV2Result{}
+}
+
+func (p *VideoServiceGetWatchHistoryV2Result) InitDefault() {
+}
+
+var VideoServiceGetWatchHistoryV2Result_Success_DEFAULT *GetWatchHistoryResponseV2
+
+func (p *VideoServiceGetWatchHistoryV2Result) GetSuccess() (v *GetWatchHistoryResponseV2) {
+	if !p.IsSetSuccess() {
+		return VideoServiceGetWatchHistoryV2Result_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *VideoServiceGetWatchHistoryV2Result) SetSuccess(x interface{}) {
+	p.Success = x.(*GetWatchHistoryResponseV2)
+}
+
+func (p *VideoServiceGetWatchHistoryV2Result) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *VideoServiceGetWatchHistoryV2Result) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceGetWatchHistoryV2Result(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceGetWatchHistoryV2Result = map[int16]string{
+	0: "success",
+}
+
+type VideoServiceAddWatchHistoryV2Args struct {
+	Req *AddWatchHistoryRequestV2 `thrift:"req,1" frugal:"1,default,AddWatchHistoryRequestV2" json:"req"`
+}
+
+func NewVideoServiceAddWatchHistoryV2Args() *VideoServiceAddWatchHistoryV2Args {
+	return &VideoServiceAddWatchHistoryV2Args{}
+}
+
+func (p *VideoServiceAddWatchHistoryV2Args) InitDefault() {
+}
+
+var VideoServiceAddWatchHistoryV2Args_Req_DEFAULT *AddWatchHistoryRequestV2
+
+func (p *VideoServiceAddWatchHistoryV2Args) GetReq() (v *AddWatchHistoryRequestV2) {
+	if !p.IsSetReq() {
+		return VideoServiceAddWatchHistoryV2Args_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *VideoServiceAddWatchHistoryV2Args) SetReq(val *AddWatchHistoryRequestV2) {
+	p.Req = val
+}
+
+func (p *VideoServiceAddWatchHistoryV2Args) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *VideoServiceAddWatchHistoryV2Args) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceAddWatchHistoryV2Args(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceAddWatchHistoryV2Args = map[int16]string{
+	1: "req",
+}
+
+type VideoServiceAddWatchHistoryV2Result struct {
+	Success *AddWatchHistoryResponseV2 `thrift:"success,0,optional" frugal:"0,optional,AddWatchHistoryResponseV2" json:"success,omitempty"`
+}
+
+func NewVideoServiceAddWatchHistoryV2Result() *VideoServiceAddWatchHistoryV2Result {
+	return &VideoServiceAddWatchHistoryV2Result{}
+}
+
+func (p *VideoServiceAddWatchHistoryV2Result) InitDefault() {
+}
+
+var VideoServiceAddWatchHistoryV2Result_Success_DEFAULT *AddWatchHistoryResponseV2
+
+func (p *VideoServiceAddWatchHistoryV2Result) GetSuccess() (v *AddWatchHistoryResponseV2) {
+	if !p.IsSetSuccess() {
+		return VideoServiceAddWatchHistoryV2Result_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *VideoServiceAddWatchHistoryV2Result) SetSuccess(x interface{}) {
+	p.Success = x.(*AddWatchHistoryResponseV2)
+}
+
+func (p *VideoServiceAddWatchHistoryV2Result) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *VideoServiceAddWatchHistoryV2Result) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceAddWatchHistoryV2Result(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceAddWatchHistoryV2Result = map[int16]string{
+	0: "success",
+}
+
+type VideoServiceClearWatchHistoryV2Args struct {
+	Req *ClearWatchHistoryRequestV2 `thrift:"req,1" frugal:"1,default,ClearWatchHistoryRequestV2" json:"req"`
+}
+
+func NewVideoServiceClearWatchHistoryV2Args() *VideoServiceClearWatchHistoryV2Args {
+	return &VideoServiceClearWatchHistoryV2Args{}
+}
+
+func (p *VideoServiceClearWatchHistoryV2Args) InitDefault() {
+}
+
+var VideoServiceClearWatchHistoryV2Args_Req_DEFAULT *ClearWatchHistoryRequestV2
+
+func (p *VideoServiceClearWatchHistoryV2Args) GetReq() (v *ClearWatchHistoryRequestV2) {
+	if !p.IsSetReq() {
+		return VideoServiceClearWatchHistoryV2Args_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *VideoServiceClearWatchHistoryV2Args) SetReq(val *ClearWatchHistoryRequestV2) {
+	p.Req = val
+}
+
+func (p *VideoServiceClearWatchHistoryV2Args) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *VideoServiceClearWatchHistoryV2Args) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceClearWatchHistoryV2Args(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceClearWatchHistoryV2Args = map[int16]string{
+	1: "req",
+}
+
+type VideoServiceClearWatchHistoryV2Result struct {
+	Success *ClearWatchHistoryResponseV2 `thrift:"success,0,optional" frugal:"0,optional,ClearWatchHistoryResponseV2" json:"success,omitempty"`
+}
+
+func NewVideoServiceClearWatchHistoryV2Result() *VideoServiceClearWatchHistoryV2Result {
+	return &VideoServiceClearWatchHistoryV2Result{}
+}
+
+func (p *VideoServiceClearWatchHistoryV2Result) InitDefault() {
+}
+
+var VideoServiceClearWatchHistoryV2Result_Success_DEFAULT *ClearWatchHistoryResponseV2
+
+func (p *VideoServiceClearWatchHistoryV2Result) GetSuccess() (v *ClearWatchHistoryResponseV2) {
+	if !p.IsSetSuccess() {
+		return VideoServiceClearWatchHistoryV2Result_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *VideoServiceClearWatchHistoryV2Result) SetSuccess(x interface{}) {
+	p.Success = x.(*ClearWatchHistoryResponseV2)
+}
+
+func (p *VideoServiceClearWatchHistoryV2Result) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *VideoServiceClearWatchHistoryV2Result) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceClearWatchHistoryV2Result(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceClearWatchHistoryV2Result = map[int16]string{
+	0: "success",
+}
+
+type VideoServiceDeleteWatchHistoryItemV2Args struct {
+	Req *DeleteWatchHistoryItemRequestV2 `thrift:"req,1" frugal:"1,default,DeleteWatchHistoryItemRequestV2" json:"req"`
+}
+
+func NewVideoServiceDeleteWatchHistoryItemV2Args() *VideoServiceDeleteWatchHistoryItemV2Args {
+	return &VideoServiceDeleteWatchHistoryItemV2Args{}
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Args) InitDefault() {
+}
+
+var VideoServiceDeleteWatchHistoryItemV2Args_Req_DEFAULT *DeleteWatchHistoryItemRequestV2
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Args) GetReq() (v *DeleteWatchHistoryItemRequestV2) {
+	if !p.IsSetReq() {
+		return VideoServiceDeleteWatchHistoryItemV2Args_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *VideoServiceDeleteWatchHistoryItemV2Args) SetReq(val *DeleteWatchHistoryItemRequestV2) {
+	p.Req = val
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Args) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Args) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceDeleteWatchHistoryItemV2Args(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceDeleteWatchHistoryItemV2Args = map[int16]string{
+	1: "req",
+}
+
+type VideoServiceDeleteWatchHistoryItemV2Result struct {
+	Success *DeleteWatchHistoryItemResponseV2 `thrift:"success,0,optional" frugal:"0,optional,DeleteWatchHistoryItemResponseV2" json:"success,omitempty"`
+}
+
+func NewVideoServiceDeleteWatchHistoryItemV2Result() *VideoServiceDeleteWatchHistoryItemV2Result {
+	return &VideoServiceDeleteWatchHistoryItemV2Result{}
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Result) InitDefault() {
+}
+
+var VideoServiceDeleteWatchHistoryItemV2Result_Success_DEFAULT *DeleteWatchHistoryItemResponseV2
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Result) GetSuccess() (v *DeleteWatchHistoryItemResponseV2) {
+	if !p.IsSetSuccess() {
+		return VideoServiceDeleteWatchHistoryItemV2Result_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *VideoServiceDeleteWatchHistoryItemV2Result) SetSuccess(x interface{}) {
+	p.Success = x.(*DeleteWatchHistoryItemResponseV2)
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Result) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *VideoServiceDeleteWatchHistoryItemV2Result) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("VideoServiceDeleteWatchHistoryItemV2Result(%+v)", *p)
+}
+
+var fieldIDToName_VideoServiceDeleteWatchHistoryItemV2Result = map[int16]string{
 	0: "success",
 }

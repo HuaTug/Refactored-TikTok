@@ -40,7 +40,7 @@ func (v *CreateUserService) CreateUser(req *users.CreateUserRequest) error {
 		Email:     req.Email,
 		Sex:       req.Sex,
 		Password:  passWord,
-		AvatarUrl: "HuaTug.com",
+		AvatarUrl: "https://ui-avatars.com/api/?name=" + req.UserName + "&background=random&size=200",
 		CreatedAt: time.Now().Format(constants.DataFormate),
 		UpdatedAt: time.Now().Format(constants.DataFormate),
 	})

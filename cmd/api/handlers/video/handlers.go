@@ -50,28 +50,28 @@ type VideoSearchParam struct {
 }
 
 type VideoPublishStartParam struct {
-	Title            string `form:"title"`
-	Description      string `form:"description"`
-	LabName          string `form:"lab_name"`
-	Category         string `form:"category"`
-	Open             int64  `form:"open"`
-	ChunkTotalNumber int64  `form:"chunk_total_number"`
+	Title            string `form:"title" json:"title"`
+	Description      string `form:"description" json:"description"`
+	LabName          string `form:"lab_name" json:"lab_name"`
+	Category         string `form:"category" json:"category"`
+	Open             int64  `form:"open" json:"open"`
+	ChunkTotalNumber int64  `form:"chunk_total_number" json:"chunk_total_number"`
 }
 
 type VideoPublishUploadingParam struct {
-	Uuid        string `form:"uuid"`
-	Is_M3U8     bool   `form:"is_m3u8"`
-	FileName    string `form:"filename"`
-	ChunkNumber int64  `form:"chunk_number"` // 要分片的数量，服务端会根据此值对大文件进行分片
+	Uuid        string `form:"uuid" json:"uuid"`
+	Is_M3U8     bool   `form:"is_m3u8" json:"is_m3u8"`
+	FileName    string `form:"filename" json:"filename"`
+	ChunkNumber int64  `form:"chunk_number" json:"chunk_number"`
 	// Data字段移除，直接从请求中读取
 }
 
 type VideoPublishCompleteParam struct {
-	Uuid string `form:"uuid"`
+	Uuid string `form:"uuid" json:"uuid"`
 }
 
 type VideoPublishCancleParam struct {
-	Uuid string `form:"uuid"`
+	Uuid string `form:"uuid" json:"uuid"`
 }
 
 type VideoDeleteParam struct {
@@ -95,8 +95,8 @@ type GetFavoriteListParam struct {
 }
 
 type AddFavoriteVideoParam struct {
-	FavoriteId int64 `form:"favorite_id"`
-	VideoId    int64 `form:"video_id"`
+	FavoriteId int64 `form:"favorite_id" json:"favorite_id"`
+	VideoId    int64 `form:"video_id" json:"video_id"`
 }
 
 type GetFavoriteVideoListParam struct {

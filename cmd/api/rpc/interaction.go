@@ -83,3 +83,11 @@ func LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *int
 	}
 	return resp, nil
 }
+
+func BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (resp *interactions.BatchLikeStatusResponse, err error) {
+	resp, err = InteractionClient.BatchLikeStatus(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, nil
+}

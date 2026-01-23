@@ -35,11 +35,13 @@ struct DeleteUserResponse{
 }
 
 struct UpdateUserRequest{
-    1: string user_name (api.body="user_name", api.form="user_name", api.vd="(len($) > 0 && len($) < 100)")
-    2: i64 userId
-    3: string password (api.body="password", api.form="password", api.vd="(len($)>5 &&len($)<12)")
+    1: string user_name (api.body="user_name", api.form="user_name")
+    2: i64 userId (api.body="userId", api.form="userId")
+    3: string password (api.body="password", api.form="password")
     4: binary data
     5: i64 filesize
+    6: i64 sex (api.body="sex", api.form="sex")
+    7: string bio (api.body="bio", api.form="bio")
 }
 
 struct UpdateUserResponse{

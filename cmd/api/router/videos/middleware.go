@@ -80,6 +80,65 @@ func _getvideoanalyticsV2Mw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
+// ========== 视频访问V2中间件 ==========
+func _videovisitV2Mw() []app.HandlerFunc {
+	return nil // 视频访问不需要登录
+}
+
+func _getvideovisitcountV2Mw() []app.HandlerFunc {
+	return nil // 获取浏览量不需要登录
+}
+
+// ========== 浏览历史V2中间件 ==========
+func _historyV2Mw() []app.HandlerFunc {
+	return nil
+}
+
+func _getwatchhistoryV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _addwatchhistoryV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _clearwatchhistoryV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _deletewatchhistoryitemV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+// ========== V2收藏夹中间件 ==========
+func _favoriteV2Mw() []app.HandlerFunc {
+	return nil
+}
+
+func _createfavoriteV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _getfavoritelistV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _getfavoritevideolistV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _addfavoritevideoV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _deletefavoriteV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
+func _deletevideofromfavoriteV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
 // ========== 通用功能中间件 ==========
 func _videorecommendvideoMw() []app.HandlerFunc {
 	// your code...

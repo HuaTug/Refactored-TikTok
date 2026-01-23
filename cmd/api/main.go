@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"HuaTug.com/cmd/api/dal"
 	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/cmd/video/infras/redis"
 	jwt "HuaTug.com/pkg"
@@ -21,6 +22,7 @@ import (
 func Init() {
 	rpc.InitRPC()
 	redis.Load()
+	dal.InitDB() // 初始化 API 服务数据库连接
 
 	// 初始化MinIO客户端
 	if err := oss.InitMinio(); err != nil {

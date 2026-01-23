@@ -1148,10 +1148,97 @@ var fieldIDToName_MarkNotificationReadResponse = map[int16]string{
 	2: "marked_count",
 }
 
+type BatchLikeStatusRequest struct {
+	UserId   int64   `thrift:"user_id,1" frugal:"1,default,i64" json:"user_id"`
+	VideoIds []int64 `thrift:"video_ids,2" frugal:"2,default,list<i64>" json:"video_ids"`
+}
+
+func NewBatchLikeStatusRequest() *BatchLikeStatusRequest {
+	return &BatchLikeStatusRequest{}
+}
+
+func (p *BatchLikeStatusRequest) InitDefault() {
+}
+
+func (p *BatchLikeStatusRequest) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *BatchLikeStatusRequest) GetVideoIds() (v []int64) {
+	return p.VideoIds
+}
+func (p *BatchLikeStatusRequest) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *BatchLikeStatusRequest) SetVideoIds(val []int64) {
+	p.VideoIds = val
+}
+
+func (p *BatchLikeStatusRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("BatchLikeStatusRequest(%+v)", *p)
+}
+
+var fieldIDToName_BatchLikeStatusRequest = map[int16]string{
+	1: "user_id",
+	2: "video_ids",
+}
+
+type BatchLikeStatusResponse struct {
+	Base       *base.Status   `thrift:"base,1" frugal:"1,default,base.Status" json:"base"`
+	LikeStatus map[int64]bool `thrift:"like_status,2" frugal:"2,default,map<i64:bool>" json:"like_status"`
+}
+
+func NewBatchLikeStatusResponse() *BatchLikeStatusResponse {
+	return &BatchLikeStatusResponse{}
+}
+
+func (p *BatchLikeStatusResponse) InitDefault() {
+}
+
+var BatchLikeStatusResponse_Base_DEFAULT *base.Status
+
+func (p *BatchLikeStatusResponse) GetBase() (v *base.Status) {
+	if !p.IsSetBase() {
+		return BatchLikeStatusResponse_Base_DEFAULT
+	}
+	return p.Base
+}
+
+func (p *BatchLikeStatusResponse) GetLikeStatus() (v map[int64]bool) {
+	return p.LikeStatus
+}
+func (p *BatchLikeStatusResponse) SetBase(val *base.Status) {
+	p.Base = val
+}
+func (p *BatchLikeStatusResponse) SetLikeStatus(val map[int64]bool) {
+	p.LikeStatus = val
+}
+
+func (p *BatchLikeStatusResponse) IsSetBase() bool {
+	return p.Base != nil
+}
+
+func (p *BatchLikeStatusResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("BatchLikeStatusResponse(%+v)", *p)
+}
+
+var fieldIDToName_BatchLikeStatusResponse = map[int16]string{
+	1: "base",
+	2: "like_status",
+}
+
 type InteractionService interface {
 	LikeAction(ctx context.Context, req *LikeActionRequest) (r *LikeActionResponse, err error)
 
 	LikeList(ctx context.Context, req *LikeListRequest) (r *LikeListResponse, err error)
+
+	BatchLikeStatus(ctx context.Context, req *BatchLikeStatusRequest) (r *BatchLikeStatusResponse, err error)
 
 	CreateComment(ctx context.Context, req *CreateCommentRequest) (r *CreateCommentResponse, err error)
 
@@ -1317,6 +1404,82 @@ func (p *InteractionServiceLikeListResult) String() string {
 }
 
 var fieldIDToName_InteractionServiceLikeListResult = map[int16]string{
+	0: "success",
+}
+
+type InteractionServiceBatchLikeStatusArgs struct {
+	Req *BatchLikeStatusRequest `thrift:"req,1" frugal:"1,default,BatchLikeStatusRequest" json:"req"`
+}
+
+func NewInteractionServiceBatchLikeStatusArgs() *InteractionServiceBatchLikeStatusArgs {
+	return &InteractionServiceBatchLikeStatusArgs{}
+}
+
+func (p *InteractionServiceBatchLikeStatusArgs) InitDefault() {
+}
+
+var InteractionServiceBatchLikeStatusArgs_Req_DEFAULT *BatchLikeStatusRequest
+
+func (p *InteractionServiceBatchLikeStatusArgs) GetReq() (v *BatchLikeStatusRequest) {
+	if !p.IsSetReq() {
+		return InteractionServiceBatchLikeStatusArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *InteractionServiceBatchLikeStatusArgs) SetReq(val *BatchLikeStatusRequest) {
+	p.Req = val
+}
+
+func (p *InteractionServiceBatchLikeStatusArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *InteractionServiceBatchLikeStatusArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InteractionServiceBatchLikeStatusArgs(%+v)", *p)
+}
+
+var fieldIDToName_InteractionServiceBatchLikeStatusArgs = map[int16]string{
+	1: "req",
+}
+
+type InteractionServiceBatchLikeStatusResult struct {
+	Success *BatchLikeStatusResponse `thrift:"success,0,optional" frugal:"0,optional,BatchLikeStatusResponse" json:"success,omitempty"`
+}
+
+func NewInteractionServiceBatchLikeStatusResult() *InteractionServiceBatchLikeStatusResult {
+	return &InteractionServiceBatchLikeStatusResult{}
+}
+
+func (p *InteractionServiceBatchLikeStatusResult) InitDefault() {
+}
+
+var InteractionServiceBatchLikeStatusResult_Success_DEFAULT *BatchLikeStatusResponse
+
+func (p *InteractionServiceBatchLikeStatusResult) GetSuccess() (v *BatchLikeStatusResponse) {
+	if !p.IsSetSuccess() {
+		return InteractionServiceBatchLikeStatusResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *InteractionServiceBatchLikeStatusResult) SetSuccess(x interface{}) {
+	p.Success = x.(*BatchLikeStatusResponse)
+}
+
+func (p *InteractionServiceBatchLikeStatusResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *InteractionServiceBatchLikeStatusResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("InteractionServiceBatchLikeStatusResult(%+v)", *p)
+}
+
+var fieldIDToName_InteractionServiceBatchLikeStatusResult = map[int16]string{
 	0: "success",
 }
 

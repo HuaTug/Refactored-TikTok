@@ -141,11 +141,15 @@ func UpdateUser(ctx context.Context, user *base.User) error {
 	if user.Email != "" {
 		updates["email"] = user.Email
 	}
-	if user.Sex != 0 {
+	// 性别: 0女 1男 2保密，使用 >= 0 判断是否设置
+	if user.Sex >= 0 {
 		updates["sex"] = user.Sex
 	}
 	if user.AvatarUrl != "" {
 		updates["avatar_url"] = user.AvatarUrl
+	}
+	if user.Bio != "" {
+		updates["bio"] = user.Bio
 	}
 
 	if len(updates) == 1 { // 只有updated_at，没有其他字段需要更新
@@ -279,8 +283,11 @@ func RemoveDuplicate(ctx context.Context, username string) (err error, flag bool
 
 func UploadAvatarUrl(ctx context.Context, uid, avatarUrl string) error {
 	user, err := UserExist(ctx, uid)
-	if err != nil || len(user) == 0 {
+	if err != nil {
 		return err
+	}
+	if len(user) == 0 {
+		return errors.Errorf("用户不存在: %s", uid)
 	}
 	if err = DB.WithContext(ctx).Model(&UserWithPassword{}).Where("user_id = ?", uid).Updates(map[string]interface{}{
 		"avatar_url": avatarUrl,

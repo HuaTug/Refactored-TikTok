@@ -19,18 +19,25 @@ func NewAvatarUploadService(ctx context.Context) *AvatarUploadService {
 }
 
 func (s *AvatarUploadService) GetAvatarUploadUrl(userId int64, fileExtension string) (uploadUrl, accessUrl string, expiresIn int64, err error) {
-	// 暂时使用传统上传方式，返回提示信息
-	// TODO: 实现真正的预签名上传URL功能
+	bucketName := "picture"
+	objectName := fmt.Sprintf("avatar/%d%s", userId, fileExtension)
+	
+	// 预签名 URL 有效期 15 分钟
+	expires := 15 * time.Minute
+	expiresIn = int64(expires.Seconds())
 
-	expiresIn = 15 * 60 // 15分钟
+	// 生成预签名上传 URL
+	uploadUrl, err = oss.GeneratePresignedPutURL(bucketName, objectName, expires)
+	if err != nil {
+		hlog.Errorf("生成预签名URL失败: %v", err)
+		return "", "", 0, err
+	}
 
-	// 生成唯一的上传标识
-	uploadToken := fmt.Sprintf("upload_%d_%d", userId, time.Now().Unix())
-
-	// 返回模拟的上传URL和访问URL - Use MinIO API endpoint
-	uploadUrl = fmt.Sprintf("http://localhost:8080/upload/avatar?token=%s&ext=%s", uploadToken, fileExtension)
-	accessUrl = fmt.Sprintf("%s/picture/avatar/%d%s", oss.GetMinIOEndpoint(), userId, fileExtension)
+	// 生成访问 URL
+	accessUrl = fmt.Sprintf("%s/%s/%s", oss.GetMinIOEndpoint(), bucketName, objectName)
 
 	hlog.Infof("为用户 %d 生成头像上传URL: %s", userId, uploadUrl)
+	hlog.Infof("头像访问URL: %s", accessUrl)
+	
 	return uploadUrl, accessUrl, expiresIn, nil
 }

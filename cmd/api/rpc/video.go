@@ -375,3 +375,105 @@ func GetVideoAnalyticsV2(ctx context.Context, req *videos.VideoAnalyticsRequest)
 	}
 	return resp, err
 }
+
+// ========== V2版本：视频访问相关 ==========
+
+func VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2) (resp *videos.VideoVisitResponseV2, err error) {
+	resp, err = VideoClient.VideoVisitV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (resp *videos.GetVideoVisitCountResponseV2, err error) {
+	resp, err = VideoClient.GetVideoVisitCountV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+// ========== V2版本：浏览历史相关 ==========
+
+func GetWatchHistoryV2(ctx context.Context, req *videos.GetWatchHistoryRequestV2) (resp *videos.GetWatchHistoryResponseV2, err error) {
+	resp, err = VideoClient.GetWatchHistoryV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func AddWatchHistoryV2(ctx context.Context, req *videos.AddWatchHistoryRequestV2) (resp *videos.AddWatchHistoryResponseV2, err error) {
+	resp, err = VideoClient.AddWatchHistoryV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func ClearWatchHistoryV2(ctx context.Context, req *videos.ClearWatchHistoryRequestV2) (resp *videos.ClearWatchHistoryResponseV2, err error) {
+	resp, err = VideoClient.ClearWatchHistoryV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func DeleteWatchHistoryItemV2(ctx context.Context, req *videos.DeleteWatchHistoryItemRequestV2) (resp *videos.DeleteWatchHistoryItemResponseV2, err error) {
+	resp, err = VideoClient.DeleteWatchHistoryItemV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+// ========== V2版本：收藏夹相关 ==========
+
+func CreateFavoriteV2(ctx context.Context, req *videos.CreateFavoriteRequestV2) (resp *videos.CreateFavoriteResponseV2, err error) {
+	resp, err = VideoClient.CreateFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetFavoriteListV2(ctx context.Context, req *videos.GetFavoriteListRequestV2) (resp *videos.GetFavoriteListResponseV2, err error) {
+	resp, err = VideoClient.GetFavoriteListV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func GetFavoriteVideoListV2(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (resp *videos.GetFavoriteVideoListResponseV2, err error) {
+	resp, err = VideoClient.GetFavoriteVideoListV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func AddFavoriteVideoV2(ctx context.Context, req *videos.AddFavoriteVideoRequestV2) (resp *videos.AddFavoriteVideoResponseV2, err error) {
+	resp, err = VideoClient.AddFavoriteVideoV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func DeleteFavoriteV2(ctx context.Context, req *videos.DeleteFavoriteRequestV2) (resp *videos.DeleteFavoriteResponseV2, err error) {
+	resp, err = VideoClient.DeleteFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}
+
+func DeleteVideoFromFavoriteV2(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) (resp *videos.DeleteVideoFromFavoriteResponseV2, err error) {
+	resp, err = VideoClient.DeleteVideoFromFavoriteV2(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+	return resp, err
+}

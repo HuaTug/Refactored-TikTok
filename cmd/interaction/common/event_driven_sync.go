@@ -844,7 +844,7 @@ func (s *EventDrivenSyncService) updateVideoLikeCount(ctx context.Context, tx *g
 	// 使用原子操作更新点赞数，避免并发问题
 	result := tx.Model(&model.Video{}).
 		Where("video_id = ?", videoID).
-		Update("like_count", gorm.Expr("like_count + ?", delta))
+		Update("likes_count", gorm.Expr("likes_count + ?", delta))
 
 	if result.Error != nil {
 		return fmt.Errorf("failed to update video like count: %w", result.Error)
@@ -854,8 +854,37 @@ func (s *EventDrivenSyncService) updateVideoLikeCount(ctx context.Context, tx *g
 		hlog.CtxWarnf(ctx, "No video found with ID %d for like count update", videoID)
 	}
 
+	// 更新热门视频排行榜缓存
+	go s.updateHotVideoRankCache(ctx, videoID)
+
 	hlog.CtxInfof(ctx, "Updated video %d like count by %d", videoID, delta)
 	return nil
+}
+
+// updateHotVideoRankCache 更新热门视频排行榜缓存
+func (s *EventDrivenSyncService) updateHotVideoRankCache(ctx context.Context, videoID int64) {
+	// 获取视频当前的点赞数
+	var video model.Video
+	if err := s.db.Where("video_id = ?", videoID).First(&video).Error; err != nil {
+		hlog.CtxWarnf(ctx, "Failed to get video %d for rank cache update: %v", videoID, err)
+		return
+	}
+
+	// 更新Redis排行榜（ZSet），以点赞数为分数
+	key := "Rank"
+	err := redis.RedisDBInteraction.ZAdd(key, redisClient.Z{
+		Score:  float64(video.LikesCount),
+		Member: videoID,
+	}).Err()
+	if err != nil {
+		hlog.CtxWarnf(ctx, "Failed to update rank cache for video %d: %v", videoID, err)
+		return
+	}
+
+	// 只保留前100名
+	redis.RedisDBInteraction.ZRemRangeByRank(key, 0, -101)
+
+	hlog.CtxInfof(ctx, "Updated rank cache for video %d with likes_count %d", videoID, video.LikesCount)
 }
 
 // sendVideoLikeNotification 发送视频点赞通知

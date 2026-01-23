@@ -11,58 +11,89 @@ import (
 	"HuaTug.com/pkg/utils"
 
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
 func UpdateUser(ctx context.Context, c *app.RequestContext) {
-
 	var v interface{}
 	var err error
 	if v, err = jwt.ConvertJWTPayloadToString(ctx, c); err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
+		return
 	}
 	userId := utils.Transfer(v)
-	var update UpdateParam
-	if err := c.Bind(&update); err != nil {
-		SendResponse(c, errno.ConvertErr(err), nil)
-		return
-	}
 
-	// 获取上传的文件
-	uploadData, err := c.FormFile("file")
-	if err != nil {
-		SendResponse(c, errno.ConvertErr(err), nil)
-		return
-	}
-	//	打开文件流
-	file, err := uploadData.Open()
-	if err != nil {
-		SendResponse(c, errno.ConvertErr(err), nil)
-		return
-	}
-	defer file.Close()
-	// 处理文件内容，将文件内容读取到内存中
-	fileContent, err := io.ReadAll(file)
-	if err != nil {
-		SendResponse(c, errno.ConvertErr(err), nil)
-		return
-	}
-
-	// 构建UpdateUserRequest，只传递必要的字段
+	// 构建UpdateUserRequest
 	req := &users.UpdateUserRequest{
-		UserId:   userId,
-		Data:     fileContent,
-		Filesize: uploadData.Size,
+		UserId: userId,
 	}
 
-	// 只有当用户名非空时才更新用户名
-	if update.UserName != "" {
-		req.UserName = update.UserName
-	}
+	// 检查 Content-Type，支持 JSON 和 multipart/form-data
+	contentType := string(c.ContentType())
+	hlog.Infof("UpdateUser: Content-Type=%s", contentType)
 
-	// 只有当密码非空时才更新密码
-	if update.PassWord != "" {
-		password, _ := utils.Crypt(update.PassWord)
-		req.Password = password
+	if contentType == "application/json" || contentType == "" {
+		// JSON 格式请求
+		var update UpdateParam
+		if err := c.BindJSON(&update); err != nil {
+			hlog.Errorf("UpdateUser: BindJSON error: %v", err)
+			SendResponse(c, errno.ConvertErr(err), nil)
+			return
+		}
+		hlog.Infof("UpdateUser: Parsed JSON - UserName=%s, Sex=%d, Bio=%s", update.UserName, update.Sex, update.Bio)
+
+		if update.UserName != "" {
+			req.UserName = update.UserName
+		}
+		if update.PassWord != "" {
+			password, _ := utils.Crypt(update.PassWord)
+			req.Password = password
+		}
+		req.Sex = update.Sex
+		if update.Bio != "" {
+			req.Bio = update.Bio
+		}
+	} else {
+		// multipart/form-data 格式请求
+		var update UpdateParam
+		if err := c.Bind(&update); err != nil {
+			hlog.Errorf("UpdateUser: Bind error: %v", err)
+			SendResponse(c, errno.ConvertErr(err), nil)
+			return
+		}
+		hlog.Infof("UpdateUser: Parsed Form - UserName=%s, Sex=%d, Bio=%s", update.UserName, update.Sex, update.Bio)
+
+		if update.UserName != "" {
+			req.UserName = update.UserName
+		}
+		if update.PassWord != "" {
+			password, _ := utils.Crypt(update.PassWord)
+			req.Password = password
+		}
+		req.Sex = update.Sex
+		if update.Bio != "" {
+			req.Bio = update.Bio
+		}
+
+		// 尝试获取上传的文件（可选）
+		uploadData, err := c.FormFile("file")
+		if err == nil && uploadData != nil {
+			file, err := uploadData.Open()
+			if err != nil {
+				SendResponse(c, errno.ConvertErr(err), nil)
+				return
+			}
+			defer file.Close()
+
+			fileContent, err := io.ReadAll(file)
+			if err != nil {
+				SendResponse(c, errno.ConvertErr(err), nil)
+				return
+			}
+
+			req.Data = fileContent
+			req.Filesize = uploadData.Size
+		}
 	}
 
 	resp, err := rpc.UpdateUser(ctx, req)

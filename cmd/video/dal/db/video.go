@@ -2,16 +2,20 @@ package db
 
 import (
 	"context"
+	stdErrors "errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"HuaTug.com/cmd/model"
+	"HuaTug.com/cmd/video/infras/redis"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 func Feedlist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, error) {
@@ -143,6 +147,14 @@ func UpdateVideoUrl(ctx context.Context, videoUrl, coverUrl, vid string) error {
 	return nil
 }
 
+// UpdateVideoCoverUrl 单独更新视频封面URL
+func UpdateVideoCoverUrl(ctx context.Context, videoId int64, coverUrl string) error {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", videoId).Update("cover_url", coverUrl).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
 func UpdateVideoVisit(ctx context.Context, vid, visitCount int64) error {
 	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", vid).Update("visit_count", visitCount).Error; err != nil {
 		return err
@@ -230,6 +242,48 @@ func CreateFavorite(ctx context.Context, fav *base.Favorite) error {
 	return nil
 }
 
+// CreateFavoriteModel 使用 model.Favorite 创建收藏夹
+func CreateFavoriteModel(ctx context.Context, fav *model.Favorite) error {
+	if err := DB.WithContext(ctx).Create(fav).Error; err != nil {
+		return errors.WithMessage(err, "Failed to create Favorite")
+	}
+	return nil
+}
+
+// GetOrCreateDefaultFavorite 获取或创建用户的默认收藏夹
+func GetOrCreateDefaultFavorite(ctx context.Context, userId int64) (*model.Favorite, error) {
+	var fav model.Favorite
+	// 先查询用户是否有默认收藏夹（名称为"默认收藏夹"）
+	err := DB.WithContext(ctx).Model(&model.Favorite{}).
+		Where("user_id = ? AND name = ?", userId, "默认收藏夹").
+		First(&fav).Error
+
+	if err == nil {
+		// 找到了，直接返回
+		return &fav, nil
+	}
+
+	if !stdErrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.WithMessage(err, "Failed to query default favorite")
+	}
+
+	// 没有默认收藏夹，创建一个
+	now := time.Now()
+	newFav := &model.Favorite{
+		UserId:      userId,
+		Name:        "默认收藏夹",
+		Description: "系统自动创建的默认收藏夹",
+		IsPublic:    0, // 私密
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := DB.WithContext(ctx).Create(newFav).Error; err != nil {
+		return nil, errors.WithMessage(err, "Failed to create default favorite")
+	}
+	hlog.Infof("Created default favorite for user %d, favorite_id=%d", userId, newFav.FavoriteId)
+	return newFav, nil
+}
+
 // 获取用户收藏列表（有多少个收藏夹）
 func GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequestV2) ([]*base.Favorite, error) {
 	var favList []*base.Favorite
@@ -248,9 +302,34 @@ func GetFavoriteList(ctx context.Context, req *videos.GetFavoriteListRequestV2) 
 }
 
 func AddVideoToFavorite(ctx context.Context, fav_vid *model.FavoritesVideos) error {
+	// 检查是否已经收藏过
+	var count int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("user_id = ? AND favorite_id = ? AND video_id = ?", fav_vid.UserId, fav_vid.FavoriteId, fav_vid.VideoId).
+		Count(&count).Error; err != nil {
+		return errors.WithMessage(err, "Failed to check existing favorite")
+	}
+	if count > 0 {
+		return errors.New("video already in favorite")
+	}
+
+	// 添加收藏
 	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).Create(fav_vid).Error; err != nil {
 		return errors.WithMessage(err, "Failed to add VideoToFavorite")
 	}
+
+	// 更新收藏夹视频数量
+	if err := UpdateFavoriteVideoCount(ctx, fav_vid.FavoriteId, 1); err != nil {
+		hlog.Warnf("Failed to update favorite video count: %v", err)
+	}
+
+	// 更新视频主表的收藏数 (favorites_count 字段)
+	if err := DB.WithContext(ctx).Model(&model.Video{}).
+		Where("video_id = ?", fav_vid.VideoId).
+		UpdateColumn("favorites_count", gorm.Expr("favorites_count + ?", 1)).Error; err != nil {
+		hlog.Warnf("Failed to increment video favorites count: %v", err)
+	}
+
 	return nil
 }
 
@@ -307,9 +386,36 @@ func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequestV2) er
 }
 
 func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) error {
-	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).Where("user_id =? and video_id =?", req.UserId, req.VideoId).Delete(&model.FavoritesVideos{}).Error; err != nil {
+	// 先检查记录是否存在
+	var count int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("user_id = ? AND favorite_id = ? AND video_id = ?", req.UserId, req.FavoriteId, req.VideoId).
+		Count(&count).Error; err != nil {
+		return errors.WithMessage(err, "Failed to check favorite record")
+	}
+	if count == 0 {
+		return errors.New("video not found in favorite")
+	}
+
+	// 删除收藏记录
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("user_id = ? AND favorite_id = ? AND video_id = ?", req.UserId, req.FavoriteId, req.VideoId).
+		Delete(&model.FavoritesVideos{}).Error; err != nil {
 		return errors.WithMessage(err, "Failed to delete VideoFromFavorite")
 	}
+
+	// 更新收藏夹视频数量
+	if err := UpdateFavoriteVideoCount(ctx, req.FavoriteId, -1); err != nil {
+		hlog.Warnf("Failed to update favorite video count: %v", err)
+	}
+
+	// 更新视频主表的收藏数 (favorites_count 字段)
+	if err := DB.WithContext(ctx).Model(&model.Video{}).
+		Where("video_id = ? AND favorites_count > 0", req.VideoId).
+		UpdateColumn("favorites_count", gorm.Expr("favorites_count - ?", 1)).Error; err != nil {
+		hlog.Warnf("Failed to decrement video favorites count: %v", err)
+	}
+
 	return nil
 }
 
@@ -563,4 +669,314 @@ func ClearUserWatchHistory(ctx context.Context, userId int64) error {
 		return errors.WithMessage(err, "Failed to clear watch history")
 	}
 	return nil
+}
+
+// ========================================
+// Video Visit/View Operations
+// ========================================
+
+// IncrementVisitCount increments video visit count with Redis cache
+func IncrementVisitCount(ctx context.Context, videoId, userId int64) error {
+	// 1. 先更新Redis缓存（快速响应）
+	if _, err := redis.IncrementVideoVisitCount(ctx, videoId); err != nil {
+		hlog.Warnf("Failed to increment visit count in Redis: %v, falling back to DB", err)
+	}
+
+	// 2. 更新Redis观看历史缓存
+	if userId > 0 {
+		if err := redis.AddToWatchHistory(ctx, userId, videoId); err != nil {
+			hlog.Warnf("Failed to add to watch history cache: %v", err)
+		}
+	}
+
+	// 3. 异步更新数据库（使用goroutine避免阻塞）
+	go func() {
+		// 使用计数器表进行原子增加
+		if err := IncrementVideoCounter(context.Background(), videoId, "visit_count", 1); err != nil {
+			hlog.Warnf("Failed to increment visit count in counter table: %v", err)
+		}
+
+		// 同时更新主表的浏览量
+		if err := DB.Model(&base.Video{}).
+			Where("video_id = ?", videoId).
+			UpdateColumn("visit_count", DB.Raw("visit_count + 1")).Error; err != nil {
+			hlog.Warnf("Failed to update main video visit count: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// GetVideoVisitCountById gets video visit count by video id (with Redis cache)
+func GetVideoVisitCountById(ctx context.Context, videoId int64) (uint64, error) {
+	// 1. 先从Redis获取
+	count, found, err := redis.GetVideoVisitCountCached(ctx, videoId)
+	if err == nil && found {
+		return uint64(count), nil
+	}
+
+	// 2. Redis没有，从数据库获取
+	var dbCount uint64
+	// 优先从计数器表获取
+	var counter model.VideoCounter
+	err = DB.WithContext(ctx).Where("video_id = ?", videoId).First(&counter).Error
+	if err == nil {
+		dbCount = counter.VisitCount
+	} else {
+		// 回退到主表
+		if err := DB.WithContext(ctx).Model(&base.Video{}).
+			Select("visit_count").
+			Where("video_id = ?", videoId).
+			Scan(&dbCount).Error; err != nil {
+			return 0, errors.WithMessage(err, "Failed to get video visit count")
+		}
+	}
+
+	// 3. 写入Redis缓存
+	if err := redis.SetVideoVisitCount(ctx, videoId, int64(dbCount)); err != nil {
+		hlog.Warnf("Failed to set visit count to Redis: %v", err)
+	}
+
+	return dbCount, nil
+}
+
+// GetVideoDetailedCounts gets all count metrics for a video
+func GetVideoDetailedCounts(ctx context.Context, videoId int64) (map[string]int64, error) {
+	counts := make(map[string]int64)
+
+	var counter model.VideoCounter
+	err := DB.WithContext(ctx).Where("video_id = ?", videoId).First(&counter).Error
+	if err == nil {
+		counts["visit_count"] = int64(counter.VisitCount)
+		counts["like_count"] = int64(counter.LikeCount)
+		counts["comment_count"] = int64(counter.CommentCount)
+		counts["share_count"] = int64(counter.ShareCount)
+		counts["favorite_count"] = int64(counter.FavoriteCount)
+		counts["download_count"] = int64(counter.DownloadCount)
+		return counts, nil
+	}
+
+	// 回退到主表
+	var video base.Video
+	if err := DB.WithContext(ctx).Model(&base.Video{}).
+		Select("visit_count, likes_count, comment_count, share_count, favorites_count").
+		Where("video_id = ?", videoId).
+		First(&video).Error; err != nil {
+		return nil, errors.WithMessage(err, "Failed to get video counts")
+	}
+
+	counts["visit_count"] = video.VisitCount
+	counts["like_count"] = video.LikesCount
+	counts["comment_count"] = video.CommentCount
+	counts["share_count"] = video.ShareCount
+	counts["favorite_count"] = video.FavoritesCount
+	return counts, nil
+}
+
+// ========================================
+// Watch History Extended Operations
+// ========================================
+
+// AddOrUpdateWatchHistory adds or updates watch history with Redis cache
+func AddOrUpdateWatchHistory(ctx context.Context, userId, videoId int64, watchDuration uint, completionRate float64) (bool, error) {
+	// 1. 先更新Redis缓存
+	if err := redis.AddToWatchHistory(ctx, userId, videoId); err != nil {
+		hlog.Warnf("Failed to add to watch history cache: %v", err)
+	}
+
+	// 2. 检查数据库中是否已存在
+	var history model.UserVideoWatchHistory
+	err := DB.WithContext(ctx).Where("user_id = ? AND video_id = ?", userId, videoId).First(&history).Error
+
+	isNew := err != nil
+	if isNew {
+		// 新记录：增加浏览量（已经在IncrementVisitCount中处理Redis）
+		if err := IncrementVisitCount(ctx, videoId, userId); err != nil {
+			hlog.Warnf("Failed to increment visit count: %v", err)
+		}
+
+		// 创建新的观看历史（数据库）
+		history = model.UserVideoWatchHistory{
+			UserId:         userId,
+			VideoId:        videoId,
+			WatchDuration:  watchDuration,
+			CompletionRate: completionRate,
+			WatchTime:      time.Now(),
+		}
+		if err := DB.WithContext(ctx).Create(&history).Error; err != nil {
+			return false, errors.WithMessage(err, "Failed to create watch history")
+		}
+	} else {
+		// 更新现有记录 - 只更新观看时间（使用Go本地时间，避免数据库时区问题）
+		updates := map[string]interface{}{
+			"watch_time": time.Now(),
+		}
+		// 只有当传入了有效的观看时长时才更新这些字段（避免浏览量记录覆盖已有的观看数据）
+		if watchDuration > 0 {
+			updates["watch_duration"] = watchDuration
+			updates["completion_rate"] = completionRate
+		}
+		if err := DB.WithContext(ctx).Model(&model.UserVideoWatchHistory{}).
+			Where("user_video_watch_history_id = ?", history.UserVideoWatchHistoryId).
+			Updates(updates).Error; err != nil {
+			return false, errors.WithMessage(err, "Failed to update watch history")
+		}
+	}
+
+	return isNew, nil
+}
+
+// DeleteWatchHistoryItem deletes a specific watch history item (with Redis cache)
+func DeleteWatchHistoryItem(ctx context.Context, userId, videoId int64) error {
+	// 1. 删除Redis缓存
+	if err := redis.RemoveFromWatchHistory(ctx, userId, videoId); err != nil {
+		hlog.Warnf("Failed to remove from watch history cache: %v", err)
+	}
+
+	// 2. 删除数据库记录
+	result := DB.WithContext(ctx).
+		Where("user_id = ? AND video_id = ?", userId, videoId).
+		Delete(&model.UserVideoWatchHistory{})
+	if result.Error != nil {
+		return errors.WithMessage(result.Error, "Failed to delete watch history item")
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("watch history item not found")
+	}
+	return nil
+}
+
+// GetWatchHistoryWithVideos gets watch history with video details
+func GetWatchHistoryWithVideos(ctx context.Context, userId int64, page, pageSize int64, dateFilter string) ([]*model.UserVideoWatchHistory, []*base.Video, int64, error) {
+	db := DB.WithContext(ctx).Model(&model.UserVideoWatchHistory{}).Where("user_id = ? AND deleted_at IS NULL", userId)
+
+	// 添加日期过滤
+	switch dateFilter {
+	case "today":
+		db = db.Where("DATE(watch_time) = CURDATE()")
+	case "week":
+		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")
+	case "month":
+		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)")
+	}
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, nil, 0, errors.WithMessage(err, "Failed to count watch history")
+	}
+
+	var history []*model.UserVideoWatchHistory
+	if err := db.Order("watch_time DESC").
+		Limit(int(pageSize)).
+		Offset(int((page - 1) * pageSize)).
+		Find(&history).Error; err != nil {
+		return nil, nil, 0, errors.WithMessage(err, "Failed to get watch history")
+	}
+
+	if len(history) == 0 {
+		return history, nil, total, nil
+	}
+
+	// 获取视频详情
+	videoIds := make([]int64, len(history))
+	for i, h := range history {
+		videoIds[i] = h.VideoId
+	}
+
+	videos, err := GetVideoByVideoId(ctx, videoIds)
+	if err != nil {
+		hlog.Warnf("Failed to get video details: %v", err)
+		return history, nil, total, nil
+	}
+
+	return history, videos, total, nil
+}
+
+// ClearUserWatchHistoryByDate clears user's watch history by date range (with Redis cache)
+func ClearUserWatchHistoryByDate(ctx context.Context, userId int64, dateRange string) (int64, error) {
+	// 1. 清除Redis缓存（如果是清空全部）
+	if dateRange == "all" || dateRange == "" {
+		if err := redis.ClearWatchHistoryCache(ctx, userId); err != nil {
+			hlog.Warnf("Failed to clear watch history cache: %v", err)
+		}
+	}
+
+	// 2. 清除数据库记录
+	db := DB.WithContext(ctx).Where("user_id = ?", userId)
+
+	switch dateRange {
+	case "today":
+		db = db.Where("DATE(watch_time) = CURDATE()")
+	case "week":
+		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")
+	case "month":
+		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)")
+	// "all" or default: no date filter
+	}
+
+	result := db.Delete(&model.UserVideoWatchHistory{})
+	if result.Error != nil {
+		return 0, errors.WithMessage(result.Error, "Failed to clear watch history")
+	}
+	return result.RowsAffected, nil
+}
+
+// CheckVideoInFavorite checks if video is already in a specific favorite
+func CheckVideoInFavorite(ctx context.Context, userId, favoriteId, videoId int64) (bool, error) {
+	var count int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("user_id = ? AND favorite_id = ? AND video_id = ?", userId, favoriteId, videoId).
+		Count(&count).Error; err != nil {
+		return false, errors.WithMessage(err, "Failed to check video in favorite")
+	}
+	return count > 0, nil
+}
+
+// BatchCheckUserFavorites 批量检查用户是否收藏了指定视频
+func BatchCheckUserFavorites(ctx context.Context, userId int64, videoIds []int64) (map[int64]bool, error) {
+	result := make(map[int64]bool)
+	if len(videoIds) == 0 {
+		return result, nil
+	}
+
+	// 初始化所有 videoId 为 false
+	for _, vid := range videoIds {
+		result[vid] = false
+	}
+
+	// 查询用户收藏的视频
+	var favoriteRecords []model.FavoritesVideos
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("user_id = ? AND video_id IN ?", userId, videoIds).
+		Find(&favoriteRecords).Error; err != nil {
+		return result, errors.WithMessage(err, "Failed to batch check user favorites")
+	}
+
+	// 标记已收藏的视频
+	for _, record := range favoriteRecords {
+		result[record.VideoId] = true
+	}
+
+	return result, nil
+}
+
+// GetHotVideosByLikes 获取热门视频排行榜（按点赞数排序）
+func GetHotVideosByLikes(ctx context.Context, limit int) ([]model.Video, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	var videos []model.Video
+	err := DB.WithContext(ctx).
+		Where("deleted_at IS NULL").
+		Order("likes_count DESC, visit_count DESC, created_at DESC").
+		Limit(limit).
+		Find(&videos).Error
+	if err != nil {
+		return nil, errors.WithMessage(err, "Failed to get hot videos by likes")
+	}
+	return videos, nil
 }

@@ -19,6 +19,7 @@ import (
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/oss"
+	"HuaTug.com/pkg/utils"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/pkg/errors"
@@ -366,19 +367,31 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	// 构造视频URL - 使用相对路径，前端通过 Vite 代理访问 MinIO
 	videoURL := fmt.Sprintf("/%s/%s", session.BucketName, session.ObjectName)
 
+	// 5. 同步生成视频缩略图并上传到 MinIO
+	thumbnailURL := videoURL // 默认使用视频URL作为封面
+	thumbnailURLs := map[string]string{"medium": videoURL}
+
+	// 同步生成缩略图
+	thumbURL, err := s.generateAndUploadThumbnail(session.UserID, session.VideoID, session.BucketName, session.ObjectName)
+	if err != nil {
+		hlog.Warnf("Failed to generate thumbnail for video %d: %v, using video URL as cover", session.VideoID, err)
+	} else {
+		hlog.Infof("Successfully generated thumbnail for video %d: %s", session.VideoID, thumbURL)
+		thumbnailURL = thumbURL
+		thumbnailURLs["medium"] = thumbURL
+	}
+
 	// 视频处理响应
-	// 注意：缩略图、动态封面等需要后端视频处理模块(FFmpeg)真正生成
-	// 目前暂时使用视频URL作为缩略图占位，前端可用video元素的poster属性或canvas截取第一帧
 	uploadResp := &oss.VideoUploadResponse{
 		VideoID:          session.VideoID,
 		SourceURL:        videoURL,
-		ProcessedURLs:    map[int]string{720: videoURL},         // 简化处理，使用原始URL
-		ThumbnailURLs:    map[string]string{"medium": videoURL}, // 暂用视频URL，前端自行截取封面帧
-		AnimatedCoverURL: videoURL,                              // 暂用视频URL
-		MetadataURL:      "",                                    // 暂不生成元数据文件
+		ProcessedURLs:    map[int]string{720: videoURL},
+		ThumbnailURLs:    thumbnailURLs,
+		AnimatedCoverURL: videoURL,
+		MetadataURL:      "",
 	}
 
-	// 5. 获取视频文件大小（从MinIO）
+	// 6. 获取视频文件大小（从MinIO）
 	objectInfo, err := s.tikTokStorage.GetObjectInfo(s.ctx, session.BucketName, session.ObjectName)
 	var fileSize int64 = 0
 	if err != nil {
@@ -389,7 +402,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		fileSize = objectInfo.Size
 	}
 
-	// 6. 创建存储映射记录
+	// 7. 创建存储映射记录
 	storageMapping := &db.VideoStorageMapping{
 		UserID:            session.UserID,
 		VideoID:           session.VideoID,
@@ -415,7 +428,7 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		// 不阻塞主流程，可以后续补偿
 	}
 
-	// 7. 创建视频记录
+	// 8. 创建视频记录
 	video := &base.Video{
 		Title:       session.Title,
 		Description: session.Description,
@@ -425,8 +438,8 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		Category:    session.Category,
 		CreatedAt:   time.Now().Format(constants.DataFormate),
 		UpdatedAt:   time.Now().Format(constants.DataFormate),
-		VideoUrl:    uploadResp.ProcessedURLs[720], // 默认使用720p
-		CoverUrl:    uploadResp.ThumbnailURLs["medium"],
+		VideoUrl:    uploadResp.ProcessedURLs[720],
+		CoverUrl:    thumbnailURL, // 使用生成的缩略图URL
 	}
 
 	if err := db.InsertVideo(s.ctx, video); err != nil {
@@ -1003,4 +1016,56 @@ func (s *VideoUploadServiceV2) isTempDir(name string) bool {
 // StopCleanupTask 停止清理任务（可在服务关闭时调用）
 func (s *VideoUploadServiceV2) StopCleanupTask() {
 	close(s.cleanupStopCh)
+}
+
+// generateAndUploadThumbnail 从MinIO下载视频，生成缩略图，然后上传到MinIO（使用service的ctx）
+func (s *VideoUploadServiceV2) generateAndUploadThumbnail(userID, videoID int64, bucketName, objectName string) (string, error) {
+	return s.generateAndUploadThumbnailAsync(s.ctx, userID, videoID, bucketName, objectName)
+}
+
+// generateAndUploadThumbnailAsync 从MinIO下载视频，生成缩略图，然后上传到MinIO（使用传入的ctx，适用于异步调用）
+func (s *VideoUploadServiceV2) generateAndUploadThumbnailAsync(ctx context.Context, userID, videoID int64, bucketName, objectName string) (string, error) {
+	hlog.Infof("Starting thumbnail generation for video %d", videoID)
+
+	// 1. 创建临时目录
+	tempDir := fmt.Sprintf("/tmp/thumbnail_%d_%d", userID, videoID)
+	if err := os.MkdirAll(tempDir, os.ModePerm); err != nil {
+		return "", fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir) // 清理临时目录
+
+	// 2. 从MinIO下载视频到临时文件
+	tempVideoPath := fmt.Sprintf("%s/video.mp4", tempDir)
+	if err := s.tikTokStorage.DownloadFile(ctx, bucketName, objectName, tempVideoPath); err != nil {
+		return "", fmt.Errorf("failed to download video from MinIO: %w", err)
+	}
+	hlog.Infof("Downloaded video to temp path: %s", tempVideoPath)
+
+	// 3. 使用FFmpeg生成缩略图
+	thumbnailPath, err := utils.GetVideoThumbnail(tempVideoPath, tempDir, 1, 320, 180) // 在第1秒截取，320x180尺寸
+	if err != nil {
+		return "", fmt.Errorf("failed to generate thumbnail: %w", err)
+	}
+	hlog.Infof("Generated thumbnail at: %s", thumbnailPath)
+
+	// 4. 读取缩略图文件
+	thumbnailData, err := os.ReadFile(thumbnailPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read thumbnail file: %w", err)
+	}
+
+	// 5. 构造缩略图在MinIO中的路径
+	// 格式: users/{userID}/videos/{videoID}/thumbnails/thumb_medium.jpg
+	thumbnailObjectName := fmt.Sprintf(oss.VIDEO_THUMBNAIL_TEMPLATE, userID, videoID, "medium")
+
+	// 6. 上传缩略图到MinIO
+	if err := s.tikTokStorage.UploadBytes(ctx, bucketName, thumbnailObjectName, thumbnailData, "image/jpeg"); err != nil {
+		return "", fmt.Errorf("failed to upload thumbnail to MinIO: %w", err)
+	}
+
+	// 7. 返回缩略图URL
+	thumbnailURL := fmt.Sprintf("/%s/%s", bucketName, thumbnailObjectName)
+	hlog.Infof("Uploaded thumbnail to MinIO: %s", thumbnailURL)
+
+	return thumbnailURL, nil
 }

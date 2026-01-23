@@ -492,6 +492,62 @@ struct VideoAnalyticsResponse {
     5: string report_generated_at
 }
 
+// ========== 浏览历史功能（V2版本） ==========
+struct WatchHistoryItem {
+    1: i64 history_id
+    2: i64 video_id
+    3: i64 user_id
+    4: i32 watch_duration           // 观看时长（秒）
+    5: double completion_rate       // 完播率（0-100）
+    6: string watch_time            // 观看时间
+    7: base.Video video_info        // 视频详情（可选）
+}
+
+struct GetWatchHistoryRequestV2 {
+    1: i64 user_id
+    2: i64 page_num
+    3: i64 page_size
+    4: string date_filter           // 可选：today, week, month, all
+}
+
+struct GetWatchHistoryResponseV2 {
+    1: base.Status base
+    2: list<WatchHistoryItem> history_list
+    3: i64 total_count
+    4: bool has_more
+}
+
+struct AddWatchHistoryRequestV2 {
+    1: i64 user_id
+    2: i64 video_id
+    3: i32 watch_duration           // 观看时长（秒）
+    4: double completion_rate       // 完播率（0-100）
+}
+
+struct AddWatchHistoryResponseV2 {
+    1: base.Status base
+    2: bool is_new_record           // 是否新增记录（否则为更新）
+}
+
+struct ClearWatchHistoryRequestV2 {
+    1: i64 user_id
+    2: string date_range            // 可选：today, week, month, all（默认all）
+}
+
+struct ClearWatchHistoryResponseV2 {
+    1: base.Status base
+    2: i64 deleted_count
+}
+
+struct DeleteWatchHistoryItemRequestV2 {
+    1: i64 user_id
+    2: i64 video_id
+}
+
+struct DeleteWatchHistoryItemResponseV2 {
+    1: base.Status base
+}
+
 // ========== 统一视频服务（仅V2版本） ==========
 service VideoService {
     // ========== V2版本API（推荐使用） ==========
@@ -544,4 +600,10 @@ service VideoService {
     
     // 分析统计
     VideoAnalyticsResponse GetVideoAnalyticsV2(1: VideoAnalyticsRequest req)(api.get="/v2/video/analytics")
+    
+    // 浏览历史功能
+    GetWatchHistoryResponseV2 GetWatchHistoryV2(1: GetWatchHistoryRequestV2 req)(api.get="/v2/history/list")
+    AddWatchHistoryResponseV2 AddWatchHistoryV2(1: AddWatchHistoryRequestV2 req)(api.post="/v2/history/add")
+    ClearWatchHistoryResponseV2 ClearWatchHistoryV2(1: ClearWatchHistoryRequestV2 req)(api.delete="/v2/history/clear")
+    DeleteWatchHistoryItemResponseV2 DeleteWatchHistoryItemV2(1: DeleteWatchHistoryItemRequestV2 req)(api.delete="/v2/history/delete")
 }

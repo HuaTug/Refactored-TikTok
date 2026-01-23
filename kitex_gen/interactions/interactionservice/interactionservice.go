@@ -27,6 +27,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"BatchLikeStatus": kitex.NewMethodInfo(
+		batchLikeStatusHandler,
+		newInteractionServiceBatchLikeStatusArgs,
+		newInteractionServiceBatchLikeStatusResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"CreateComment": kitex.NewMethodInfo(
 		createCommentHandler,
 		newInteractionServiceCreateCommentArgs,
@@ -176,6 +183,24 @@ func newInteractionServiceLikeListArgs() interface{} {
 
 func newInteractionServiceLikeListResult() interface{} {
 	return interactions.NewInteractionServiceLikeListResult()
+}
+
+func batchLikeStatusHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*interactions.InteractionServiceBatchLikeStatusArgs)
+	realResult := result.(*interactions.InteractionServiceBatchLikeStatusResult)
+	success, err := handler.(interactions.InteractionService).BatchLikeStatus(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newInteractionServiceBatchLikeStatusArgs() interface{} {
+	return interactions.NewInteractionServiceBatchLikeStatusArgs()
+}
+
+func newInteractionServiceBatchLikeStatusResult() interface{} {
+	return interactions.NewInteractionServiceBatchLikeStatusResult()
 }
 
 func createCommentHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -329,6 +354,16 @@ func (p *kClient) LikeList(ctx context.Context, req *interactions.LikeListReques
 	_args.Req = req
 	var _result interactions.InteractionServiceLikeListResult
 	if err = p.c.Call(ctx, "LikeList", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (r *interactions.BatchLikeStatusResponse, err error) {
+	var _args interactions.InteractionServiceBatchLikeStatusArgs
+	_args.Req = req
+	var _result interactions.InteractionServiceBatchLikeStatusResult
+	if err = p.c.Call(ctx, "BatchLikeStatus", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

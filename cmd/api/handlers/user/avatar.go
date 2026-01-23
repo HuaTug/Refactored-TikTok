@@ -23,6 +23,7 @@ import (
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/pkg/errno"
 
+	"github.com/bytedance/gopkg/cloud/metainfo"
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -76,8 +77,8 @@ func GetAvatarUploadUrl(ctx context.Context, c *app.RequestContext) {
 
 	hlog.Infof("GetAvatarUploadUrl: userId=%d, file_extension=%s", userId, param.FileExtension)
 
-	// 创建带有user_id的context
-	rpcCtx := context.WithValue(ctx, "user_id", userId)
+	// 使用 metainfo 传递 user_id 到 RPC 服务
+	rpcCtx := metainfo.WithValue(ctx, "user_id", strconv.FormatInt(userId, 10))
 
 	// 调用RPC服务
 	resp, err := rpc.GetAvatarUploadUrl(rpcCtx, &users.GetAvatarUploadUrlRequest{
@@ -91,11 +92,13 @@ func GetAvatarUploadUrl(ctx context.Context, c *app.RequestContext) {
 	}
 
 	c.JSON(200, utils.H{
-		"code":       resp.Base.Code,
-		"message":    resp.Base.Msg,
-		"upload_url": resp.UploadUrl,
-		"access_url": resp.AccessUrl,
-		"expires_in": resp.ExpiresIn,
+		"code":    resp.Base.Code,
+		"message": resp.Base.Msg,
+		"data": utils.H{
+			"upload_url": resp.UploadUrl,
+			"access_url": resp.AccessUrl,
+			"expires_in": resp.ExpiresIn,
+		},
 	})
 }
 
@@ -139,8 +142,8 @@ func UpdateAvatar(ctx context.Context, c *app.RequestContext) {
 
 	hlog.Infof("UpdateAvatar: userId=%d, avatar_url=%s", userId, param.AvatarUrl)
 
-	// 创建带有user_id的context
-	rpcCtx := context.WithValue(ctx, "user_id", userId)
+	// 使用 metainfo 传递 user_id 到 RPC 服务
+	rpcCtx := metainfo.WithValue(ctx, "user_id", strconv.FormatInt(userId, 10))
 
 	// 调用RPC服务
 	resp, err := rpc.UpdateAvatar(rpcCtx, &users.UpdateAvatarRequest{
@@ -153,7 +156,26 @@ func UpdateAvatar(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	SendResponse(c, nil, utils.H{
-		"user": resp.User,
+	if resp == nil || resp.Base == nil {
+		hlog.Error("UpdateAvatar: resp or resp.Base is nil")
+		SendResponse(c, errno.ServiceErr, nil)
+		return
+	}
+
+	if resp.Base.Code != 200 {
+		c.JSON(200, utils.H{
+			"code":    resp.Base.Code,
+			"message": resp.Base.Msg,
+			"data":    nil,
+		})
+		return
+	}
+
+	c.JSON(200, utils.H{
+		"code":    resp.Base.Code,
+		"message": resp.Base.Msg,
+		"data": utils.H{
+			"user": resp.User,
+		},
 	})
 }

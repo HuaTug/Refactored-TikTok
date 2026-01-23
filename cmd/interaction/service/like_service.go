@@ -3,49 +3,67 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
-	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
-	"HuaTug.com/pkg/mq"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
-	"github.com/google/uuid"
 )
 
-// LikeActionService 新版点赞服务，使用优化后的Redis设计
+// =============================================================================
+// 点赞服务架构设计
+// =============================================================================
+//
+// 设计原则：
+// 1. 点赞是简单的 CRUD 操作，不需要消息队列
+// 2. 数据一致性：先写数据库，成功后再更新缓存（Cache-Aside 模式）
+// 3. 缓存失败不影响主流程，但会记录日志
+//
+// 数据流：
+//   用户点赞 → 检查状态(缓存优先) → 写入数据库(事务) → 更新缓存 → 返回结果
+//
+// 数据存储：
+// - MySQL video_likes 表：持久化存储，source of truth
+// - Redis 缓存：
+//   - user:likes:{user_id}:{business_type} (Set)：用户点赞列表
+//   - count:{business_type}:{resource_id} (String)：点赞计数
+//
+// =============================================================================
+
+// LikeActionService 点赞服务
 type LikeActionService struct {
 	ctx          context.Context
 	cacheManager *redis.LikeCacheManager
-	producer     *mq.Producer
 }
 
-// NewLikeActionService 创建新版点赞服务实例
-func NewLikeActionService(ctx context.Context, producer *mq.Producer) *LikeActionService {
+// NewLikeActionService 创建点赞服务实例（不再依赖 MQ Producer）
+func NewLikeActionService(ctx context.Context) *LikeActionService {
 	cacheManager := redis.NewLikeCacheManager(redis.RedisDBInteraction)
 	return &LikeActionService{
 		ctx:          ctx,
 		cacheManager: cacheManager,
-		producer:     producer,
 	}
 }
 
+// =============================================================================
+// 点赞操作
+// =============================================================================
+
 // LikeAction 处理点赞/取消点赞操作
-func (service *LikeActionService) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (*interactions.LikeActionResponse, error) {
+func (s *LikeActionService) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (*interactions.LikeActionResponse, error) {
 	var isLiked bool
 	var err error
 
 	// 根据请求类型处理不同的点赞操作
 	if req.VideoId != 0 {
-		isLiked, err = service.handleVideoLike(ctx, req)
+		isLiked, err = s.handleVideoLike(ctx, req)
 	} else if req.CommentId != 0 {
-		isLiked, err = service.handleCommentLike(ctx, req)
+		isLiked, err = s.handleCommentLike(ctx, req)
 	} else {
 		return nil, fmt.Errorf("invalid request: neither video_id nor comment_id provided")
 	}
@@ -65,135 +83,188 @@ func (service *LikeActionService) LikeAction(ctx context.Context, req *interacti
 }
 
 // handleVideoLike 处理视频点赞操作
-func (service *LikeActionService) handleVideoLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+func (s *LikeActionService) handleVideoLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+	userID := req.UserId
+	videoID := req.VideoId
+
 	switch req.ActionType {
 	case "like":
-		// 检查是否已经点赞
-		isLiked, err := service.cacheManager.IsVideoLikedByUser(ctx, req.UserId, req.VideoId)
-		if err != nil {
-			return false, fmt.Errorf("failed to check like status: %w", err)
-		}
-		if isLiked {
-			return true, nil // 已经点赞，直接返回
-		}
-
-		// 添加点赞记录到缓存
-		if err := service.cacheManager.AddUserLike(ctx, req.UserId, redis.BusinessTypeVideo, req.VideoId); err != nil {
-			return false, fmt.Errorf("failed to add like to cache: %w", err)
-		}
-
-		event := &mq.LikeEvent{
-			UserID:     req.UserId,
-			VideoID:    req.VideoId,
-			CommentID:  req.CommentId,
-			ActionType: req.ActionType,
-			EventType:  "video_like",
-			Timestamp:  time.Now().Unix(),
-			EventID:    uuid.New().String(),
-		}
-		service.producer.PublishLikeEvent(ctx, event)
-
-		return true, nil
-
+		return s.likeVideo(ctx, userID, videoID)
 	case "unlike":
-		// 检查是否已经点赞
-		isLiked, err := service.cacheManager.IsVideoLikedByUser(ctx, req.UserId, req.VideoId)
-		if err != nil {
-			return false, fmt.Errorf("failed to check like status: %w", err)
-		}
-		if !isLiked {
-			return false, nil // 没有点赞，直接返回
-		}
-
-		// 从缓存移除点赞记录
-		if err := service.cacheManager.RemoveUserLike(ctx, req.UserId, redis.BusinessTypeVideo, req.VideoId); err != nil {
-			return false, fmt.Errorf("failed to remove like from cache: %w", err)
-		}
-
-		event := &mq.LikeEvent{
-			UserID:     req.UserId,
-			VideoID:    req.VideoId,
-			CommentID:  req.CommentId,
-			ActionType: req.ActionType,
-			EventType:  "video_like",
-			Timestamp:  time.Now().Unix(),
-			EventID:    uuid.New().String(),
-		}
-		service.producer.PublishLikeEvent(ctx, event)
-		return false, nil
-
+		return s.unlikeVideo(ctx, userID, videoID)
 	default:
 		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
 	}
 }
+
+// likeVideo 点赞视频
+func (s *LikeActionService) likeVideo(ctx context.Context, userID, videoID int64) (bool, error) {
+	// 直接写入数据库（DB 层会处理幂等逻辑）
+	created, err := db.CreateVideoLike(ctx, userID, videoID)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "Failed to create video like in DB: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+		return false, fmt.Errorf("failed to save like to database: %w", err)
+	}
+
+	// 只有真正创建了记录才更新缓存
+	if created {
+		s.updateCacheAfterLike(ctx, userID, videoID)
+		hlog.CtxInfof(ctx, "Video like success: user_id=%d, video_id=%d", userID, videoID)
+	}
+
+	return true, nil
+}
+
+// unlikeVideo 取消点赞视频
+func (s *LikeActionService) unlikeVideo(ctx context.Context, userID, videoID int64) (bool, error) {
+	// 直接从数据库删除（DB 层会处理幂等逻辑）
+	deleted, err := db.DeleteVideoLike(ctx, userID, videoID)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "Failed to delete video like from DB: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+		return false, fmt.Errorf("failed to remove like from database: %w", err)
+	}
+
+	// 只有真正删除了记录才更新缓存
+	if deleted {
+		s.updateCacheAfterUnlike(ctx, userID, videoID)
+		hlog.CtxInfof(ctx, "Video unlike success: user_id=%d, video_id=%d", userID, videoID)
+	}
+
+	return false, nil
+}
+
+// =============================================================================
+// 缓存操作（辅助方法）
+// =============================================================================
+
+// updateCacheAfterLike 点赞后更新缓存
+func (s *LikeActionService) updateCacheAfterLike(ctx context.Context, userID, videoID int64) {
+	// 更新用户点赞列表
+	if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to add user like to cache: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+	}
+
+	// 更新点赞计数
+	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, videoID, 1); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to increment like count in cache: video_id=%d, err=%v", videoID, err)
+	}
+}
+
+// updateCacheAfterUnlike 取消点赞后更新缓存
+func (s *LikeActionService) updateCacheAfterUnlike(ctx context.Context, userID, videoID int64) {
+	// 从用户点赞列表移除
+	if err := s.cacheManager.RemoveUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to remove user like from cache: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+	}
+
+	// 更新点赞计数
+	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, videoID, -1); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to decrement like count in cache: video_id=%d, err=%v", videoID, err)
+	}
+}
+
+// checkVideoLikeStatus 检查用户是否点赞了视频
+// 查询顺序：Redis缓存 → MySQL数据库（缓存miss时回填）
+func (s *LikeActionService) checkVideoLikeStatus(ctx context.Context, userID, videoID int64) (bool, error) {
+	// 1. 先查 Redis 缓存
+	isLiked, err := s.cacheManager.IsVideoLikedByUser(ctx, userID, videoID)
+	if err == nil && isLiked {
+		return true, nil
+	}
+
+	// 2. 缓存中没找到，查数据库
+	like, err := db.GetVideoLikeByUserAndVideo(ctx, userID, videoID)
+	if err != nil {
+		// 数据库查询出错或记录不存在，视为未点赞
+		return false, nil
+	}
+
+	// 3. 数据库中有记录，回填缓存
+	if like != nil {
+		if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
+			hlog.CtxWarnf(ctx, "Failed to backfill like cache: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+		}
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// =============================================================================
+// 评论点赞（简化实现，与视频点赞逻辑类似）
+// =============================================================================
 
 // handleCommentLike 处理评论点赞操作
-func (service *LikeActionService) handleCommentLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+func (s *LikeActionService) handleCommentLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+	userID := req.UserId
+	commentID := req.CommentId
+
 	switch req.ActionType {
 	case "like":
-		// 检查是否已经点赞
-		isLiked, err := service.cacheManager.IsCommentLikedByUser(ctx, req.UserId, req.CommentId)
-		if err != nil {
-			return false, fmt.Errorf("failed to check like status: %w", err)
-		}
-		if isLiked {
-			return true, nil // 已经点赞，直接返回
-		}
-
-		// 添加点赞记录到缓存
-		if err := service.cacheManager.AddUserLike(ctx, req.UserId, redis.BusinessTypeComment, req.CommentId); err != nil {
-			return false, fmt.Errorf("failed to add like to cache: %w", err)
-		}
-
-		// 发布评论点赞事件，由事件驱动同步服务处理数据库操作
-		event := &mq.LikeEvent{
-			UserID:     req.UserId,
-			VideoID:    req.VideoId,
-			CommentID:  req.CommentId,
-			ActionType: req.ActionType,
-			EventType:  "comment_like",
-			Timestamp:  time.Now().Unix(),
-			EventID:    uuid.New().String(),
-		}
-		service.producer.PublishLikeEvent(ctx, event)
-
-		return true, nil
-
+		return s.likeComment(ctx, userID, commentID)
 	case "unlike":
-		// 检查是否已经点赞
-		isLiked, err := service.cacheManager.IsCommentLikedByUser(ctx, req.UserId, req.CommentId)
-		if err != nil {
-			return false, fmt.Errorf("failed to check like status: %w", err)
-		}
-		if !isLiked {
-			return false, nil // 没有点赞，直接返回
-		}
-
-		// 从缓存移除点赞记录
-		if err := service.cacheManager.RemoveUserLike(ctx, req.UserId, redis.BusinessTypeComment, req.CommentId); err != nil {
-			return false, fmt.Errorf("failed to remove like from cache: %w", err)
-		}
-
-		// 发布评论取消点赞事件，由事件驱动同步服务处理数据库操作
-		event := &mq.LikeEvent{
-			UserID:     req.UserId,
-			VideoID:    req.VideoId,
-			CommentID:  req.CommentId,
-			ActionType: req.ActionType,
-			EventType:  "comment_like",
-			Timestamp:  time.Now().Unix(),
-			EventID:    uuid.New().String(),
-		}
-		service.producer.PublishLikeEvent(ctx, event)
-		return true, nil
-
+		return s.unlikeComment(ctx, userID, commentID)
 	default:
 		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
 	}
 }
 
+// likeComment 点赞评论
+func (s *LikeActionService) likeComment(ctx context.Context, userID, commentID int64) (bool, error) {
+	// 1. 检查是否已点赞
+	isLiked, err := s.cacheManager.IsCommentLikedByUser(ctx, userID, commentID)
+	if err == nil && isLiked {
+		return true, nil // 已经点赞，幂等返回
+	}
+
+	// 2. 写入数据库
+	if err := db.CreateCommentLike(ctx, userID, commentID); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to create comment like in DB: user_id=%d, comment_id=%d, err=%v", userID, commentID, err)
+		return false, fmt.Errorf("failed to save comment like to database: %w", err)
+	}
+
+	// 3. 更新缓存
+	if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeComment, commentID); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to add comment like to cache: err=%v", err)
+	}
+	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, commentID, 1); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to increment comment like count: err=%v", err)
+	}
+
+	return true, nil
+}
+
+// unlikeComment 取消点赞评论
+func (s *LikeActionService) unlikeComment(ctx context.Context, userID, commentID int64) (bool, error) {
+	// 1. 检查是否已点赞
+	isLiked, err := s.cacheManager.IsCommentLikedByUser(ctx, userID, commentID)
+	if err != nil || !isLiked {
+		return false, nil // 没有点赞，幂等返回
+	}
+
+	// 2. 从数据库删除
+	if err := db.DeleteCommentLike(ctx, userID, commentID); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to delete comment like from DB: err=%v", err)
+		return false, fmt.Errorf("failed to remove comment like from database: %w", err)
+	}
+
+	// 3. 更新缓存
+	if err := s.cacheManager.RemoveUserLike(ctx, userID, redis.BusinessTypeComment, commentID); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to remove comment like from cache: err=%v", err)
+	}
+	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, commentID, -1); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to decrement comment like count: err=%v", err)
+	}
+
+	return false, nil
+}
+
+// =============================================================================
+// 查询接口
+// =============================================================================
+
 // GetLikeList 获取用户点赞的视频列表
-func (service *LikeActionService) GetLikeList(ctx context.Context, req *interactions.LikeListRequest) (*interactions.LikeListResponse, error) {
+func (s *LikeActionService) GetLikeList(ctx context.Context, req *interactions.LikeListRequest) (*interactions.LikeListResponse, error) {
 	// 参数校验和默认值设置
 	if req.PageNum <= 0 {
 		req.PageNum = 1
@@ -202,12 +273,11 @@ func (service *LikeActionService) GetLikeList(ctx context.Context, req *interact
 		req.PageSize = constants.DefaultLimit
 	}
 
-	// 根据用户ID获取其点赞的视频列表
 	offset := (req.PageNum - 1) * req.PageSize
 	limit := req.PageSize
 
-	// 获取用户点赞的视频ID列表
-	videoIDs, err := service.cacheManager.GetUserLikeHistory(ctx, req.UserId, redis.BusinessTypeVideo, offset, limit)
+	// 获取用户点赞的视频ID列表（从缓存获取）
+	videoIDs, err := s.cacheManager.GetUserLikeHistory(ctx, req.UserId, redis.BusinessTypeVideo, offset, limit)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "Failed to get user like history: %v", err)
 		return &interactions.LikeListResponse{
@@ -233,7 +303,6 @@ func (service *LikeActionService) GetLikeList(ctx context.Context, req *interact
 	// 批量获取视频详细信息
 	videosList := make([]*base.Video, 0, len(videoIDs))
 	for _, videoID := range videoIDs {
-		// 调用视频服务获取视频详情
 		videoResp, err := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{
 			VideoId: videoID,
 		})
@@ -256,23 +325,25 @@ func (service *LikeActionService) GetLikeList(ctx context.Context, req *interact
 	}, nil
 }
 
-// GetUserLikeHistory 获取用户点赞历史
-func (service *LikeActionService) GetUserLikeHistory(ctx context.Context, userID, businessID int64, offset, limit int64) ([]int64, error) {
-	return service.cacheManager.GetUserLikeHistory(ctx, userID, businessID, offset, limit)
-}
-
 // GetLikeCount 获取点赞数
-func (service *LikeActionService) GetLikeCount(ctx context.Context, businessID, messageID int64) (int64, error) {
-	count, err := service.cacheManager.GetCountCache(ctx, businessID, messageID)
+func (s *LikeActionService) GetLikeCount(ctx context.Context, businessID, messageID int64) (int64, error) {
+	count, err := s.cacheManager.GetCountCache(ctx, businessID, messageID)
 	if err != nil {
+		// 缓存miss，从数据库查询
+		if businessID == redis.BusinessTypeVideo {
+			dbCount, dbErr := db.GetVideoLikeCount(ctx, messageID)
+			if dbErr == nil {
+				return dbCount, nil
+			}
+		}
 		return 0, err
 	}
 	return count.LikeCount, nil
 }
 
 // BatchGetLikeCount 批量获取点赞数
-func (service *LikeActionService) BatchGetLikeCount(ctx context.Context, businessID int64, messageIDs []int64) (map[int64]int64, error) {
-	countMap, err := service.cacheManager.BatchGetCountCache(ctx, businessID, messageIDs)
+func (s *LikeActionService) BatchGetLikeCount(ctx context.Context, businessID int64, messageIDs []int64) (map[int64]int64, error) {
+	countMap, err := s.cacheManager.BatchGetCountCache(ctx, businessID, messageIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -286,111 +357,45 @@ func (service *LikeActionService) BatchGetLikeCount(ctx context.Context, busines
 }
 
 // BatchCheckUserLikes 批量检查用户点赞状态
-func (service *LikeActionService) BatchCheckUserLikes(ctx context.Context, userID, businessID int64, messageIDs []int64) (map[int64]bool, error) {
-	return service.cacheManager.BatchCheckUserLikes(ctx, userID, businessID, messageIDs)
-}
+func (s *LikeActionService) BatchCheckUserLikes(ctx context.Context, userID, businessID int64, messageIDs []int64) (map[int64]bool, error) {
+	// 初始化 result map
+	result := make(map[int64]bool)
 
-// === 异步数据库操作 ===
-
-// saveLikeToDB 异步保存点赞记录到数据库（已弃用 - 由事件驱动同步处理）
-func (service *LikeActionService) saveLikeToDB(userID, videoID int64, behaviorType string) {
-	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的插入
-	// 避免重复插入问题
-	hlog.Infof("saveLikeToDB called but handled by EventDrivenSyncService - user_id: %d, video_id: %d, type: %s",
-		userID, videoID, behaviorType)
-}
-
-// deleteLikeFromDB 异步从数据库删除点赞记录（已弃用 - 由事件驱动同步处理）
-func (service *LikeActionService) deleteLikeFromDB(userID, videoID int64, behaviorType string) {
-	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的删除
-	// 避免重复操作问题
-	hlog.Infof("deleteLikeFromDB called but handled by EventDrivenSyncService - user_id: %d, video_id: %d, type: %s",
-		userID, videoID, behaviorType)
-}
-
-// saveCommentLikeToDB 异步保存评论点赞记录到数据库（已弃用 - 由事件驱动同步处理）
-func (service *LikeActionService) saveCommentLikeToDB(userID, commentID int64, behaviorType string) {
-	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的插入
-	// 避免重复插入问题
-	hlog.Infof("saveCommentLikeToDB called but handled by EventDrivenSyncService - user_id: %d, comment_id: %d, type: %s",
-		userID, commentID, behaviorType)
-}
-
-// deleteCommentLikeFromDB 异步从数据库删除评论点赞记录（已弃用 - 由事件驱动同步处理）
-func (service *LikeActionService) deleteCommentLikeFromDB(userID, commentID int64, behaviorType string) {
-	// 注意：此方法已弃用，现在由EventDrivenSyncService统一处理user_behaviors表的删除
-	// 避免重复操作问题
-	hlog.Infof("deleteCommentLikeFromDB called but handled by EventDrivenSyncService - user_id: %d, comment_id: %d, type: %s",
-		userID, commentID, behaviorType)
-}
-
-// SyncCacheWithDB 同步缓存与数据库数据
-func (service *LikeActionService) SyncCacheWithDB(ctx context.Context, businessID, messageID int64) error {
-	// 从数据库获取真实的点赞数据
-	// 更新缓存中的计数和用户列表
-
-	// 这里需要根据实际的数据库结构来实现
-	hlog.CtxInfof(ctx, "Syncing cache with DB for business:%d, message:%d", businessID, messageID)
-
-	return nil
-}
-
-func (service *LikeActionService) SendLikeNotification(ctx context.Context, fromUserID, targetID int64, targetType string) {
-	var toUserID int64
-	var content string
-
-	if targetType == "video" {
-		_, err := db.GetVideoInfo(ctx, targetID)
-		if err != nil {
-			hlog.Errorf("Failed to get video info for notification: %v", err)
-			return
-		}
-
-		// TODO: 这里需要根据实际的视频结构进行类型转换
-		// 目前简化处理，假设video有UserId字段
-		toUserID = 0 // 临时设置，需要根据实际情况获取视频作者ID
-		userName, err := client.GetUserInfo(ctx, &users.GetUserInfoRequest{
-			UserId: fromUserID,
-		})
-		if err != nil {
-			hlog.Errorf("Failed to get userinfo for notification: %v", err)
-			return
-		}
-
-		content = fmt.Sprintf("%v 赞了你的视频", userName)
-	} else if targetType == "comment" {
-		comment, err := db.GetCommentInfo(ctx, targetID)
-		if err != nil {
-			hlog.Errorf("Failed to get comment info for notification: %v", err)
-			return
-		}
-		toUserID = comment.UserId
-		userName, err := client.GetUserInfo(ctx, &users.GetUserInfoRequest{
-			UserId: fromUserID,
-		})
-		if err != nil {
-			hlog.Errorf("Failed to get userinfo for notification: %v", err)
-			return
-		}
-
-		content = fmt.Sprintf("%v 赞了你的评论", userName)
+	// 先从缓存批量查询
+	cacheResult, err := s.cacheManager.BatchCheckUserLikes(ctx, userID, businessID, messageIDs)
+	if err != nil {
+		hlog.CtxWarnf(ctx, "Failed to batch check likes from cache, fallback to DB: %v", err)
+	} else if cacheResult != nil {
+		result = cacheResult
 	}
 
-	if fromUserID == toUserID {
-		return
+	// 对于缓存中没有找到的，从数据库查询
+	if businessID == redis.BusinessTypeVideo {
+		missingIDs := make([]int64, 0)
+		for _, id := range messageIDs {
+			if _, ok := result[id]; !ok {
+				missingIDs = append(missingIDs, id)
+			}
+		}
+
+		if len(missingIDs) > 0 {
+			dbResult, dbErr := db.BatchGetUserVideoLikeStatus(ctx, userID, missingIDs)
+			if dbErr == nil {
+				for id, isLiked := range dbResult {
+					result[id] = isLiked
+					// 回填缓存
+					if isLiked {
+						_ = s.cacheManager.AddUserLike(ctx, userID, businessID, id)
+					}
+				}
+			}
+		}
 	}
 
-	notificationEvent := &mq.NotificationEvent{
-		UserID:           toUserID,
-		FromUserID:       fromUserID,
-		NotificationType: "like",
-		TargetID:         targetID,
-		Content:          content,
-		Timestamp:        time.Now().Unix(),
-		EventID:          uuid.New().String(),
-	}
+	return result, nil
+}
 
-	if err := service.producer.PublishNotificationEvent(ctx, notificationEvent); err != nil {
-		hlog.Errorf("Failed to publish notification event: %v", err)
-	}
+// GetUserLikeHistory 获取用户点赞历史
+func (s *LikeActionService) GetUserLikeHistory(ctx context.Context, userID, businessID int64, offset, limit int64) ([]int64, error) {
+	return s.cacheManager.GetUserLikeHistory(ctx, userID, businessID, offset, limit)
 }

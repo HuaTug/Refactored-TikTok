@@ -46,6 +46,14 @@ func (v *UpdateUserService) UpdateUser(req *users.UpdateUserRequest) (err error)
 	if avatarUrl != "" {
 		user.AvatarUrl = avatarUrl
 	}
+	// 更新性别 (0:女, 1:男, 2:保密)
+	if req.Sex >= 0 {
+		user.Sex = req.Sex
+	}
+	// 更新个人简介
+	if req.Bio != "" {
+		user.Bio = req.Bio
+	}
 
 	// 调用数据库更新
 	if err := db.UpdateUser(v.ctx, user); err != nil {

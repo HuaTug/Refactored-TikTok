@@ -19,7 +19,7 @@ type Comment struct {
 
 // CommentLike represents comment likes table
 type CommentLike struct {
-	CommentLikesId int64      `json:"comment_likes_id" gorm:"column:comment_likes_id;primaryKey"`
+	CommentLikesId int64      `json:"comment_likes_id" gorm:"column:comment_likes_id;primaryKey;autoIncrement"`
 	UserId         int64      `json:"user_id" gorm:"column:user_id"`
 	CommentId      int64      `json:"comment_id" gorm:"column:comment_id"`
 	CreatedAt      time.Time  `json:"created_at" gorm:"column:created_at"`
@@ -28,7 +28,7 @@ type CommentLike struct {
 
 // VideoLike represents video likes table
 type VideoLike struct {
-	VideoLikesId int64      `json:"video_likes_id" gorm:"column:video_likes_id;primaryKey"`
+	VideoLikesId int64      `json:"video_likes_id" gorm:"column:video_likes_id;primaryKey;autoIncrement"`
 	UserId       int64      `json:"user_id" gorm:"column:user_id"`
 	VideoId      int64      `json:"video_id" gorm:"column:video_id"`
 	CreatedAt    time.Time  `json:"created_at" gorm:"column:created_at"`

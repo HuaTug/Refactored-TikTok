@@ -64,6 +64,18 @@ func AccessTokenJwtInit() {
 			return user.User.UserId, nil
 		},
 
+		// IdentityHandler: 从JWT claims中提取user_id
+		IdentityHandler: func(ctx context.Context, c *app.RequestContext) interface{} {
+			claims := jwt.ExtractClaims(ctx, c)
+			hlog.Infof("IdentityHandler: claims=%+v", claims)
+			if userId, ok := claims[AccessTokenIdentityKey].(float64); ok {
+				hlog.Infof("IdentityHandler: extracted userId=%d", int64(userId))
+				return int64(userId)
+			}
+			hlog.Warnf("IdentityHandler: failed to extract user_id from claims")
+			return nil
+		},
+
 		// data为Authenticator返回的interface{}
 		PayloadFunc: func(data interface{}) jwt.MapClaims {
 			if v, ok := data.(int64); ok {
@@ -73,6 +85,19 @@ func AccessTokenJwtInit() {
 			}
 			return jwt.MapClaims{}
 		},
+
+		// Authorizator: 授权验证，设置user_id到context
+		Authorizator: func(data interface{}, ctx context.Context, c *app.RequestContext) bool {
+			hlog.Infof("Authorizator: data=%+v, type=%T", data, data)
+			if userId, ok := data.(int64); ok {
+				c.Set("user_id", userId)
+				hlog.Infof("Authorizator: set user_id=%d", userId)
+				return true
+			}
+			hlog.Warnf("Authorizator: failed to set user_id, data type mismatch")
+			return false
+		},
+
 		LoginResponse: func(ctx context.Context, c *app.RequestContext, code int, message string, time time.Time) {
 			hlog.CtxInfof(ctx, "Login Successfully. IP: "+c.ClientIP())
 			c.Set("Access-Token", message)

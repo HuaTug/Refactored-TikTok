@@ -42,7 +42,7 @@ create table   `users`(
     `phone` varchar(20) default null comment 'phone number',
     `email` varchar(50) not null,
     `sex` tinyint(1) not null, -- 0:female 1:male
-    `avatar_url` varchar(255) ,
+    `avatar_url` varchar(1000) ,
     `background_url` varchar(255) default null comment 'profile background image',
     `bio` varchar(500) default '' comment 'user bio',
     `birthday` date default null comment 'birthday',
@@ -154,7 +154,7 @@ create table `user_video_watch_histories`(
 -- Table structure of video_likes --
 drop table if exists `video_likes`;
 create table `video_likes`(
-    `video_likes_id` bigint not null ,
+    `video_likes_id` bigint not null auto_increment,
     `user_id` bigint not null ,
     `video_id` bigint not null ,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

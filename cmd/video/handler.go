@@ -235,10 +235,43 @@ func (s *VideoServiceImpl) VideoPublishCancelV2(ctx context.Context, req *videos
 }
 
 func (s *VideoServiceImpl) VideoVisitV2(ctx context.Context, req *videos.VideoVisitRequestV2) (resp *videos.VideoVisitResponseV2, err error) {
+	resp = new(videos.VideoVisitResponseV2)
+	resp.Base = &base.Status{}
+
+	visitService := service.NewVideoVisitService(ctx)
+	result, err := visitService.VideoVisit(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.VideoVisit failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to visit video: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Video visit recorded successfully"
+	resp.Item = result.Item
+	resp.ViewCounted = result.ViewCounted
+	resp.RelatedVideos = result.RelatedVideos
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) GetVideoVisitCountV2(ctx context.Context, req *videos.GetVideoVisitCountRequestV2) (resp *videos.GetVideoVisitCountResponseV2, err error) {
+	resp = new(videos.GetVideoVisitCountResponseV2)
+	resp.Base = &base.Status{}
+
+	visitService := service.NewVideoVisitService(ctx)
+	result, err := visitService.GetVideoVisitCount(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetVideoVisitCount failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get video visit count: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Get video visit count successfully"
+	resp.VisitCount = result.VisitCount
+	resp.DetailedCounts = result.DetailedCounts
 	return resp, nil
 }
 
@@ -303,7 +336,21 @@ func (s *VideoServiceImpl) AddFavoriteVideoV2(ctx context.Context, req *videos.A
 	resp = new(videos.AddFavoriteVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	err = service.NewVideoFavoritesService(ctx).AddFavoriteVideo(req)
+	// 先检查是否已经收藏
+	favService := service.NewVideoFavoritesService(ctx)
+	exists, checkErr := favService.CheckVideoInFavorite(req.UserId, req.FavoriteId, req.VideoId)
+	if checkErr != nil {
+		hlog.CtxErrorf(ctx, "service.CheckVideoInFavorite failed, original error: %v", errors.Cause(checkErr))
+	}
+
+	if exists {
+		resp.Base.Code = consts.StatusOK
+		resp.Base.Msg = "Video already exists in favorites"
+		resp.AlreadyExists = true
+		return resp, nil
+	}
+
+	err = favService.AddFavoriteVideo(req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.AddFavoriteVideo failed, original error: %v", errors.Cause(err))
 		resp.Base.Code = errno.ServiceErrCode
@@ -313,6 +360,7 @@ func (s *VideoServiceImpl) AddFavoriteVideoV2(ctx context.Context, req *videos.A
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully added video to favorites"
+	resp.AlreadyExists = false
 	return resp, nil
 }
 
@@ -578,5 +626,88 @@ func (s *VideoServiceImpl) TranscodeVideoV2(ctx context.Context, req *videos.Vid
 	// For now, return success with empty response
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully submitted video transcoding request"
+	return resp, nil
+}
+
+// ========== 浏览历史功能 ==========
+
+// GetWatchHistoryV2 implements the VideoServiceImpl interface.
+func (s *VideoServiceImpl) GetWatchHistoryV2(ctx context.Context, req *videos.GetWatchHistoryRequestV2) (resp *videos.GetWatchHistoryResponseV2, err error) {
+	resp = new(videos.GetWatchHistoryResponseV2)
+	resp.Base = &base.Status{}
+
+	historyService := service.NewWatchHistoryService(ctx)
+	result, err := historyService.GetWatchHistory(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetWatchHistory failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get watch history: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully retrieved watch history"
+	resp.HistoryList = result.HistoryList
+	resp.TotalCount = result.TotalCount
+	resp.HasMore = result.HasMore
+	return resp, nil
+}
+
+// AddWatchHistoryV2 implements the VideoServiceImpl interface.
+func (s *VideoServiceImpl) AddWatchHistoryV2(ctx context.Context, req *videos.AddWatchHistoryRequestV2) (resp *videos.AddWatchHistoryResponseV2, err error) {
+	resp = new(videos.AddWatchHistoryResponseV2)
+	resp.Base = &base.Status{}
+
+	historyService := service.NewWatchHistoryService(ctx)
+	isNew, err := historyService.AddWatchHistory(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.AddWatchHistory failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to add watch history: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully added watch history"
+	resp.IsNewRecord = isNew
+	return resp, nil
+}
+
+// ClearWatchHistoryV2 implements the VideoServiceImpl interface.
+func (s *VideoServiceImpl) ClearWatchHistoryV2(ctx context.Context, req *videos.ClearWatchHistoryRequestV2) (resp *videos.ClearWatchHistoryResponseV2, err error) {
+	resp = new(videos.ClearWatchHistoryResponseV2)
+	resp.Base = &base.Status{}
+
+	historyService := service.NewWatchHistoryService(ctx)
+	deletedCount, err := historyService.ClearWatchHistory(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.ClearWatchHistory failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to clear watch history: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully cleared watch history"
+	resp.DeletedCount = deletedCount
+	return resp, nil
+}
+
+// DeleteWatchHistoryItemV2 implements the VideoServiceImpl interface.
+func (s *VideoServiceImpl) DeleteWatchHistoryItemV2(ctx context.Context, req *videos.DeleteWatchHistoryItemRequestV2) (resp *videos.DeleteWatchHistoryItemResponseV2, err error) {
+	resp = new(videos.DeleteWatchHistoryItemResponseV2)
+	resp.Base = &base.Status{}
+
+	historyService := service.NewWatchHistoryService(ctx)
+	err = historyService.DeleteWatchHistoryItem(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.DeleteWatchHistoryItem failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to delete watch history item: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully deleted watch history item"
 	return resp, nil
 }

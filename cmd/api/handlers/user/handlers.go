@@ -59,8 +59,10 @@ type QueryParam struct {
 }
 
 type UpdateParam struct {
-	UserName string `form:"user_name" `
-	PassWord string `form:"password"`
+	UserName string `form:"user_name" json:"user_name"`
+	PassWord string `form:"password" json:"password"`
+	Sex      int64  `form:"sex" json:"sex"`
+	Bio      string `form:"bio" json:"bio"`
 }
 
 type SendCodeParam struct {

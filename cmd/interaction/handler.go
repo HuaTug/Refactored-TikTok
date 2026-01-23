@@ -6,31 +6,16 @@ import (
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
-	"HuaTug.com/pkg/mq"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
 	"github.com/pkg/errors"
 )
 
-type InteractionServiceImpl struct {
-	producer *mq.Producer
-}
-
-// 全局生产者实例，在main.go中初始化
-var globalProducer *mq.Producer
-
-func SetGlobalProducer(producer *mq.Producer) {
-	globalProducer = producer
-}
-
-func GetGlobalProducer() *mq.Producer {
-	return globalProducer
-}
+type InteractionServiceImpl struct{}
 
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
-	// 使用全局producer实例
-	likeService := service.NewLikeActionService(ctx, globalProducer)
+	likeService := service.NewLikeActionService(ctx)
 
 	resp, err = likeService.LikeAction(ctx, req)
 	if err != nil {
@@ -51,7 +36,7 @@ func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactio
 }
 
 func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *interactions.LikeListResponse, err error) {
-	likeService := service.NewLikeActionService(ctx, globalProducer)
+	likeService := service.NewLikeActionService(ctx)
 	resp, err = likeService.GetLikeList(ctx, req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.LikeList failed, original error: %v", errors.Cause(err))
@@ -66,6 +51,35 @@ func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions
 		}
 		return resp, err
 	}
+	return resp, nil
+}
+
+func (s *InteractionServiceImpl) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (resp *interactions.BatchLikeStatusResponse, err error) {
+	likeService := service.NewLikeActionService(ctx)
+
+	// 初始化响应
+	resp = &interactions.BatchLikeStatusResponse{
+		Base: &base.Status{
+			Code: consts.StatusOK,
+			Msg:  "success",
+		},
+		LikeStatus: make(map[int64]bool),
+	}
+
+	if len(req.VideoIds) == 0 {
+		return resp, nil
+	}
+
+	// 批量检查点赞状态
+	likeStatus, err := likeService.BatchCheckUserLikes(ctx, req.UserId, 1, req.VideoIds) // 1 = BusinessTypeVideo
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.BatchCheckUserLikes failed: %v", err)
+		resp.Base.Code = consts.StatusInternalServerError
+		resp.Base.Msg = "获取点赞状态失败"
+		return resp, err
+	}
+
+	resp.LikeStatus = likeStatus
 	return resp, nil
 }
 

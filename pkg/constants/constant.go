@@ -30,7 +30,7 @@ const (
 	ESNoTimeFilterFlag             = -1
 	ESNoUsernameFilterFlag         = ``
 	ESNoPageParamFlag              = -1
-	CPURateLimit           float64 = 80.0
+	CPURateLimit           float64 = 95.0 // 开发环境放宽CPU限制
 )
 
 var (

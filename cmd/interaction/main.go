@@ -2,13 +2,9 @@ package main
 
 import (
 	"net"
-	"os"
 
 	"HuaTug.com/cmd/api/rpc"
-	"HuaTug.com/cmd/interaction/common"
-	"HuaTug.com/cmd/interaction/consumer"
 	"HuaTug.com/cmd/interaction/dal"
-	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/config"
@@ -16,7 +12,6 @@ import (
 	interaction "HuaTug.com/kitex_gen/interactions/interactionservice"
 	"HuaTug.com/pkg/bound"
 	"HuaTug.com/pkg/middleware"
-	"HuaTug.com/pkg/mq"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/kitex/pkg/limit"
@@ -25,81 +20,21 @@ import (
 	etcd "github.com/kitex-contrib/registry-etcd"
 )
 
-// 全局变量
-var globalEventDrivenSyncService *common.EventDrivenSyncService
-
 func Init() {
-	//tracer2.InitJaeger(constants.UserServiceName)
 	config.Init()
 	dal.Init()
 	redis.Load()
 	client.Init()
 
-	go func() {
-		consumer.Init()
-	}()
-
 	// 初始化RPC客户端，确保VideoClient被正确初始化
 	rpc.InitVideoRpc()
 
-	// 初始化消息队列生产者
-	initMessageQueue()
-
-	// 启用事件驱动同步服务
-	initEventDrivenSyncService()
-
-	// go common.NewCommentSync().Run()
-	// go common.NewVideoSyncman().Run()
-}
-
-func initMessageQueue() {
-	// 从环境变量或配置文件获取RabbitMQ连接URL
-	rabbitmqURL := os.Getenv("RABBITMQ_URL")
-	if rabbitmqURL == "" {
-		rabbitmqURL = "amqp://guest:guest@localhost:5672/"
-	}
-
-	// 创建统一的消息队列管理器（兼容旧的Producer接口）
-	producer, err := mq.NewProducer(rabbitmqURL)
-	if err != nil {
-		hlog.Fatalf("Failed to initialize message queue producer: %v", err)
-		panic(err)
-	}
-
-	// 设置全局生产者实例
-	SetGlobalProducer(producer)
-
-	hlog.Info("Message queue producer initialized successfully")
-}
-
-// 初始化事件驱动同步服务
-func initEventDrivenSyncService() {
-	// 获取全局生产者
-	producer := GetGlobalProducer()
-	db := db.DB
-
-	// 创建事件驱动同步服务
-	globalEventDrivenSyncService = common.NewEventDrivenSyncService(producer, db)
-
-	// 启动同步服务
-	if err := globalEventDrivenSyncService.Start(); err != nil {
-		hlog.Fatalf("Failed to start event-driven sync service: %v", err)
-		panic(err)
-	}
-
-	hlog.Info("Event-driven sync service initialized and started successfully")
-}
-
-// 获取全局事件驱动同步服务
-func GetGlobalEventDrivenSyncService() *common.EventDrivenSyncService {
-	return globalEventDrivenSyncService
+	hlog.Info("Interaction service initialized successfully")
 }
 
 func main() {
-	//pprof.Load()
 	config.Init()
 	Init()
-	//cache.Init()
 
 	suite, closer := jaeger.NewServerSuite().Init("Interaction")
 	defer closer.Close()
@@ -113,19 +48,16 @@ func main() {
 		panic(err)
 	}
 
-	//当出现了UserServiceImpl报错时 说明当前该接口的方法没有被完全实现
-
 	svr := interaction.NewServer(new(InteractionServiceImpl),
-		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "Interaction"}), // server name
-		server.WithMiddleware(middleware.CommonMiddleware),                                 // middleware
+		server.WithServerBasicInfo(&rpcinfo.EndpointBasicInfo{ServiceName: "Interaction"}),
+		server.WithMiddleware(middleware.CommonMiddleware),
 		server.WithMiddleware(middleware.ServerMiddleware),
-		server.WithServiceAddr(addr),                                       // address
-		server.WithLimit(&limit.Option{MaxConnections: 1000, MaxQPS: 100}), // limit
-		server.WithMuxTransport(),                                          // Multiplex
-		//server.WithSuite(trace.NewDefaultServerSuite()),
-		server.WithSuite(suite),                             // tracer
-		server.WithBoundHandler(bound.NewCpuLimitHandler()), // BoundHandler
-		server.WithRegistry(r),                              // registry
+		server.WithServiceAddr(addr),
+		server.WithLimit(&limit.Option{MaxConnections: 1000, MaxQPS: 100}),
+		server.WithMuxTransport(),
+		server.WithSuite(suite),
+		server.WithBoundHandler(bound.NewCpuLimitHandler()),
+		server.WithRegistry(r),
 	)
 	err = svr.Run()
 	if err != nil {

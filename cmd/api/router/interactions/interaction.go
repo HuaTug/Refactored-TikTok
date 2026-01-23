@@ -24,6 +24,7 @@ func Register(r *server.Hertz) {
 			_action := _v1.Group("/action", _actionMw()...)
 			_action.POST("/like", append(_likeactionMw(), interactions.LikeAction)...)
 			_action.GET("/list", append(_likelistMw(), interactions.LikeList)...)
+			_action.POST("/batch_status", append(_likeactionMw(), interactions.BatchLikeStatus)...)
 		}
 		{
 			_comment := _v1.Group("/comment", _commentMw()...)

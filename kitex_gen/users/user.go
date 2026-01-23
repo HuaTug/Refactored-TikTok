@@ -287,6 +287,8 @@ type UpdateUserRequest struct {
 	Password string `thrift:"password,3" frugal:"3,default,string" json:"password"`
 	Data     []byte `thrift:"data,4" frugal:"4,default,binary" json:"data"`
 	Filesize int64  `thrift:"filesize,5" frugal:"5,default,i64" json:"filesize"`
+	Sex      int64  `thrift:"sex,6" frugal:"6,default,i64" json:"sex"`
+	Bio      string `thrift:"bio,7" frugal:"7,default,string" json:"bio"`
 }
 
 func NewUpdateUserRequest() *UpdateUserRequest {
@@ -315,6 +317,14 @@ func (p *UpdateUserRequest) GetData() (v []byte) {
 func (p *UpdateUserRequest) GetFilesize() (v int64) {
 	return p.Filesize
 }
+
+func (p *UpdateUserRequest) GetSex() (v int64) {
+	return p.Sex
+}
+
+func (p *UpdateUserRequest) GetBio() (v string) {
+	return p.Bio
+}
 func (p *UpdateUserRequest) SetUserName(val string) {
 	p.UserName = val
 }
@@ -330,6 +340,12 @@ func (p *UpdateUserRequest) SetData(val []byte) {
 func (p *UpdateUserRequest) SetFilesize(val int64) {
 	p.Filesize = val
 }
+func (p *UpdateUserRequest) SetSex(val int64) {
+	p.Sex = val
+}
+func (p *UpdateUserRequest) SetBio(val string) {
+	p.Bio = val
+}
 
 func (p *UpdateUserRequest) String() string {
 	if p == nil {
@@ -344,6 +360,8 @@ var fieldIDToName_UpdateUserRequest = map[int16]string{
 	3: "password",
 	4: "data",
 	5: "filesize",
+	6: "sex",
+	7: "bio",
 }
 
 type UpdateUserResponse struct {
