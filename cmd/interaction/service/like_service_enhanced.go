@@ -440,9 +440,9 @@ func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []
 	}
 
 	var (
-		wg         sync.WaitGroup
-		mu         sync.Mutex
-		videoList  = make([]*base.Video, 0, len(videoIDs))
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		videoList = make([]*base.Video, 0, len(videoIDs))
 	)
 
 	// 并发获取视频信息

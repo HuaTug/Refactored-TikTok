@@ -35,20 +35,15 @@ func initShardingManager() error {
 	}
 
 	// 从配置中获取分片配置
-	// 处理SlaveDSNs类型转换 - 将[][]string转换为[]string
-	var slaveDSNs []string
-	for _, dsns := range config.ConfigInfo.CommentSharding.SlaveDSNs {
-		slaveDSNs = append(slaveDSNs, dsns...)
-	}
-
 	shardingConfig := &db.ShardingConfig{
 		DatabaseCount:   config.ConfigInfo.CommentSharding.DatabaseCount,
 		TableCount:      config.ConfigInfo.CommentSharding.TableCount,
 		MasterDSNs:      config.ConfigInfo.CommentSharding.MasterDSNs,
-		SlaveDSNs:       slaveDSNs,
+		SlaveDSNs:       config.ConfigInfo.CommentSharding.SlaveDSNs,
 		MaxOpenConns:    config.ConfigInfo.CommentSharding.MaxOpenConns,
 		MaxIdleConns:    config.ConfigInfo.CommentSharding.MaxIdleConns,
 		ConnMaxLifetime: connMaxLifetime,
+		EnableIndex:     true, // 启用全局索引
 	}
 
 	// 使用全局的InitShardingManager初始化分片管理器

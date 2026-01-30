@@ -67,7 +67,12 @@ func (cep *CommentEventProcessor) handleCommentCreate(ctx context.Context, event
 			cep.cacheManager.IncrementVideoCommentCount(context.Background(), event.VideoID, 1)
 		}
 
-		// 发送通知事件（如果是回复）
+		// 发送通知事件
+		// 一级评论：通知视频作者
+		if event.Comment.ParentId == -1 {
+			cep.sendVideoCommentNotification(context.Background(), event)
+		}
+		// 回复评论：通知被回复者
 		if event.Comment.ParentId != -1 {
 			cep.sendReplyNotification(context.Background(), event)
 		}
@@ -322,4 +327,75 @@ func (cep *CommentEventProcessor) GetProcessingStats() map[string]interface{} {
 		"processor_status": "running",
 		"last_processed":   time.Now().Unix(),
 	}
+}
+
+// sendVideoCommentNotification 发送视频评论通知（当有人评论视频时通知视频作者）
+func (cep *CommentEventProcessor) sendVideoCommentNotification(ctx context.Context, event *mq.CommentEvent) {
+if cep.mqManager == nil {
+return
+}
+
+// 只处理一级评论（直接评论视频的情况）
+if event.Comment.ParentId != -1 {
+return // 如果是回复评论，由sendReplyNotification处理
+}
+
+// 获取视频信息以确定通知接收者（视频作者）
+videoAuthorID := event.Extra["video_author_id"]
+if videoAuthorID == nil {
+hlog.Warnf("Video author ID not found in comment event extra data")
+return
+}
+
+authorID, ok := videoAuthorID.(int64)
+if !ok {
+// 尝试从float64转换
+if authorFloat, ok := videoAuthorID.(float64); ok {
+authorID = int64(authorFloat)
+} else {
+hlog.Warnf("Invalid video author ID type in comment event")
+return
+}
+}
+
+// 不给自己发通知
+if authorID == event.UserID {
+return
+}
+
+notificationEvent := &mq.NotificationEvent{
+Type:       "comment",
+ReceiverID: authorID,
+SenderID:   event.UserID,
+Content:    fmt.Sprintf("评论了你的视频: %s", truncateString(event.Comment.Content, 50)),
+Extra: map[string]interface{}{
+"comment_id": event.Comment.CommentId,
+"video_id":   event.VideoID,
+},
+Timestamp: time.Now().Unix(),
+
+// 兼容字段
+UserID:           authorID,
+FromUserID:       event.UserID,
+NotificationType: "comment",
+TargetID:         event.VideoID,
+VideoID:          event.VideoID,
+CommentID:        event.Comment.CommentId,
+}
+
+if err := cep.mqManager.PublishNotificationEvent(ctx, notificationEvent); err != nil {
+hlog.Warnf("Failed to send video comment notification: %v", err)
+} else {
+hlog.Infof("Sent video comment notification: user %d commented on video %d by user %d",
+event.UserID, event.VideoID, authorID)
+}
+}
+
+// truncateString 截断字符串
+func truncateString(s string, maxLen int) string {
+runes := []rune(s)
+if len(runes) <= maxLen {
+return s
+}
+return string(runes[:maxLen]) + "..."
 }

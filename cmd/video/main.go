@@ -13,6 +13,7 @@ import (
 	"HuaTug.com/config/jaeger"
 	"HuaTug.com/kitex_gen/videos/videoservice"
 	"HuaTug.com/pkg/bound"
+	"HuaTug.com/pkg/logsystem"
 	"HuaTug.com/pkg/middleware"
 	"HuaTug.com/pkg/oss"
 
@@ -33,6 +34,16 @@ func Init() {
 	client.Init()
 	// common.NewSyncSerivce().Run()
 
+	// 初始化日志系统 (Kafka + ES)
+	if err := logsystem.Init(&logsystem.LogSystemConfig{
+		ServiceName:      "video-service",
+		Environment:      "production",
+		Version:          "v2.0.0",
+		EnableESConsumer: false, // RPC 服务不启用消费者
+	}); err != nil {
+		hlog.Warnf("Failed to initialize log system: %v", err)
+	}
+
 	// 启动浏览量同步任务
 	service.StartVisitCountSyncTask()
 
@@ -42,6 +53,8 @@ func Init() {
 
 func main() {
 	Init()
+	// 确保日志系统在退出时关闭
+	defer logsystem.Close()
 	//pprof.Load()
 
 	// Try to create etcd registry with timeout and retry

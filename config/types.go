@@ -8,6 +8,7 @@ type config struct {
 	Etcd            etcd            `yaml:"etcd" mapstructure:"etcd"`
 	RabbitMq        rabbitmq        `yaml:"rabbitmq" mapstructure:"rabbitmq"`
 	Kafka           kafka           `yaml:"kafka" mapstructure:"kafka"`
+	Elasticsearch   elasticsearch   `yaml:"elasticsearch" mapstructure:"elasticsearch"`
 }
 
 // kafka 配置
@@ -16,6 +17,16 @@ type kafka struct {
 	Version            string   `yaml:"version" mapstructure:"version"`
 	ProducerRetries    int      `yaml:"producer_retries" mapstructure:"producer_retries"`
 	ConsumerOffsetInit string   `yaml:"consumer_offset_init" mapstructure:"consumer_offset_init"` // newest / oldest
+}
+
+// elasticsearch 配置
+type elasticsearch struct {
+	Addresses   []string `yaml:"addresses" mapstructure:"addresses"`       // ES 节点地址列表
+	Username    string   `yaml:"username" mapstructure:"username"`         // 用户名
+	Password    string   `yaml:"password" mapstructure:"password"`         // 密码
+	IndexPrefix string   `yaml:"index_prefix" mapstructure:"index_prefix"` // 索引前缀
+	MaxRetries  int      `yaml:"max_retries" mapstructure:"max_retries"`   // 最大重试次数
+	EnableSniff bool     `yaml:"enable_sniff" mapstructure:"enable_sniff"` // 是否启用节点嗅探
 }
 
 type mysql struct {

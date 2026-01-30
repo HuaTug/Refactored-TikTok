@@ -115,6 +115,22 @@ func Init() {
 	ConfigInfo.Kafka.ProducerRetries = viper.GetInt("kafka.producer_retries")
 	ConfigInfo.Kafka.ConsumerOffsetInit = viper.GetString("kafka.consumer_offset_init")
 
+	// Elasticsearch 配置
+	ConfigInfo.Elasticsearch.Addresses = viper.GetStringSlice("elasticsearch.addresses")
+	ConfigInfo.Elasticsearch.Username = viper.GetString("elasticsearch.username")
+	ConfigInfo.Elasticsearch.Password = viper.GetString("elasticsearch.password")
+	ConfigInfo.Elasticsearch.IndexPrefix = viper.GetString("elasticsearch.index_prefix")
+	ConfigInfo.Elasticsearch.MaxRetries = viper.GetInt("elasticsearch.max_retries")
+	ConfigInfo.Elasticsearch.EnableSniff = viper.GetBool("elasticsearch.enable_sniff")
+
+	// 设置默认值
+	if ConfigInfo.Elasticsearch.IndexPrefix == "" {
+		ConfigInfo.Elasticsearch.IndexPrefix = "tiktok"
+	}
+	if ConfigInfo.Elasticsearch.MaxRetries == 0 {
+		ConfigInfo.Elasticsearch.MaxRetries = 3
+	}
+
 	// 打印配置信息用于调试
 	logrus.Infof("Config loaded - MySQL: %s:%s@%s/%s",
 		ConfigInfo.Mysql.Username, "***", ConfigInfo.Mysql.Addr, ConfigInfo.Mysql.Database)
@@ -127,6 +143,7 @@ func Init() {
 		ConfigInfo.FollowsSharding.TableCount,
 		len(ConfigInfo.FollowsSharding.MasterDSNs))
 	logrus.Infof("Kafka - Brokers: %v", ConfigInfo.Kafka.Brokers)
+	logrus.Infof("Elasticsearch - Addresses: %v, IndexPrefix: %s", ConfigInfo.Elasticsearch.Addresses, ConfigInfo.Elasticsearch.IndexPrefix)
 
 	if len(ConfigInfo.CommentSharding.MasterDSNs) == 0 {
 		logrus.Warn("No comment sharding DSNs configured!")
@@ -134,4 +151,24 @@ func Init() {
 	if len(ConfigInfo.FollowsSharding.MasterDSNs) == 0 {
 		logrus.Warn("No follows sharding DSNs configured!")
 	}
+}
+
+// GetRabbitMQURL builds and returns the RabbitMQ connection URL
+func GetRabbitMQURL() string {
+	if ConfigInfo.RabbitMq.Addr == "" {
+		return ""
+	}
+
+	username := ConfigInfo.RabbitMq.Username
+	password := ConfigInfo.RabbitMq.Password
+	addr := ConfigInfo.RabbitMq.Addr
+
+	if username == "" {
+		username = "guest"
+	}
+	if password == "" {
+		password = "guest"
+	}
+
+	return "amqp://" + username + ":" + password + "@" + addr + "/"
 }

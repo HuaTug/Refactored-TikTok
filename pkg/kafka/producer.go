@@ -324,3 +324,80 @@ func (p *Producer) PublishCDCEvent(ctx context.Context, topic string, event *CDC
 	keyBytes, _ := json.Marshal(event.PrimaryKey)
 	return p.Send(topic, string(keyBytes), event)
 }
+
+// ============ 日志系统发送方法 ============
+
+// PublishServiceLog 发送服务调用日志
+func (p *Producer) PublishServiceLog(ctx context.Context, event *ServiceLogEvent) error {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	// 使用 TraceID 作为 key，保证同一请求链路的日志有序
+	key := event.TraceID
+	if key == "" {
+		key = fmt.Sprintf("service_%s_%d", event.ServiceName, time.Now().UnixNano())
+	}
+	return p.Send(TopicServiceLog, key, event)
+}
+
+// PublishErrorLog 发送错误日志
+func (p *Producer) PublishErrorLog(ctx context.Context, event *ErrorLogEvent) error {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	key := event.TraceID
+	if key == "" {
+		key = fmt.Sprintf("error_%s_%d", event.ServiceName, time.Now().UnixNano())
+	}
+	return p.Send(TopicErrorLog, key, event)
+}
+
+// PublishAccessLog 发送访问日志
+func (p *Producer) PublishAccessLog(ctx context.Context, event *AccessLogEvent) error {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	key := event.TraceID
+	if key == "" {
+		key = fmt.Sprintf("access_%d_%d", event.UserID, time.Now().UnixNano())
+	}
+	return p.Send(TopicAccessLog, key, event)
+}
+
+// PublishAuditLog 发送审计日志
+func (p *Producer) PublishAuditLog(ctx context.Context, event *AuditLogEvent) error {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	// 审计日志使用 UserID 作为 key
+	key := fmt.Sprintf("audit_%d_%s", event.UserID, event.Action)
+	return p.Send(TopicAuditLog, key, event)
+}
+
+// PublishAlertLog 发送告警日志
+func (p *Producer) PublishAlertLog(ctx context.Context, event *AlertLogEvent) error {
+	if event.EventID == "" {
+		event.EventID = uuid.New().String()
+	}
+	if event.Timestamp.IsZero() {
+		event.Timestamp = time.Now()
+	}
+	// 告警日志使用 AlertID 作为 key，便于告警聚合
+	key := event.AlertID
+	if key == "" {
+		key = fmt.Sprintf("alert_%s_%s", event.ServiceName, event.AlertName)
+	}
+	return p.Send(TopicAlertLog, key, event)
+}

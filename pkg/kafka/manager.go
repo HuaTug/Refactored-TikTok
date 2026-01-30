@@ -222,6 +222,13 @@ func (m *Manager) InitTopics() error {
 		// CDC Topics
 		{TopicCDCVideo, 6, 1},
 		{TopicCDCUser, 6, 1},
+
+		// 日志系统 Topics
+		{TopicServiceLog, 6, 1},
+		{TopicErrorLog, 6, 1},
+		{TopicAccessLog, 6, 1},
+		{TopicAuditLog, 6, 1},
+		{TopicAlertLog, 6, 1},
 	}
 
 	for _, t := range topics {
@@ -330,6 +337,33 @@ func (m *Manager) PublishRecommendation(ctx context.Context, event *Recommendati
 // PublishCDCEvent 发布 CDC 事件 (使用高可靠性生产者)
 func (m *Manager) PublishCDCEvent(ctx context.Context, topic string, event *CDCEvent) error {
 	return m.highRelProducer.PublishCDCEvent(ctx, topic, event)
+}
+
+// ============ 日志系统发布方法 ============
+
+// PublishServiceLog 发布服务调用日志 (使用高吞吐量生产者)
+func (m *Manager) PublishServiceLog(ctx context.Context, event *ServiceLogEvent) error {
+	return m.highTpProducer.PublishServiceLog(ctx, event)
+}
+
+// PublishErrorLog 发布错误日志 (使用默认生产者，保证可靠性)
+func (m *Manager) PublishErrorLog(ctx context.Context, event *ErrorLogEvent) error {
+	return m.defaultProducer.PublishErrorLog(ctx, event)
+}
+
+// PublishAccessLog 发布访问日志 (使用高吞吐量生产者)
+func (m *Manager) PublishAccessLog(ctx context.Context, event *AccessLogEvent) error {
+	return m.highTpProducer.PublishAccessLog(ctx, event)
+}
+
+// PublishAuditLog 发布审计日志 (使用高可靠性生产者)
+func (m *Manager) PublishAuditLog(ctx context.Context, event *AuditLogEvent) error {
+	return m.highRelProducer.PublishAuditLog(ctx, event)
+}
+
+// PublishAlertLog 发布告警日志 (使用默认生产者)
+func (m *Manager) PublishAlertLog(ctx context.Context, event *AlertLogEvent) error {
+	return m.defaultProducer.PublishAlertLog(ctx, event)
 }
 
 // ============ 健康检查 ============

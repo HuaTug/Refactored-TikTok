@@ -12,12 +12,10 @@ import (
 
 	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
-	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
@@ -264,6 +262,15 @@ func (service *CommentService) CreateComment(ctx context.Context, req *interacti
 		}
 	}()
 
+	// Process @mentions and send notifications asynchronously
+	go func() {
+		mentionCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		mentionService := NewMentionNotificationService()
+		mentionService.ProcessMentions(mentionCtx, uid, videoId, commentId, req.Content)
+	}()
+
 	return nil
 }
 
@@ -364,11 +371,10 @@ func (service *CommentService) calculateTimeFactor(createdAt time.Time) float64 
 func (service *CommentService) buildCommentData(commentId int64) (*base.Comment, error) {
 	var (
 		wg         sync.WaitGroup
-		errChan    = make(chan error, 4)
+		errChan    = make(chan error, 3)
 		res        *model.Comment
 		likeCount  int64
 		childCount int64
-		userInfo   *users.GetUserInfoResponse
 	)
 
 	wg.Add(3)
@@ -404,20 +410,6 @@ func (service *CommentService) buildCommentData(commentId int64) (*base.Comment,
 		return nil, <-errChan
 	}
 
-	// Get user info for the commenter
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		var err error
-		userInfo, err = client.GetUserInfo(service.ctx, &users.GetUserInfoRequest{
-			UserId: res.UserId,
-		})
-		if err != nil {
-			hlog.CtxWarnf(service.ctx, "Failed to get user info for user %d: %v", res.UserId, err)
-		}
-	}()
-	wg.Wait()
-
 	// Convert time.Time to string for base.Comment
 	createdAtStr := res.CreatedAt.Format(constants.DataFormate)
 	updatedAtStr := res.UpdatedAt.Format(constants.DataFormate)
@@ -426,8 +418,7 @@ func (service *CommentService) buildCommentData(commentId int64) (*base.Comment,
 		deletedAtStr = res.DeletedAt.Format(constants.DataFormate)
 	}
 
-	// Build comment with user info
-	comment := &base.Comment{
+	return &base.Comment{
 		CommentId:        res.CommentId,
 		VideoId:          res.VideoId,
 		UserId:           res.UserId,
@@ -439,35 +430,7 @@ func (service *CommentService) buildCommentData(commentId int64) (*base.Comment,
 		UpdatedAt:        updatedAtStr,
 		DeletedAt:        deletedAtStr,
 		ReplyToCommentId: res.ReplyToCommentId,
-	}
-
-	// Fill user info if available
-	if userInfo != nil && userInfo.User != nil {
-		userName := userInfo.User.UserName
-		avatarUrl := userInfo.User.AvatarUrl
-		comment.UserName = &userName
-		comment.AvatarUrl = &avatarUrl
-	}
-
-	// If this is a reply, get the replied user's info
-	if res.ReplyToCommentId > 0 {
-		replyToComment, err := db.GetCommentInfo(service.ctx, res.ReplyToCommentId)
-		if err == nil && replyToComment != nil {
-			replyToUserId := replyToComment.UserId
-			comment.ReplyToUserId = &replyToUserId
-
-			// Get replied user's info
-			replyToUserInfo, err := client.GetUserInfo(service.ctx, &users.GetUserInfoRequest{
-				UserId: replyToUserId,
-			})
-			if err == nil && replyToUserInfo != nil && replyToUserInfo.User != nil {
-				replyToUserName := replyToUserInfo.User.UserName
-				comment.ReplyToUserName = &replyToUserName
-			}
-		}
-	}
-
-	return comment, nil
+	}, nil
 }
 
 // GetCommentsByReplyTarget 根据回复目标获取相关评论

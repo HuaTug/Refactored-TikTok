@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"HuaTug.com/cmd/video/service"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/errno"
+	"HuaTug.com/pkg/logsystem"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
@@ -18,6 +20,7 @@ import (
 type VideoServiceImpl struct{}
 
 func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
+	startTime := time.Now()
 	resp = new(videos.VideoFeedListResponseV2)
 	resp.Base = &base.Status{}
 	var video []*base.Video
@@ -28,6 +31,8 @@ func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.Vide
 		if video, count, err = service.NewVideoListService(ctx).VideoList(req); err != nil {
 			hlog.CtxErrorf(ctx, "service.VideoList failed,original error:%v", errors.Cause(err))
 			hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+			// 记录错误日志 -> Kafka -> ES
+			logsystem.LogRPCError(ctx, "video-service", "VideoFeedListV2", "VIDEO_LIST_FAILED", err.Error(), req.UserId, time.Since(startTime).Milliseconds())
 			resp.Base.Code = consts.StatusBadRequest
 			resp.Base.Msg = "Fail to Get VideoList!"
 			resp.VideoList = video
@@ -38,6 +43,8 @@ func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.Vide
 		if video, err = service.NewFeedListService(ctx).FeedList(req); err != nil {
 			hlog.CtxErrorf(ctx, "service.FeedList failed,original error:%v", errors.Cause(err))
 			hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+			// 记录错误日志 -> Kafka -> ES
+			logsystem.LogRPCError(ctx, "video-service", "VideoFeedListV2", "FEED_LIST_FAILED", err.Error(), req.UserId, time.Since(startTime).Milliseconds())
 			resp.Base.Code = consts.StatusBadRequest
 			resp.Base.Msg = "Fail to Get FeedList!"
 			resp.VideoList = video
@@ -55,6 +62,7 @@ func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.Vide
 }
 
 func (s *VideoServiceImpl) VideoSearchV2(ctx context.Context, req *videos.VideoSearchRequestV2) (resp *videos.VideoSearchResponseV2, err error) {
+	startTime := time.Now()
 	resp = new(videos.VideoSearchResponseV2)
 	resp.Base = &base.Status{}
 	var video []*base.Video
@@ -63,6 +71,11 @@ func (s *VideoServiceImpl) VideoSearchV2(ctx context.Context, req *videos.VideoS
 	if video, count, err = service.NewVideoSearchService(ctx).VideoSearch(req); err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoSearch failed,original error:%v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		// 记录错误日志 -> Kafka -> ES
+		logsystem.LogRPCErrorWithContext(ctx, "video-service", "VideoSearchV2", "VIDEO_SEARCH_FAILED", "business", err.Error(), 0, map[string]string{
+			"keyword": req.Keyword,
+		})
+		_ = startTime // 用于计时
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to Get VideoFeed!"
 		resp.VideoSearch = video
@@ -80,12 +93,15 @@ func (s *VideoServiceImpl) VideoSearchV2(ctx context.Context, req *videos.VideoS
 }
 
 func (s *VideoServiceImpl) VideoPopularV2(ctx context.Context, req *videos.VideoPopularRequestV2) (resp *videos.VideoPopularResponseV2, err error) {
+	startTime := time.Now()
 	resp = new(videos.VideoPopularResponseV2)
 	resp.Base = &base.Status{}
 	var video []*base.Video
 	if video, err = service.NewVideoPopularService(ctx).VideoPopular(req); err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPopular failed,original error:%v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		// 记录错误日志 -> Kafka -> ES
+		logsystem.LogRPCError(ctx, "video-service", "VideoPopularV2", "VIDEO_POPULAR_FAILED", err.Error(), 0, time.Since(startTime).Milliseconds())
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "Fail to Get VideoFeed!"
 		resp.Popular = video
@@ -98,6 +114,7 @@ func (s *VideoServiceImpl) VideoPopularV2(ctx context.Context, req *videos.Video
 }
 
 func (s *VideoServiceImpl) VideoPublishStartV2(ctx context.Context, req *videos.VideoPublishStartRequestV2) (resp *videos.VideoPublishStartResponseV2, err error) {
+	startTime := time.Now()
 	resp = new(videos.VideoPublishStartResponseV2)
 	resp.Base = &base.Status{}
 
@@ -107,10 +124,16 @@ func (s *VideoServiceImpl) VideoPublishStartV2(ctx context.Context, req *videos.
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.VideoPublishStart (V2) failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		// 记录错误日志 -> Kafka -> ES
+		logsystem.LogRPCErrorWithContext(ctx, "video-service", "VideoPublishStartV2", "VIDEO_PUBLISH_START_FAILED", "system", err.Error(), req.UserId, map[string]string{
+			"title":              req.Title,
+			"chunk_total_number": fmt.Sprintf("%d", req.ChunkTotalNumber),
+		})
 		resp.Base.Code = consts.StatusInternalServerError
 		resp.Base.Msg = "Failed to start video upload: " + err.Error()
 		return resp, err
 	}
+	_ = startTime // 用于计时
 
 	// 获取用户存储配额信息
 	userQuota, err := uploadServiceV2.GetUserStorageQuota(req.UserId)

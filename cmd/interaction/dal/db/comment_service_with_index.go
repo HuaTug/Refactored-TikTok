@@ -97,7 +97,11 @@ func (cs *CommentServiceWithIndex) GetCommentChildrenWithIndex(ctx context.Conte
 		dbKey := fmt.Sprintf("db_%d", index.DbShard)
 		tableName := fmt.Sprintf("comments_%d", index.TableShard)
 
-		db := cs.shardingManager.databases[dbKey]
+		dbs := cs.shardingManager.GetAllDatabases()
+		db := dbs[dbKey]
+		if db == nil {
+			continue
+		}
 		var count int64
 		err := db.WithContext(ctx).Table(tableName).
 			Where("comment_id = ? AND parent_id = ?", index.CommentId, parentCommentID).
@@ -123,7 +127,11 @@ func (cs *CommentServiceWithIndex) GetCommentByIDWithIndex(ctx context.Context, 
 	dbKey := fmt.Sprintf("db_%d", dbShard)
 	tableName := fmt.Sprintf("comments_%d", tableShard)
 
-	db := cs.shardingManager.databases[dbKey]
+	dbs := cs.shardingManager.GetAllDatabases()
+	db := dbs[dbKey]
+	if db == nil {
+		return nil, fmt.Errorf("database %s not found", dbKey)
+	}
 	var comment model.Comment
 	err = db.WithContext(ctx).Table(tableName).Where("comment_id = ?", commentID).First(&comment).Error
 	if err != nil {
@@ -145,7 +153,11 @@ func (cs *CommentServiceWithIndex) DeleteCommentWithIndex(ctx context.Context, c
 	dbKey := fmt.Sprintf("db_%d", dbShard)
 	tableName := fmt.Sprintf("comments_%d", tableShard)
 
-	db := cs.shardingManager.databases[dbKey]
+	dbs := cs.shardingManager.GetAllDatabases()
+	db := dbs[dbKey]
+	if db == nil {
+		return fmt.Errorf("database %s not found", dbKey)
+	}
 	err = db.WithContext(ctx).Table(tableName).Where("comment_id = ?", commentID).Delete(&model.Comment{}).Error
 	if err != nil {
 		return fmt.Errorf("failed to delete comment from shard: %w", err)

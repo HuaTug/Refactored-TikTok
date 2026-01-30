@@ -53,17 +53,11 @@ func initShardingManager() error {
 	}
 
 	// 从配置中获取分片配置
-	// 处理SlaveDSNs类型转换 - 将[][]string转换为[]string
-	var slaveDSNs []string
-	for _, dsns := range config.ConfigInfo.FollowsSharding.SlaveDSNs {
-		slaveDSNs = append(slaveDSNs, dsns...)
-	}
-
 	shardingConfig := &db.ShardingConfig{
 		DatabaseCount:   config.ConfigInfo.FollowsSharding.DatabaseCount,
 		TableCount:      config.ConfigInfo.FollowsSharding.TableCount,
 		MasterDSNs:      config.ConfigInfo.FollowsSharding.MasterDSNs,
-		SlaveDSNs:       slaveDSNs,
+		SlaveDSNs:       config.ConfigInfo.FollowsSharding.SlaveDSNs,
 		MaxOpenConns:    config.ConfigInfo.FollowsSharding.MaxOpenConns,
 		MaxIdleConns:    config.ConfigInfo.FollowsSharding.MaxIdleConns,
 		ConnMaxLifetime: connMaxLifetime,

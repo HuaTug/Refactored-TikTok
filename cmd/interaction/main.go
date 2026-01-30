@@ -7,6 +7,7 @@ import (
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/infras/client"
 	"HuaTug.com/cmd/interaction/infras/redis"
+	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config"
 	"HuaTug.com/config/jaeger"
 	interaction "HuaTug.com/kitex_gen/interactions/interactionservice"
@@ -28,6 +29,9 @@ func Init() {
 
 	// 初始化RPC客户端，确保VideoClient被正确初始化
 	rpc.InitVideoRpc()
+
+	// Initialize MQ Manager for mention notifications
+	service.InitMentionNotificationFromConfig()
 
 	hlog.Info("Interaction service initialized successfully")
 }

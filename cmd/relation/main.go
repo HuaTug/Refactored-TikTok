@@ -5,6 +5,7 @@ import (
 
 	"HuaTug.com/cmd/relation/dal"
 	"HuaTug.com/cmd/relation/infras"
+	"HuaTug.com/cmd/relation/service"
 	"HuaTug.com/config"
 	"HuaTug.com/config/cache"
 	"HuaTug.com/config/jaeger"
@@ -24,6 +25,16 @@ func Init() {
 	//tracer2.InitJaeger(constants.UserServiceName)
 	infras.Init()
 	dal.Init()
+
+	// Initialize MQ Manager for notification
+	rabbitmqURL := config.GetRabbitMQURL()
+	if rabbitmqURL != "" {
+		if err := service.InitMQManager(rabbitmqURL); err != nil {
+			hlog.Warnf("Failed to initialize MQ Manager: %v (notifications will be disabled)", err)
+		}
+	} else {
+		hlog.Warn("RabbitMQ URL not configured, notifications will be disabled")
+	}
 }
 
 func main() {

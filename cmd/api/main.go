@@ -9,6 +9,8 @@ import (
 	"HuaTug.com/cmd/video/infras/redis"
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
+	"HuaTug.com/pkg/logger"
+	"HuaTug.com/pkg/logsystem"
 	"HuaTug.com/pkg/oss"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -23,6 +25,16 @@ func Init() {
 	rpc.InitRPC()
 	redis.Load()
 	dal.InitDB() // 初始化 API 服务数据库连接
+
+	// 初始化日志系统 (Kafka + ES)
+	if err := logsystem.Init(&logsystem.LogSystemConfig{
+		ServiceName:      "tiktok-api",
+		Environment:      "production",
+		Version:          "v2.0.0",
+		EnableESConsumer: false, // API 服务不启用消费者，由独立日志服务消费
+	}); err != nil {
+		hlog.Warnf("Failed to initialize log system: %v", err)
+	}
 
 	// 初始化MinIO客户端
 	if err := oss.InitMinio(); err != nil {
@@ -54,6 +66,9 @@ func Init() {
 
 func main() {
 	Init()
+	// 确保日志系统在退出时关闭
+	defer logsystem.Close()
+
 	//pprof.Load()
 	r := server.New(
 		server.WithHostPorts("0.0.0.0:8888"),
@@ -75,15 +90,30 @@ func main() {
 	jwt.AccessTokenJwtInit()
 	jwt.RefreshTokenJwtInit()
 
-	// 错误处理
-	r.Use(recovery.Recovery(recovery.WithRecoveryHandler(
-		func(ctx context.Context, c *app.RequestContext, err interface{}, stack []byte) {
-			hlog.SystemLogger().CtxErrorf(ctx, "[Recovery] err=%v\nstack=%s", err, stack)
-			c.JSON(consts.StatusInternalServerError, map[string]interface{}{
-				"code":    errno.ServiceErrCode,
-				"message": fmt.Sprintf("[Recovery] err=%v\nstack=%s", err, stack),
-			})
-		})))
+	// 添加日志中间件 (自动记录请求日志到 Kafka -> ES)
+	loggingMiddleware := logsystem.CreateLoggingMiddleware(&logger.MiddlewareConfig{
+		EnableRequestBody:  false, // 生产环境不记录请求体
+		EnableResponseBody: false,
+		MaxBodySize:        4096,
+		SensitiveEndpoints: []string{"/api/v1/users/login", "/api/v1/users/register"},
+		SkipEndpoints:      []string{"/health", "/metrics", "/favicon.ico"},
+	})
+	if loggingMiddleware != nil {
+		// 使用 Recovery 中间件 (记录 panic 到日志系统)
+		r.Use(loggingMiddleware.RecoveryMiddleware())
+		// 使用日志中间件 (自动记录所有请求)
+		r.Use(loggingMiddleware.Handler())
+	} else {
+		// 如果日志中间件未初始化，使用默认的错误处理
+		r.Use(recovery.Recovery(recovery.WithRecoveryHandler(
+			func(ctx context.Context, c *app.RequestContext, err interface{}, stack []byte) {
+				hlog.SystemLogger().CtxErrorf(ctx, "[Recovery] err=%v\nstack=%s", err, stack)
+				c.JSON(consts.StatusInternalServerError, map[string]interface{}{
+					"code":    errno.ServiceErrCode,
+					"message": fmt.Sprintf("[Recovery] err=%v\nstack=%s", err, stack),
+				})
+			})))
+	}
 
 	// 注册路由
 	register(r)
