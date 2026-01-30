@@ -5,10 +5,10 @@ go 1.24.4
 require (
 	github.com/IBM/sarama v1.46.3
 	github.com/alibaba/sentinel-golang v1.0.4
+	github.com/bytedance/gopkg v0.1.2
 	github.com/cloudwego/gopkg v0.1.5
 	github.com/cloudwego/hertz v0.10.0
 	github.com/cloudwego/kitex v0.14.1
-	github.com/cloudwego/kitex-examples/bizdemo/easy_note v0.0.0-20250623110538-c7ccf7d1b17c
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-redsync/redsync/v4 v4.13.0
@@ -39,11 +39,11 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/aws/aws-sdk-go v1.43.21 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
-	github.com/bytedance/gopkg v0.1.2 // indirect
 	github.com/bytedance/sonic v1.13.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
