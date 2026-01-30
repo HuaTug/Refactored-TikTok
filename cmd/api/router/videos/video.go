@@ -64,6 +64,16 @@ func Register(r *server.Hertz) {
 			_favoriteV2.POST("/video/add", append(_addfavoritevideoV2Mw(), videos.AddFavoriteVideoV2)...)
 			_favoriteV2.DELETE("/delete", append(_deletefavoriteV2Mw(), videos.DeleteFavoriteV2)...)
 			_favoriteV2.DELETE("/video/delete", append(_deletevideofromfavoriteV2Mw(), videos.DeleteVideoFromFavoriteV2)...)
+
+			// V2通知中心功能
+			_notification := _v2.Group("/notification", _notificationV2Mw()...)
+			_notification.GET("/list", videos.GetNotificationListV2)
+			_notification.POST("/read", videos.MarkNotificationReadV2)
+			_notification.GET("/unread", videos.GetUnreadCountV2)
+
+			// V2热门排行榜
+			_hotVideo := _v2.Group("/video/hot", _videoV2Mw()...)
+			_hotVideo.GET("/ranking", videos.GetHotVideoRankingV2)
 		}
 
 		// ========== V1版本API ==========

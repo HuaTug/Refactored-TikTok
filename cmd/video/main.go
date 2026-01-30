@@ -35,6 +35,9 @@ func Init() {
 
 	// 启动浏览量同步任务
 	service.StartVisitCountSyncTask()
+
+	// 启动热度计算定时任务
+	service.StartHotScoreService()
 }
 
 func main() {

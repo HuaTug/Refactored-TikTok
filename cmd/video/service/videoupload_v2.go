@@ -252,11 +252,8 @@ func (s *VideoUploadServiceV2) UploadChunk(req *videos.VideoPublishUploadingRequ
 	hlog.Infof("Successfully uploaded chunk %d to MinIO: ETag=%s, Size=%d bytes",
 		req.ChunkNumber, part.ETag, part.Size)
 
-	// 7. 更新会话中的分片信息
-	// 确保分片数据被保存到会话中
-	partWithData := part
-	partWithData.Data = req.ChunkData // 保存原始分片数据用于后续合并
-	session.UploadedParts[int(req.ChunkNumber)] = partWithData
+	// 7. 更新会话中的分片信息（不保存原始数据，分片已在MinIO临时目录中）
+	session.UploadedParts[int(req.ChunkNumber)] = part
 	if int(req.ChunkNumber) <= len(session.UploadedChunks) {
 		session.UploadedChunks[req.ChunkNumber-1] = true // 数组是0索引的
 	}
@@ -327,12 +324,11 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 
 	// 准备分片列表（确保按顺序排列）
 	var parts []oss.MinIOObjectPart
-	hlog.Infof("Session %s has %d uploaded parts in memory", session.UUID, len(session.UploadedParts))
+	hlog.Infof("Session %s has %d uploaded parts in session", session.UUID, len(session.UploadedParts))
 
 	for i := 1; i <= session.TotalChunks; i++ {
 		if part, exists := session.UploadedParts[i]; exists {
-			hlog.Infof("Found part %d: ETag=%s, Size=%d, DataLen=%d",
-				i, part.ETag, part.Size, len(part.Data))
+			hlog.Infof("Found part %d: ETag=%s, Size=%d", i, part.ETag, part.Size)
 			parts = append(parts, part)
 		} else {
 			// 如果某个分片不存在，这是严重错误
@@ -647,8 +643,13 @@ func (s *VideoUploadServiceV2) getUploadSession(uuid string, userID int64) (*Upl
 			if savedSession.ObjectName != "" {
 				session.ObjectName = savedSession.ObjectName
 			}
-			hlog.Infof("Restored MinIO UploadID: %s, UploadedParts: %d",
-				session.MinIOUploadID, len(session.UploadedParts))
+			// 恢复 UploadedChunks 数组状态
+			if len(savedSession.UploadedChunks) == totalChunks {
+				session.UploadedChunks = savedSession.UploadedChunks
+			}
+			hlog.Infof("Restored MinIO UploadID: %s, UploadedParts: %d, UploadedChunks: %d/%d",
+				session.MinIOUploadID, len(session.UploadedParts),
+				s.countUploadedChunks(session.UploadedChunks), totalChunks)
 		} else {
 			hlog.Errorf("Failed to unmarshal session data: %v", err)
 		}

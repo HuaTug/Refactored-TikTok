@@ -210,6 +210,10 @@ func _videodeleteMw() []app.HandlerFunc {
 	return authfunc.Auth()
 }
 
+func _notificationV2Mw() []app.HandlerFunc {
+	return authfunc.Auth()
+}
+
 func _visitMw() []app.HandlerFunc {
 	// your code...
 	return nil
