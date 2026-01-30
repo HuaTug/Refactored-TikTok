@@ -83,6 +83,11 @@ struct Comment {
     9: string updated_at
     10: string deleted_at
     11: i64 reply_to_comment_id  // target comment id for reply
+    // User info fields for display
+    12: optional string user_name      // commenter's username/nickname
+    13: optional string avatar_url     // commenter's avatar URL
+    14: optional i64 reply_to_user_id  // replied user's ID
+    15: optional string reply_to_user_name  // replied user's username/nickname
 }
 
 // Favorite represents a favorites folder

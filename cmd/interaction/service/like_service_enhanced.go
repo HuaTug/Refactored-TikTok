@@ -11,6 +11,7 @@ import (
 	"HuaTug.com/cmd/interaction/infras/redis"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
+	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
@@ -439,9 +440,9 @@ func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []
 	}
 
 	var (
-		wg     sync.WaitGroup
-		mu     sync.Mutex
-		videos = make([]*base.Video, 0, len(videoIDs))
+		wg         sync.WaitGroup
+		mu         sync.Mutex
+		videoList  = make([]*base.Video, 0, len(videoIDs))
 	)
 
 	// 并发获取视频信息
@@ -465,14 +466,14 @@ func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []
 
 			if videoResp != nil && videoResp.Items != nil {
 				mu.Lock()
-				videos = append(videos, videoResp.Items)
+				videoList = append(videoList, videoResp.Items)
 				mu.Unlock()
 			}
 		}(videoID)
 	}
 
 	wg.Wait()
-	return videos
+	return videoList
 }
 
 // =============================================================================

@@ -663,17 +663,21 @@ var fieldIDToName_Video = map[int16]string{
 }
 
 type Comment struct {
-	CommentId        int64  `thrift:"comment_id,1" frugal:"1,default,i64" json:"comment_id"`
-	UserId           int64  `thrift:"user_id,2" frugal:"2,default,i64" json:"user_id"`
-	VideoId          int64  `thrift:"video_id,3" frugal:"3,default,i64" json:"video_id"`
-	ParentId         int64  `thrift:"parent_id,4" frugal:"4,default,i64" json:"parent_id"`
-	LikeCount        int64  `thrift:"like_count,5" frugal:"5,default,i64" json:"like_count"`
-	ChildCount       int64  `thrift:"child_count,6" frugal:"6,default,i64" json:"child_count"`
-	Content          string `thrift:"content,7" frugal:"7,default,string" json:"content"`
-	CreatedAt        string `thrift:"created_at,8" frugal:"8,default,string" json:"created_at"`
-	UpdatedAt        string `thrift:"updated_at,9" frugal:"9,default,string" json:"updated_at"`
-	DeletedAt        string `thrift:"deleted_at,10" frugal:"10,default,string" json:"deleted_at"`
-	ReplyToCommentId int64  `thrift:"reply_to_comment_id,11" frugal:"11,default,i64" json:"reply_to_comment_id"`
+	CommentId        int64   `thrift:"comment_id,1" frugal:"1,default,i64" json:"comment_id"`
+	UserId           int64   `thrift:"user_id,2" frugal:"2,default,i64" json:"user_id"`
+	VideoId          int64   `thrift:"video_id,3" frugal:"3,default,i64" json:"video_id"`
+	ParentId         int64   `thrift:"parent_id,4" frugal:"4,default,i64" json:"parent_id"`
+	LikeCount        int64   `thrift:"like_count,5" frugal:"5,default,i64" json:"like_count"`
+	ChildCount       int64   `thrift:"child_count,6" frugal:"6,default,i64" json:"child_count"`
+	Content          string  `thrift:"content,7" frugal:"7,default,string" json:"content"`
+	CreatedAt        string  `thrift:"created_at,8" frugal:"8,default,string" json:"created_at"`
+	UpdatedAt        string  `thrift:"updated_at,9" frugal:"9,default,string" json:"updated_at"`
+	DeletedAt        string  `thrift:"deleted_at,10" frugal:"10,default,string" json:"deleted_at"`
+	ReplyToCommentId int64   `thrift:"reply_to_comment_id,11" frugal:"11,default,i64" json:"reply_to_comment_id"`
+	UserName         *string `thrift:"user_name,12,optional" frugal:"12,optional,string" json:"user_name,omitempty"`
+	AvatarUrl        *string `thrift:"avatar_url,13,optional" frugal:"13,optional,string" json:"avatar_url,omitempty"`
+	ReplyToUserId    *int64  `thrift:"reply_to_user_id,14,optional" frugal:"14,optional,i64" json:"reply_to_user_id,omitempty"`
+	ReplyToUserName  *string `thrift:"reply_to_user_name,15,optional" frugal:"15,optional,string" json:"reply_to_user_name,omitempty"`
 }
 
 func NewComment() *Comment {
@@ -726,6 +730,42 @@ func (p *Comment) GetDeletedAt() (v string) {
 func (p *Comment) GetReplyToCommentId() (v int64) {
 	return p.ReplyToCommentId
 }
+
+var Comment_UserName_DEFAULT string
+
+func (p *Comment) GetUserName() (v string) {
+	if !p.IsSetUserName() {
+		return Comment_UserName_DEFAULT
+	}
+	return *p.UserName
+}
+
+var Comment_AvatarUrl_DEFAULT string
+
+func (p *Comment) GetAvatarUrl() (v string) {
+	if !p.IsSetAvatarUrl() {
+		return Comment_AvatarUrl_DEFAULT
+	}
+	return *p.AvatarUrl
+}
+
+var Comment_ReplyToUserId_DEFAULT int64
+
+func (p *Comment) GetReplyToUserId() (v int64) {
+	if !p.IsSetReplyToUserId() {
+		return Comment_ReplyToUserId_DEFAULT
+	}
+	return *p.ReplyToUserId
+}
+
+var Comment_ReplyToUserName_DEFAULT string
+
+func (p *Comment) GetReplyToUserName() (v string) {
+	if !p.IsSetReplyToUserName() {
+		return Comment_ReplyToUserName_DEFAULT
+	}
+	return *p.ReplyToUserName
+}
 func (p *Comment) SetCommentId(val int64) {
 	p.CommentId = val
 }
@@ -759,6 +799,34 @@ func (p *Comment) SetDeletedAt(val string) {
 func (p *Comment) SetReplyToCommentId(val int64) {
 	p.ReplyToCommentId = val
 }
+func (p *Comment) SetUserName(val *string) {
+	p.UserName = val
+}
+func (p *Comment) SetAvatarUrl(val *string) {
+	p.AvatarUrl = val
+}
+func (p *Comment) SetReplyToUserId(val *int64) {
+	p.ReplyToUserId = val
+}
+func (p *Comment) SetReplyToUserName(val *string) {
+	p.ReplyToUserName = val
+}
+
+func (p *Comment) IsSetUserName() bool {
+	return p.UserName != nil
+}
+
+func (p *Comment) IsSetAvatarUrl() bool {
+	return p.AvatarUrl != nil
+}
+
+func (p *Comment) IsSetReplyToUserId() bool {
+	return p.ReplyToUserId != nil
+}
+
+func (p *Comment) IsSetReplyToUserName() bool {
+	return p.ReplyToUserName != nil
+}
 
 func (p *Comment) String() string {
 	if p == nil {
@@ -779,6 +847,10 @@ var fieldIDToName_Comment = map[int16]string{
 	9:  "updated_at",
 	10: "deleted_at",
 	11: "reply_to_comment_id",
+	12: "user_name",
+	13: "avatar_url",
+	14: "reply_to_user_id",
+	15: "reply_to_user_name",
 }
 
 type Favorite struct {
