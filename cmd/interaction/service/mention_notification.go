@@ -47,8 +47,9 @@ func NewMentionNotificationService() *MentionNotificationService {
 }
 
 // mentionPattern matches @username patterns in comments
-// Supports alphanumeric usernames with underscores, 2-20 characters
-var mentionPattern = regexp.MustCompile(`@([a-zA-Z0-9_\u4e00-\u9fa5]{2,20})`)
+// Supports alphanumeric usernames with underscores and Chinese characters, 2-20 characters
+// Note: Go regexp uses \x{XXXX} syntax for Unicode, not \uXXXX
+var mentionPattern = regexp.MustCompile(`@([a-zA-Z0-9_\x{4e00}-\x{9fa5}]{2,20})`)
 
 // ParseMentions extracts all @usernames from a comment content
 func (s *MentionNotificationService) ParseMentions(content string) []string {

@@ -6,6 +6,7 @@ import (
 
 	"HuaTug.com/cmd/api/dal"
 	"HuaTug.com/cmd/api/rpc"
+	videodb "HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/cmd/video/infras/redis"
 	jwt "HuaTug.com/pkg"
 	"HuaTug.com/pkg/errno"
@@ -24,7 +25,8 @@ import (
 func Init() {
 	rpc.InitRPC()
 	redis.Load()
-	dal.InitDB() // 初始化 API 服务数据库连接
+	dal.InitDB()     // 初始化 API 服务数据库连接
+	videodb.Init()   // 初始化 video 模块数据库连接（用于收藏同步等功能）
 
 	// 初始化日志系统 (Kafka + ES)
 	if err := logsystem.Init(&logsystem.LogSystemConfig{

@@ -108,9 +108,19 @@ func (s *InteractionServiceImpl) ListComment(ctx context.Context, req *interacti
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.ListComment failed, original error: %v", errors.Cause(err))
 		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		// Ensure resp is not nil before accessing its fields
+		if resp == nil {
+			resp = &interactions.ListCommentResponse{
+				Base: &base.Status{},
+			}
+		}
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to List Comment Visit!"
+		resp.Base.Msg = "Fail to List Comment!"
 		return resp, err
+	}
+	// Ensure resp.Base is not nil
+	if resp.Base == nil {
+		resp.Base = &base.Status{}
 	}
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "ListComment Successfully"

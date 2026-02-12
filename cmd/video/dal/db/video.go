@@ -33,16 +33,16 @@ func Feedlist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.
 	}
 
 	// 分页查询
-	if err := query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video); err != nil {
-		return video, errors.Wrapf(err.Error, "FeedList failed,err:%v", err)
+	if err := query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video).Error; err != nil {
+		return video, errors.Wrapf(err, "FeedList failed,err:%v", err)
 	}
 	return video, nil
 }
 
 func GetAllFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Find(&video); err != nil {
-		return video, errors.Wrapf(err.Error, "GetAllFeedList failed,err:%v", err)
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Find(&video).Error; err != nil {
+		return video, errors.Wrapf(err, "GetAllFeedList failed,err:%v", err)
 	}
 	return video, nil
 }
@@ -52,9 +52,9 @@ func Videolist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base
 	var video []*base.Video
 	var count int64
 	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id=?", req.UserId).Count(&count).Limit(int(req.PageSize)).
-		Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video); err != nil {
+		Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video).Error; err != nil {
 		logrus.Info(err)
-		return video, count, errors.Wrapf(err.Error, "VideoList failed,err:%v", err)
+		return video, count, errors.Wrapf(err, "VideoList failed,err:%v", err)
 	}
 	return video, count, nil
 }
@@ -97,8 +97,13 @@ func Videosearch(ctx context.Context, req *videos.VideoSearchRequestV2) ([]*base
 }
 
 func FindVideo(ctx context.Context, videoId int64) (video *base.Video, err error) {
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id=?", videoId).Find(&video); err != nil {
-		return video, errors.Wrapf(err.Error, "FindVideo failed,err:%v", err)
+	video = &base.Video{}
+	result := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id=?", videoId).First(video)
+	if result.Error != nil {
+		if stdErrors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, errors.Wrapf(result.Error, "FindVideo: video %d not found", videoId)
+		}
+		return nil, errors.Wrapf(result.Error, "FindVideo failed,err:%v", result.Error)
 	}
 	return video, nil
 }
@@ -251,25 +256,10 @@ func CreateFavoriteModel(ctx context.Context, fav *model.Favorite) error {
 }
 
 // GetOrCreateDefaultFavorite 获取或创建用户的默认收藏夹
+// 使用 FirstOrCreate 保证原子性，避免并发创建重复收藏夹
 func GetOrCreateDefaultFavorite(ctx context.Context, userId int64) (*model.Favorite, error) {
-	var fav model.Favorite
-	// 先查询用户是否有默认收藏夹（名称为"默认收藏夹"）
-	err := DB.WithContext(ctx).Model(&model.Favorite{}).
-		Where("user_id = ? AND name = ?", userId, "默认收藏夹").
-		First(&fav).Error
-
-	if err == nil {
-		// 找到了，直接返回
-		return &fav, nil
-	}
-
-	if !stdErrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.WithMessage(err, "Failed to query default favorite")
-	}
-
-	// 没有默认收藏夹，创建一个
 	now := time.Now()
-	newFav := &model.Favorite{
+	fav := model.Favorite{
 		UserId:      userId,
 		Name:        "默认收藏夹",
 		Description: "系统自动创建的默认收藏夹",
@@ -277,11 +267,71 @@ func GetOrCreateDefaultFavorite(ctx context.Context, userId int64) (*model.Favor
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := DB.WithContext(ctx).Create(newFav).Error; err != nil {
-		return nil, errors.WithMessage(err, "Failed to create default favorite")
+
+	// 使用 FirstOrCreate 原子操作，根据 user_id 和 name 查找或创建
+	result := DB.WithContext(ctx).
+		Where("user_id = ? AND name = ?", userId, "默认收藏夹").
+		FirstOrCreate(&fav)
+
+	if result.Error != nil {
+		return nil, errors.WithMessage(result.Error, "Failed to get or create default favorite")
 	}
-	hlog.Infof("Created default favorite for user %d, favorite_id=%d", userId, newFav.FavoriteId)
-	return newFav, nil
+
+	// RowsAffected > 0 表示新创建了记录
+	if result.RowsAffected > 0 {
+		hlog.Infof("Created default favorite for user %d, favorite_id=%d", userId, fav.FavoriteId)
+	}
+
+	return &fav, nil
+}
+
+// UpdateFavorite 更新收藏夹信息（名称、描述、封面、公开状态等）
+func UpdateFavorite(ctx context.Context, favoriteId, userId int64, updates map[string]interface{}) error {
+	updates["updated_at"] = time.Now()
+	result := DB.WithContext(ctx).Model(&model.Favorite{}).
+		Where("favorite_id = ? AND user_id = ?", favoriteId, userId).
+		Updates(updates)
+	if result.Error != nil {
+		return errors.WithMessage(result.Error, "Failed to update favorite")
+	}
+	if result.RowsAffected == 0 {
+		return errors.New("favorite not found or not owned by user")
+	}
+	return nil
+}
+
+// SyncFavoriteVideoCount 同步收藏夹视频数量（根据实际收藏记录计算）
+func SyncFavoriteVideoCount(ctx context.Context, favoriteId int64) error {
+	var count int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("favorite_id = ?", favoriteId).
+		Count(&count).Error; err != nil {
+		return errors.WithMessage(err, "Failed to count favorite videos")
+	}
+
+	if err := DB.WithContext(ctx).Model(&model.Favorite{}).
+		Where("favorite_id = ?", favoriteId).
+		Update("video_count", count).Error; err != nil {
+		return errors.WithMessage(err, "Failed to sync favorite video count")
+	}
+
+	hlog.Infof("Synced favorite %d video count to %d", favoriteId, count)
+	return nil
+}
+
+// GetFavoriteById 根据ID获取收藏夹
+func GetFavoriteById(ctx context.Context, favoriteId, userId int64) (*model.Favorite, error) {
+	var fav model.Favorite
+	err := DB.WithContext(ctx).
+		Where("favorite_id = ? AND user_id = ?", favoriteId, userId).
+		First(&fav).Error
+	if err != nil {
+		if stdErrors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("favorite not found")
+		}
+		return nil, errors.WithMessage(err, "Failed to get favorite")
+	}
+	return &fav, nil
 }
 
 // 获取用户收藏列表（有多少个收藏夹）
@@ -344,16 +394,17 @@ func GetVideoIdFromFavorite(ctx context.Context, user_id, favorite_id int64) ([]
 
 // 从视频收藏中获取视频列表
 func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) ([]*base.Video, error) {
-	var video []*base.Video
 	videoIds, err := GetVideoIdFromFavorite(ctx, req.UserId, req.FavoriteId)
 	if err != nil {
-		return video, err
+		return nil, err
 	}
 	if len(videoIds) == 0 {
-		return video, nil
+		return []*base.Video{}, nil
 	}
 
-	query := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id in?", videoIds)
+	// 使用 model.Video 进行查询
+	var modelVideos []*model.Video
+	query := DB.WithContext(ctx).Table("videos").Where("video_id IN ?", videoIds)
 
 	// 添加排序
 	if req.SortBy != "" {
@@ -361,12 +412,33 @@ func GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListR
 	}
 
 	// 添加分页
-	query = query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize))
-
-	if err := query.Find(&video).Error; err != nil {
-		return video, errors.WithMessage(err, "Failed to get VideoFromList")
+	if req.PageSize > 0 {
+		query = query.Limit(int(req.PageSize)).Offset(int((req.PageNum - 1) * req.PageSize))
 	}
-	return video, nil
+
+	if err := query.Find(&modelVideos).Error; err != nil {
+		return nil, errors.WithMessage(err, "Failed to get VideoFromList")
+	}
+
+	// 转换为 base.Video
+	result := make([]*base.Video, 0, len(modelVideos))
+	for _, v := range modelVideos {
+		result = append(result, &base.Video{
+			VideoId:        v.VideoId,
+			UserId:         v.UserId,
+			VideoUrl:       v.VideoUrl,
+			CoverUrl:       v.CoverUrl,
+			Title:          v.Title,
+			Description:    v.Description,
+			VisitCount:     int64(v.VisitCount),
+			LikesCount:     int64(v.LikesCount),
+			CommentCount:   int64(v.CommentCount),
+			FavoritesCount: int64(v.FavoritesCount),
+			CreatedAt:      v.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt:      v.UpdatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return result, nil
 }
 
 func GetVideoFromFavorite(ctx context.Context, userId, videoId int64) (*base.Video, error) {
@@ -386,6 +458,51 @@ func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequestV2) er
 }
 
 func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) error {
+	hlog.Infof("DeleteVideoFromFavorite: userId=%d, videoId=%d, favoriteId=%d", req.UserId, req.VideoId, req.FavoriteId)
+	
+	// 如果 favorite_id 为 0，则从用户所有收藏夹中删除该视频
+	if req.FavoriteId == 0 {
+		// 先查询视频在哪些收藏夹中
+		var records []model.FavoritesVideos
+		if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+			Where("user_id = ? AND video_id = ?", req.UserId, req.VideoId).
+			Find(&records).Error; err != nil {
+			return errors.WithMessage(err, "Failed to find video in favorites")
+		}
+
+		hlog.Infof("DeleteVideoFromFavorite: found %d records for userId=%d, videoId=%d", len(records), req.UserId, req.VideoId)
+
+		if len(records) == 0 {
+			// 视频本来就不在收藏夹中，返回成功（幂等操作）
+			hlog.Infof("DeleteVideoFromFavorite: video %d not found in any favorite for user %d, returning success (idempotent)", req.VideoId, req.UserId)
+			return nil
+		}
+
+		// 删除所有收藏记录
+		if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+			Where("user_id = ? AND video_id = ?", req.UserId, req.VideoId).
+			Delete(&model.FavoritesVideos{}).Error; err != nil {
+			return errors.WithMessage(err, "Failed to delete VideoFromFavorite")
+		}
+
+		// 更新每个收藏夹的视频数量
+		for _, record := range records {
+			if err := UpdateFavoriteVideoCount(ctx, record.FavoriteId, -1); err != nil {
+				hlog.Warnf("Failed to update favorite video count for favorite_id %d: %v", record.FavoriteId, err)
+			}
+		}
+
+		// 更新视频主表的收藏数
+		if err := DB.WithContext(ctx).Model(&model.Video{}).
+			Where("video_id = ? AND favorites_count > 0", req.VideoId).
+			UpdateColumn("favorites_count", gorm.Expr("favorites_count - ?", len(records))).Error; err != nil {
+			hlog.Warnf("Failed to decrement video favorites count: %v", err)
+		}
+
+		return nil
+	}
+
+	// 指定了 favorite_id，则只从该收藏夹中删除
 	// 先检查记录是否存在
 	var count int64
 	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
@@ -394,7 +511,9 @@ func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFav
 		return errors.WithMessage(err, "Failed to check favorite record")
 	}
 	if count == 0 {
-		return errors.New("video not found in favorite")
+		// 视频本来就不在指定收藏夹中，返回成功（幂等操作）
+		hlog.Infof("DeleteVideoFromFavorite: video %d not found in favorite %d for user %d, returning success (idempotent)", req.VideoId, req.FavoriteId, req.UserId)
+		return nil
 	}
 
 	// 删除收藏记录
@@ -619,6 +738,65 @@ func UpdateFavoriteVideoCount(ctx context.Context, favoriteId int64, delta int) 
 		UpdateColumn("video_count", DB.Raw("video_count + ?", delta)).Error; err != nil {
 		return errors.WithMessage(err, "Failed to update favorite video count")
 	}
+	return nil
+}
+
+// SyncVideoFavoritesCount 同步视频的收藏数量（根据实际收藏记录计算）
+func SyncVideoFavoritesCount(ctx context.Context, videoId int64) (int64, error) {
+	var count int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Where("video_id = ?", videoId).
+		Count(&count).Error; err != nil {
+		return 0, errors.WithMessage(err, "Failed to count video favorites")
+	}
+
+	if err := DB.WithContext(ctx).Model(&model.Video{}).
+		Where("video_id = ?", videoId).
+		Update("favorites_count", count).Error; err != nil {
+		return 0, errors.WithMessage(err, "Failed to sync video favorites count")
+	}
+
+	hlog.Infof("Synced video %d favorites count to %d", videoId, count)
+	return count, nil
+}
+
+// SyncAllVideosFavoritesCount 同步所有视频的收藏数量
+func SyncAllVideosFavoritesCount(ctx context.Context) error {
+	// 获取所有有收藏记录的视频ID
+	var videoIds []int64
+	if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+		Distinct("video_id").
+		Pluck("video_id", &videoIds).Error; err != nil {
+		return errors.WithMessage(err, "Failed to get video ids")
+	}
+
+	// 同步每个视频的收藏数量
+	for _, videoId := range videoIds {
+		var count int64
+		if err := DB.WithContext(ctx).Model(&model.FavoritesVideos{}).
+			Where("video_id = ?", videoId).
+			Count(&count).Error; err != nil {
+			hlog.Warnf("Failed to count favorites for video %d: %v", videoId, err)
+			continue
+		}
+
+		if err := DB.WithContext(ctx).Model(&model.Video{}).
+			Where("video_id = ?", videoId).
+			Update("favorites_count", count).Error; err != nil {
+			hlog.Warnf("Failed to sync favorites count for video %d: %v", videoId, err)
+			continue
+		}
+	}
+
+	// 将没有收藏记录的视频的收藏数重置为0
+	if err := DB.WithContext(ctx).Model(&model.Video{}).
+		Where("video_id NOT IN ?", videoIds).
+		Where("favorites_count > 0").
+		Update("favorites_count", 0).Error; err != nil {
+		hlog.Warnf("Failed to reset favorites count for videos without favorites: %v", err)
+	}
+
+	hlog.Infof("Synced all videos favorites count, total videos: %d", len(videoIds))
 	return nil
 }
 

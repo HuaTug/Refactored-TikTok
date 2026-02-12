@@ -197,15 +197,20 @@ func DeleteVideoFromFavoriteV2(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 	req.UserId = userId.(int64)
+	hlog.Infof("DeleteVideoFromFavoriteV2: userId from context = %d", req.UserId)
 
-	// 获取收藏夹ID和视频ID
+	// 获取收藏夹ID（可选，为0时表示从所有收藏夹中删除）
 	favoriteIdStr := c.Query("favorite_id")
-	favoriteId, err := strconv.ParseInt(favoriteIdStr, 10, 64)
-	if err != nil || favoriteId == 0 {
-		SendResponse(c, errno.ParamErr, nil)
-		return
+	if favoriteIdStr != "" {
+		favoriteId, err := strconv.ParseInt(favoriteIdStr, 10, 64)
+		if err != nil {
+			SendResponse(c, errno.ParamErr, nil)
+			return
+		}
+		req.FavoriteId = favoriteId
+	} else {
+		req.FavoriteId = 0 // 从所有收藏夹中删除
 	}
-	req.FavoriteId = favoriteId
 
 	videoIdStr := c.Query("video_id")
 	videoId, err := strconv.ParseInt(videoIdStr, 10, 64)

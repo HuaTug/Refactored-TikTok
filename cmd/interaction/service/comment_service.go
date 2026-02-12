@@ -443,6 +443,8 @@ func (service *CommentService) GetCommentsByReplyTarget(videoId, replyToCommentI
 
 func (service *CommentService) ListComment(ctx context.Context, req *interactions.ListCommentRequest) (resp *interactions.ListCommentResponse, err error) {
 	resp = new(interactions.ListCommentResponse)
+	resp.Base = &base.Status{}
+
 	if req.PageNum <= 0 {
 		req.PageNum = 1
 	}
@@ -460,17 +462,25 @@ func (service *CommentService) ListComment(ctx context.Context, req *interaction
 	)
 	if req.VideoId != 0 {
 		if data, err = service.GetVideoCommentWithSort(req); err != nil {
-			return nil, err
+			hlog.Errorf("GetVideoCommentWithSort failed: %v", err)
+			return resp, err
 		}
 	} else if req.CommentId != 0 {
 		if data, err = service.GetCommentComment(req); err != nil {
-			return nil, err
+			hlog.Errorf("GetCommentComment failed: %v", err)
+			return resp, err
 		}
 	} else {
-		return nil, errno.RequestErr.WithMessage("Either VideoId or CommentId must be provided")
+		return resp, errno.RequestErr.WithMessage("Either VideoId or CommentId must be provided")
 	}
-	resp.Items = *data
-	resp.Base = &base.Status{}
+
+	// Safely handle data assignment
+	if data != nil {
+		resp.Items = *data
+	} else {
+		resp.Items = make([]*base.Comment, 0)
+	}
+
 	return resp, nil
 }
 
@@ -519,12 +529,20 @@ func (service *CommentService) GetVideoCommentWithSort(req *interactions.ListCom
 		// For hot sorting, get more comments and sort by like count + time
 		list, err = db.GetVideoCommentListForHotSort(service.ctx, req.VideoId, req.PageNum, req.PageSize)
 		if err != nil {
+			hlog.Errorf("Failed to get video comments for hot sort: %v", err)
 			return nil, errno.ServiceErr
+		}
+
+		// Check for nil list to prevent nil pointer dereference
+		if list == nil {
+			hlog.Warn("GetVideoCommentListForHotSort returned nil list")
+			return &data, nil
 		}
 
 		// Sort by hot algorithm (like count + time factor)
 		sortedList, err := service.sortCommentsByHot(*list, req.PageNum, req.PageSize)
 		if err != nil {
+			hlog.Errorf("Failed to sort comments by hot: %v", err)
 			return nil, errno.ServiceErr
 		}
 		list = &sortedList
@@ -532,8 +550,15 @@ func (service *CommentService) GetVideoCommentWithSort(req *interactions.ListCom
 		// For latest or other sorting, use the standard method
 		list, err = db.GetVideoCommentListByPartWithSort(service.ctx, req.VideoId, req.PageNum, req.PageSize, req.SortType)
 		if err != nil {
+			hlog.Errorf("Failed to get video comments by sort: %v", err)
 			return nil, errno.ServiceErr
 		}
+	}
+
+	// Check for nil list to prevent nil pointer dereference
+	if list == nil {
+		hlog.Warn("Comment list is nil")
+		return &data, nil
 	}
 
 	// Build comment data
@@ -619,8 +644,16 @@ func (service *CommentService) GetCommentComment(req *interactions.ListCommentRe
 	data := make([]*base.Comment, 0)
 	list, err := db.GetCommentChildListByPart(service.ctx, req.CommentId, req.PageNum, req.PageSize)
 	if err != nil {
+		hlog.Errorf("Failed to get comment child list: %v", err)
 		return nil, errno.ServiceErr
 	}
+
+	// Check for nil list to prevent nil pointer dereference
+	if list == nil {
+		hlog.Warn("GetCommentChildListByPart returned nil list")
+		return &data, nil
+	}
+
 	var (
 		wg         sync.WaitGroup
 		errChan    = make(chan error, 3)
@@ -657,6 +690,12 @@ func (service *CommentService) GetCommentComment(req *interactions.ListCommentRe
 		case result := <-errChan:
 			return nil, result
 		default:
+		}
+
+		// Check if res is nil before accessing its fields
+		if res == nil {
+			hlog.Warnf("GetCommentInfo returned nil for comment %d", item)
+			continue
 		}
 
 		// Convert time.Time to string for base.Comment

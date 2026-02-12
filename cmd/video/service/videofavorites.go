@@ -83,15 +83,15 @@ func (s *VideoFavoritesService) GetFavoriteVideoList(req *videos.GetFavoriteVide
 }
 
 // AddFavoriteVideo adds a video to a favorite folder
-// Returns error if video already exists in the favorite
-func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoRequestV2) error {
+// Returns (alreadyExists bool, error) - alreadyExists is true if video was already in the favorite (idempotent operation)
+func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoRequestV2) (bool, error) {
 	favoriteId := req.FavoriteId
 
 	// 如果没有指定收藏夹，使用默认收藏夹
 	if favoriteId <= 0 {
 		defaultFav, err := db.GetOrCreateDefaultFavorite(s.ctx, req.UserId)
 		if err != nil {
-			return errors.WithMessage(err, "Failed to get or create default favorite")
+			return false, errors.WithMessage(err, "Failed to get or create default favorite")
 		}
 		favoriteId = defaultFav.FavoriteId
 	}
@@ -99,10 +99,11 @@ func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoReq
 	// 检查视频是否已存在于收藏夹
 	exists, err := db.CheckVideoInFavorite(s.ctx, req.UserId, favoriteId, req.VideoId)
 	if err != nil {
-		return errors.WithMessage(err, "Failed to check video in favorite")
+		return false, errors.WithMessage(err, "Failed to check video in favorite")
 	}
 	if exists {
-		return errors.New("video already exists in this favorite")
+		// 视频已存在，返回成功（幂等操作），但标记已存在
+		return true, nil
 	}
 
 	if err := db.AddVideoToFavorite(s.ctx, &model.FavoritesVideos{
@@ -110,9 +111,9 @@ func (s *VideoFavoritesService) AddFavoriteVideo(req *videos.AddFavoriteVideoReq
 		FavoriteId: favoriteId,
 		VideoId:    req.VideoId,
 	}); err != nil {
-		return errors.WithMessage(err, "Failed to AddFavoriteVideo")
+		return false, errors.WithMessage(err, "Failed to AddFavoriteVideo")
 	}
-	return nil
+	return false, nil
 }
 
 // CheckVideoInFavorite checks if a video is already in a favorite folder
@@ -133,4 +134,63 @@ func (s *VideoFavoritesService) DeleteVideoFromFavorite(req *videos.DeleteVideoF
 		return errors.WithMessage(err, "Failed to DeleteFavorite")
 	}
 	return nil
+}
+
+// UpdateFavoriteParams 更新收藏夹的参数
+type UpdateFavoriteParams struct {
+	FavoriteId  int64
+	UserId      int64
+	Name        string
+	Description string
+	CoverUrl    string
+	Privacy     string // "public" or "private"
+}
+
+// UpdateFavorite 更新收藏夹信息
+func (s *VideoFavoritesService) UpdateFavorite(params *UpdateFavoriteParams) error {
+	updates := make(map[string]interface{})
+
+	if params.Name != "" {
+		updates["name"] = params.Name
+	}
+	if params.Description != "" {
+		updates["description"] = params.Description
+	}
+	if params.CoverUrl != "" {
+		updates["cover_url"] = params.CoverUrl
+	}
+	// 处理公开状态
+	if params.Privacy != "" {
+		if params.Privacy == "public" {
+			updates["is_public"] = int8(1)
+		} else {
+			updates["is_public"] = int8(0)
+		}
+	}
+
+	if len(updates) == 0 {
+		return errors.New("no fields to update")
+	}
+
+	return db.UpdateFavorite(s.ctx, params.FavoriteId, params.UserId, updates)
+}
+
+// SyncFavoriteVideoCount 同步收藏夹视频数量
+func (s *VideoFavoritesService) SyncFavoriteVideoCount(favoriteId int64) error {
+	return db.SyncFavoriteVideoCount(s.ctx, favoriteId)
+}
+
+// GetFavoriteById 获取收藏夹详情
+func (s *VideoFavoritesService) GetFavoriteById(favoriteId, userId int64) (*model.Favorite, error) {
+	return db.GetFavoriteById(s.ctx, favoriteId, userId)
+}
+
+// SyncVideoFavoritesCount 同步视频的收藏数量
+func (s *VideoFavoritesService) SyncVideoFavoritesCount(videoId int64) (int64, error) {
+	return db.SyncVideoFavoritesCount(s.ctx, videoId)
+}
+
+// SyncAllVideosFavoritesCount 同步所有视频的收藏数量
+func (s *VideoFavoritesService) SyncAllVideosFavoritesCount() error {
+	return db.SyncAllVideosFavoritesCount(s.ctx)
 }

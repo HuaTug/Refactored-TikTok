@@ -359,21 +359,8 @@ func (s *VideoServiceImpl) AddFavoriteVideoV2(ctx context.Context, req *videos.A
 	resp = new(videos.AddFavoriteVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	// 先检查是否已经收藏
 	favService := service.NewVideoFavoritesService(ctx)
-	exists, checkErr := favService.CheckVideoInFavorite(req.UserId, req.FavoriteId, req.VideoId)
-	if checkErr != nil {
-		hlog.CtxErrorf(ctx, "service.CheckVideoInFavorite failed, original error: %v", errors.Cause(checkErr))
-	}
-
-	if exists {
-		resp.Base.Code = consts.StatusOK
-		resp.Base.Msg = "Video already exists in favorites"
-		resp.AlreadyExists = true
-		return resp, nil
-	}
-
-	err = favService.AddFavoriteVideo(req)
+	alreadyExists, err := favService.AddFavoriteVideo(req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.AddFavoriteVideo failed, original error: %v", errors.Cause(err))
 		resp.Base.Code = errno.ServiceErrCode
@@ -382,8 +369,12 @@ func (s *VideoServiceImpl) AddFavoriteVideoV2(ctx context.Context, req *videos.A
 	}
 
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Successfully added video to favorites"
-	resp.AlreadyExists = false
+	if alreadyExists {
+		resp.Base.Msg = "Video already exists in favorites"
+	} else {
+		resp.Base.Msg = "Successfully added video to favorites"
+	}
+	resp.AlreadyExists = alreadyExists
 	return resp, nil
 }
 

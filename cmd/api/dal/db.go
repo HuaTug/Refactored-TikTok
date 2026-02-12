@@ -72,12 +72,20 @@ func BatchCheckUserFavorites(ctx context.Context, userId int64, videoIds []int64
 		return result, nil
 	}
 
+	hlog.Infof("BatchCheckUserFavorites: userId=%d, videoIds=%v", userId, videoIds)
+
 	// 查询用户收藏的视频
 	var favoriteRecords []FavoritesVideos
 	if err := DB.WithContext(ctx).
 		Where("user_id = ? AND video_id IN ?", userId, videoIds).
 		Find(&favoriteRecords).Error; err != nil {
 		return result, fmt.Errorf("failed to batch check user favorites: %w", err)
+	}
+
+	hlog.Infof("BatchCheckUserFavorites: found %d records", len(favoriteRecords))
+	for _, record := range favoriteRecords {
+		hlog.Infof("BatchCheckUserFavorites: record user_id=%d, video_id=%d, favorite_id=%d", 
+			record.UserId, record.VideoId, record.FavoriteId)
 	}
 
 	// 标记已收藏的视频

@@ -20,7 +20,6 @@ type BatchFavoriteStatusParam struct {
 func BatchFavoriteStatus(ctx context.Context, c *app.RequestContext) {
 	var req BatchFavoriteStatusParam
 	var err error
-	var v interface{}
 	var userId int64
 
 	if err = c.BindAndValidate(&req); err != nil {
@@ -29,11 +28,20 @@ func BatchFavoriteStatus(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	if v, err = jwt.ConvertJWTPayloadToString(ctx, c); err != nil {
-		SendResponse(c, errno.ConvertErr(err), nil)
-		return
-	} else {
+	// 使用与其他 handler 一致的方式获取 user_id
+	userIdFromContext, exists := c.Get("user_id")
+	if !exists {
+		// 降级到 JWT 方式
+		var v interface{}
+		if v, err = jwt.ConvertJWTPayloadToString(ctx, c); err != nil {
+			SendResponse(c, errno.ConvertErr(err), nil)
+			return
+		}
 		userId = utils.Transfer(v)
+		hlog.Infof("BatchFavoriteStatus: userId from JWT = %d", userId)
+	} else {
+		userId = userIdFromContext.(int64)
+		hlog.Infof("BatchFavoriteStatus: userId from context = %d", userId)
 	}
 
 	if len(req.VideoIds) == 0 {

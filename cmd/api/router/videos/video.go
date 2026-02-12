@@ -91,6 +91,8 @@ func Register(r *server.Hertz) {
 		{
 			_favorite := _v1.Group("/favorite")
 			_favorite.POST("/create", append(_createFavoriteMv(), videos.CreateFavoriteVideo)...)
+			_favorite.PUT("/update", append(_createFavoriteMv(), videos.UpdateFavorite)...)
+			_favorite.POST("/update", append(_createFavoriteMv(), videos.UpdateFavorite)...)
 			_favorite.GET("/list", append(_getFavoriteListMv(), videos.GetFavoroteList)...)
 			_favorite.GET("/video/list", append(_getFavoriteVideoMv(), videos.GetFavoriteVideoList)...)
 			_favorite.GET("/video", append(_getVideoFromFavoriteMv(), videos.GetFavoriteVideo)...)
@@ -98,6 +100,9 @@ func Register(r *server.Hertz) {
 			_favorite.DELETE("/delete", append(_deleteFavoriteMv(), videos.DeleteFavorite)...)
 			_favorite.DELETE("/video/delete", append(_deleteVideoFromFavoriteMv(), videos.DeleteVideoFromFavorite)...)
 			_favorite.POST("/batch_status", append(_getFavoriteListMv(), videos.BatchFavoriteStatus)...)
+			_favorite.POST("/sync_count", append(_createFavoriteMv(), videos.SyncFavoriteVideoCount)...)
+			_favorite.POST("/sync_video_count", videos.SyncVideoFavoritesCount)        // 同步单个视频的收藏数量
+			_favorite.POST("/sync_all_videos", videos.SyncAllVideosFavoritesCount)     // 同步所有视频的收藏数量（管理员）
 		}
 
 		{

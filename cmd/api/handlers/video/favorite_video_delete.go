@@ -31,11 +31,17 @@ func DeleteVideoFromFavorite(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
+	// video_id 必须提供
+	if DeleteVideo.VideoId == 0 {
+		SendResponse(c, errno.ParamErr, nil)
+		return
+	}
+
 	resp, err := rpc.DeleteVideoFromFavortie(ctx, &videos.DeleteVideoFromFavoriteRequestV2{
 		UserId:       UserId,
 		VideoId:      DeleteVideo.VideoId,
-		FavoriteId:   DeleteVideo.FavoriteId,
-		RemoveReason: "user_request", // 添加默认值
+		FavoriteId:   DeleteVideo.FavoriteId, // 可以为0，表示从所有收藏夹中删除
+		RemoveReason: "user_request",
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)
