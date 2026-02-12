@@ -392,10 +392,72 @@ func (e *IntegratedRecommendationEngine) injectExploration(
 		return videos
 	}
 
-	// TODO: 获取探索性视频 (新视频、长尾视频等)
-	// 这里简化处理，实际应该从专门的探索池获取
+	// Fetch exploration videos from the recall engine (recent/long-tail/random)
+	var exploreVideos []ScoredVideo
+	if e.recallEngine != nil {
+		// Use recall engine to get candidate videos for exploration
+		recallCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
 
-	return videos
+		candidates, err := e.recallEngine.RecommendSimple(recallCtx, userID, exploreCount*3)
+		if err == nil && len(candidates) > 0 {
+			exploreVideos = candidates
+
+			// Apply lower scores to exploration items (they're supplementary)
+			for i := range exploreVideos {
+				exploreVideos[i].Score *= 0.5 // Lower weight for exploration
+				exploreVideos[i].RecallSource = "exploration"
+			}
+		} else {
+			hlog.CtxWarnf(ctx, "Failed to get exploration videos: %v", err)
+		}
+	}
+
+	if len(exploreVideos) == 0 {
+		return videos
+	}
+
+	// Deduplicate: remove videos already in the main list
+	existingIDs := make(map[int64]bool)
+	for _, v := range videos {
+		existingIDs[v.VideoID] = true
+	}
+
+	var uniqueExplore []ScoredVideo
+	for _, v := range exploreVideos {
+		if !existingIDs[v.VideoID] {
+			uniqueExplore = append(uniqueExplore, v)
+			if len(uniqueExplore) >= exploreCount {
+				break
+			}
+		}
+	}
+
+	// Interleave exploration videos at regular intervals
+	if len(uniqueExplore) == 0 {
+		return videos
+	}
+
+	result := make([]ScoredVideo, 0, len(videos)+len(uniqueExplore))
+	interval := len(videos) / (len(uniqueExplore) + 1)
+	if interval < 3 {
+		interval = 3 // Minimum gap between exploration items
+	}
+
+	exploreIdx := 0
+	for i, v := range videos {
+		result = append(result, v)
+		if exploreIdx < len(uniqueExplore) && (i+1)%interval == 0 {
+			result = append(result, uniqueExplore[exploreIdx])
+			exploreIdx++
+		}
+	}
+	// Append remaining exploration videos at the end
+	for ; exploreIdx < len(uniqueExplore); exploreIdx++ {
+		result = append(result, uniqueExplore[exploreIdx])
+	}
+
+	return result
 }
 
 // convertToScoredVideos 转换为 ScoredVideo
@@ -404,7 +466,7 @@ func (e *IntegratedRecommendationEngine) convertToScoredVideos(videoIDs []int64)
 	for i, vid := range videoIDs {
 		result[i] = ScoredVideo{
 			VideoID: vid,
-			Score:   float64(len(videoIDs) - i) / float64(len(videoIDs)), // 保持原有顺序的分数
+			Score:   float64(len(videoIDs)-i) / float64(len(videoIDs)), // 保持原有顺序的分数
 		}
 	}
 	return result

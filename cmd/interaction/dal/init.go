@@ -1,6 +1,7 @@
 package dal
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"HuaTug.com/pkg/cache"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	goredisv9 "github.com/redis/go-redis/v9"
 )
 
 // ShardedCommentDBInstance 全局分片评论数据库实例
@@ -57,9 +59,25 @@ func initShardingManager() error {
 		return fmt.Errorf("sharding manager is nil after initialization")
 	}
 
-	// 初始化缓存管理器
+	// 初始化缓存管理器 (connect to Redis for comment caching)
 	var cacheManager *cache.CommentCacheManager
-	// TODO: 这里应该根据实际情况初始化缓存管理器
+	redisAddr := config.ConfigInfo.Redis.Addr
+	redisPassword := config.ConfigInfo.Redis.Password
+	if redisAddr != "" {
+		redisClient := goredisv9.NewClient(&goredisv9.Options{
+			Addr:     redisAddr,
+			Password: redisPassword,
+			DB:       2, // Use DB 2 for comment cache
+		})
+		if err := redisClient.Ping(context.Background()).Err(); err != nil {
+			hlog.Warnf("Failed to connect to Redis for comment cache: %v, caching disabled", err)
+		} else {
+			cacheManager = cache.NewCommentCacheManager(redisClient)
+			hlog.Info("Comment cache manager initialized successfully")
+		}
+	} else {
+		hlog.Warn("Redis address not configured, comment cache disabled")
+	}
 
 	// 创建分片评论数据库实例
 	ShardedCommentDBInstance = db.NewShardedCommentDB(shardingManager, cacheManager)

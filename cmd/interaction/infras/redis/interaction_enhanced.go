@@ -483,6 +483,12 @@ func (m *EnhancedInteractionManager) GetLikeCount(ctx context.Context, objID int
 	return count, nil
 }
 
+// SetLikeCount sets the like count for the given object in Redis (used for calibration).
+func (m *EnhancedInteractionManager) SetLikeCount(ctx context.Context, objID int64, bizType int, count int64) error {
+	key := fmt.Sprintf(LikeCountHashKey, bizType)
+	return m.client.HSet(key, strconv.FormatInt(objID, 10), strconv.FormatInt(count, 10)).Err()
+}
+
 // BatchGetLikeStatus 批量检查点赞状态
 func (m *EnhancedInteractionManager) BatchGetLikeStatus(ctx context.Context, userID int64, objIDs []int64, bizType int) (map[int64]bool, error) {
 	if len(objIDs) == 0 {

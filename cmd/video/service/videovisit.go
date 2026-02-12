@@ -52,8 +52,11 @@ func (s *VideoVisitService) VideoVisit(req *videos.VideoVisitRequestV2) (*videos
 		}
 	}
 
-	// TODO: 获取相关推荐视频（根据标签、分类等）
-	// resp.RelatedVideos = getRelatedVideos(s.ctx, video)
+	// Get related videos by same author or category
+	relatedVideos, err := getRelatedVideos(s.ctx, video)
+	if err == nil && len(relatedVideos) > 0 {
+		resp.RelatedVideos = relatedVideos
+	}
 
 	return resp, nil
 }
@@ -101,4 +104,57 @@ func (s *VideoVisitService) UpdateVisitCount(req *videos.UpdateVisitCountRequest
 	}
 
 	return count, nil
+}
+
+// getRelatedVideos fetches related videos by same author or hot videos as fallback
+func getRelatedVideos(ctx context.Context, video *base.Video) ([]*base.Video, error) {
+	const relatedLimit = 10
+
+	// 1. Get videos from the same author (exclude current video)
+	authorVideos, _, err := db.GetUserVideoList(ctx, video.UserId, 1, relatedLimit+1)
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to get author videos")
+	}
+
+	var related []*base.Video
+	for _, v := range authorVideos {
+		if v.VideoId != video.VideoId {
+			related = append(related, v)
+		}
+		if len(related) >= relatedLimit {
+			break
+		}
+	}
+
+	// 2. If not enough, supplement with hot videos
+	if len(related) < relatedLimit {
+		remaining := relatedLimit - len(related)
+		hotVideos, err := db.GetHotVideosByLikes(ctx, remaining+5)
+		if err == nil {
+			existingIds := make(map[int64]bool)
+			existingIds[video.VideoId] = true
+			for _, v := range related {
+				existingIds[v.VideoId] = true
+			}
+			for _, hv := range hotVideos {
+				if existingIds[hv.VideoId] {
+					continue
+				}
+				related = append(related, &base.Video{
+					VideoId:    hv.VideoId,
+					Title:      hv.Title,
+					VideoUrl:   hv.VideoUrl,
+					CoverUrl:   hv.CoverUrl,
+					LikesCount: int64(hv.LikesCount),
+					VisitCount: int64(hv.VisitCount),
+					UserId:     hv.UserId,
+				})
+				if len(related) >= relatedLimit {
+					break
+				}
+			}
+		}
+	}
+
+	return related, nil
 }

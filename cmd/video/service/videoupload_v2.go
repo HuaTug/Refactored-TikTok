@@ -142,11 +142,11 @@ func (s *VideoUploadServiceV2) StartUpload(req *videos.VideoPublishStartRequestV
 		ChunkSize:     chunkSize,
 	}
 
-	// 7. 确保用户存储目录结构存在（跳过，将在实际上传时处理）
-	// TODO: 实现用户目录结构检查
-	// if err := s.tikTokStorage.ensureUserDirectoryStructure(s.ctx, req.UserId); err != nil {
-	//     return nil, fmt.Errorf("failed to ensure user directory: %w", err)
-	// }
+	// 7. Ensure user directory structure exists in MinIO
+	if err := s.tikTokStorage.EnsureUserDirectoryStructure(s.ctx, req.UserId); err != nil {
+		hlog.Warnf("Failed to ensure user directory structure for user %d: %v (non-blocking)", req.UserId, err)
+		// Non-blocking: directory will be created on first upload if missing
+	}
 
 	// 8. 保存会话到Redis
 	if err := s.saveUploadSession(session); err != nil {
@@ -759,27 +759,39 @@ func getUploadedPartsKeys(parts map[int]oss.MinIOObjectPart) []int {
 	return keys
 }
 
-// GetUserStorageQuota 获取用户存储配额信息
+// GetUserStorageQuota retrieves real user storage quota from database
 func (s *VideoUploadServiceV2) GetUserStorageQuota(userID int64) (*videos.UserStorageQuota, error) {
-	// 暂时使用简化的存储统计逻辑，后续可以扩展
-	// TODO: 实现真实的用户存储统计查询
+	// 1. Try to get quota from database first
+	dbQuota, err := db.GetUserStorageQuota(s.ctx, userID)
+	if err == nil && dbQuota != nil {
+		return &videos.UserStorageQuota{
+			TotalQuotaBytes:   dbQuota.MaxStorageBytes,
+			UsedQuotaBytes:    dbQuota.UsedStorageBytes,
+			VideoCount:        int64(dbQuota.VideoCount),
+			QuotaLevel:        dbQuota.QuotaLevel,
+			MaxVideoSizeBytes: dbQuota.MaxVideoSize,
+			MaxVideoCount:     int32(dbQuota.MaxVideoCount),
+		}, nil
+	}
 
-	// 根据用户等级确定配额
+	hlog.Warnf("Failed to get quota from DB for user %d: %v, using default values", userID, err)
+
+	// 2. Fallback: determine quota from user level with defaults
 	quotaLevel := s.determineQuotaLevel(userID)
 	totalQuota := s.getTotalQuotaByLevel(quotaLevel)
 	maxVideoSize := s.getMaxVideoSizeByLevel(quotaLevel)
 	maxVideoCount := s.getMaxVideoCountByLevel(quotaLevel)
 
-	// 简化的使用量统计 - 实际项目中应该从数据库查询
+	// 3. Try to get actual usage from storage mappings
 	usedStorage := int64(0)
 	videoCount := int64(0)
-
-	// TODO: 从数据库查询实际使用量
-	// userStats, err := db.GetUserStorageStats(s.ctx, userID)
-	// if err == nil {
-	//     usedStorage = userStats.UsedStorage
-	//     videoCount = userStats.VideoCount
-	// }
+	userVideos, err := db.GetUserVideos(s.ctx, userID, 10000, 0)
+	if err == nil {
+		videoCount = int64(len(userVideos))
+		for _, v := range userVideos {
+			usedStorage += v.FileSize
+		}
+	}
 
 	return &videos.UserStorageQuota{
 		TotalQuotaBytes:   totalQuota,
@@ -787,14 +799,34 @@ func (s *VideoUploadServiceV2) GetUserStorageQuota(userID int64) (*videos.UserSt
 		VideoCount:        videoCount,
 		QuotaLevel:        quotaLevel,
 		MaxVideoSizeBytes: maxVideoSize,
-		MaxVideoCount:     int32(maxVideoCount), // 转换为int32
+		MaxVideoCount:     int32(maxVideoCount),
 	}, nil
 }
 
-// determineQuotaLevel 确定用户配额等级
+// determineQuotaLevel determines user quota level based on DB record or video count
 func (s *VideoUploadServiceV2) determineQuotaLevel(userID int64) string {
-	// TODO: 根据用户VIP等级或其他条件确定配额等级
-	// 这里简化处理，默认为 standard
+	// Try to get quota level from database
+	dbQuota, err := db.GetUserStorageQuota(s.ctx, userID)
+	if err == nil && dbQuota != nil && dbQuota.QuotaLevel != "" {
+		return dbQuota.QuotaLevel
+	}
+
+	// Fallback: determine by user's video count as a heuristic
+	userVideos, err := db.GetUserVideos(s.ctx, userID, 1, 0)
+	if err == nil {
+		count := len(userVideos)
+		switch {
+		case count >= 500:
+			return "enterprise"
+		case count >= 100:
+			return "premium"
+		case count >= 10:
+			return "standard"
+		default:
+			return "basic"
+		}
+	}
+
 	return "standard"
 }
 
@@ -893,10 +925,35 @@ func (s *VideoUploadServiceV2) GetUploadProgress(sessionUUID string, userID int6
 		Status:          status,
 		ProgressPercent: progressPercent,
 		NextChunkOffset: nextChunkOffset,
-		UploadSpeedMbps: "calculating", // TODO: 实现真实的速度计算
+		UploadSpeedMbps: s.calculateUploadSpeed(session),
 		UploadedChunks:  uploadedCount,
 		TotalChunks:     totalChunks,
 	}, nil
+}
+
+// calculateUploadSpeed estimates upload speed based on session progress and elapsed time
+func (s *VideoUploadServiceV2) calculateUploadSpeed(session *UploadSession) string {
+	if session == nil || session.CreatedAt.IsZero() {
+		return "N/A"
+	}
+
+	elapsed := time.Since(session.CreatedAt).Seconds()
+	if elapsed <= 0 {
+		return "N/A"
+	}
+
+	uploadedCount := s.countUploadedChunks(session.UploadedChunks)
+	if uploadedCount == 0 {
+		return "0.00"
+	}
+
+	// Estimate total bytes uploaded: uploaded chunks * chunk size
+	uploadedBytes := float64(uploadedCount) * float64(session.ChunkSize)
+
+	// Convert to Mbps (megabits per second)
+	speedMbps := (uploadedBytes * 8) / (elapsed * 1024 * 1024)
+
+	return fmt.Sprintf("%.2f", speedMbps)
 }
 
 // countUploadedChunks 计算已上传分片数量

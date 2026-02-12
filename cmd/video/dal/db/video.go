@@ -459,7 +459,7 @@ func DeleteFavorite(ctx context.Context, req *videos.DeleteFavoriteRequestV2) er
 
 func DeleteVideoFromFavorite(ctx context.Context, req *videos.DeleteVideoFromFavoriteRequestV2) error {
 	hlog.Infof("DeleteVideoFromFavorite: userId=%d, videoId=%d, favoriteId=%d", req.UserId, req.VideoId, req.FavoriteId)
-	
+
 	// 如果 favorite_id 为 0，则从用户所有收藏夹中删除该视频
 	if req.FavoriteId == 0 {
 		// 先查询视频在哪些收藏夹中
@@ -669,6 +669,23 @@ func UpdateVideoSchool(ctx context.Context, videoId, schoolId int64) error {
 		return errors.WithMessage(err, "Failed to update video school")
 	}
 	return nil
+}
+
+// GetUserVideoList gets videos by user_id with pagination
+func GetUserVideoList(ctx context.Context, userId int64, page, pageSize int64) ([]*base.Video, int64, error) {
+	db := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id = ? AND deleted_at IS NULL", userId)
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to count user videos")
+	}
+
+	var videoList []*base.Video
+	if err := db.Order("created_at DESC").Limit(int(pageSize)).Offset(int(pageSize * (page - 1))).Find(&videoList).Error; err != nil {
+		return nil, 0, errors.WithMessage(err, "Failed to get user video list")
+	}
+
+	return videoList, total, nil
 }
 
 // UpdateVideoMetadata updates video metadata fields
@@ -1089,7 +1106,7 @@ func ClearUserWatchHistoryByDate(ctx context.Context, userId int64, dateRange st
 		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)")
 	case "month":
 		db = db.Where("watch_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)")
-	// "all" or default: no date filter
+		// "all" or default: no date filter
 	}
 
 	result := db.Delete(&model.UserVideoWatchHistory{})

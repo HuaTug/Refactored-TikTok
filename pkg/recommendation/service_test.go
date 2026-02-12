@@ -10,8 +10,8 @@ import (
 // =====================================================
 
 func TestNewHotScoreConfig(t *testing.T) {
-	config := &HotScoreConfig{
-		TimeWindows: []TimeWindow{
+	config := &testHotScoreConfig{
+		TimeWindows: []testTimeWindow{
 			{Name: "1h", Duration: time.Hour},
 			{Name: "24h", Duration: 24 * time.Hour},
 		},
@@ -87,7 +87,7 @@ func TestCalculateDecay(t *testing.T) {
 }
 
 func TestCalculateHotScore(t *testing.T) {
-	config := &HotScoreConfig{
+	config := &testHotScoreConfig{
 		Weights: InteractionWeights{
 			View:     1.0,
 			Like:     3.0,
@@ -159,15 +159,15 @@ type InteractionWeights struct {
 	Favorite float64
 }
 
-// TimeWindow represents a time window configuration
-type TimeWindow struct {
+// testTimeWindow represents a time window configuration for tests
+type testTimeWindow struct {
 	Name     string
 	Duration time.Duration
 }
 
-// HotScoreConfig configuration for hot score calculation
-type HotScoreConfig struct {
-	TimeWindows        []TimeWindow
+// testHotScoreConfig configuration for hot score calculation tests
+type testHotScoreConfig struct {
+	TimeWindows        []testTimeWindow
 	Weights            InteractionWeights
 	DecayHalfLife      time.Duration
 	QualityThreshold   float64
@@ -217,7 +217,7 @@ func expDecay(x float64) float64 {
 }
 
 // CalculateHotScore calculates the complete hot score
-func CalculateHotScore(config *HotScoreConfig, current, previous VideoStats, publishTime time.Time, qualityScore float64) float64 {
+func CalculateHotScore(config *testHotScoreConfig, current, previous VideoStats, publishTime time.Time, qualityScore float64) float64 {
 	// Calculate base scores
 	currentBase := CalculateBaseScore(current, config.Weights)
 	previousBase := CalculateBaseScore(previous, config.Weights)

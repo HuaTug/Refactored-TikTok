@@ -2,7 +2,9 @@ package recommendation
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"sort"
 	"sync"
 	"time"
 
@@ -13,43 +15,107 @@ import (
 	"gorm.io/gorm"
 )
 
-// =====================================================
-// 视频热度计算服务
-// 定时计算视频热度分数，支持多时间窗口
-// =====================================================
+// Action type constants for interaction increment.
+const (
+	ActionView    = "view"
+	ActionLike    = "like"
+	ActionComment = "comment"
+	ActionShare   = "share"
+)
 
-// TimeWindow 时间窗口定义
+// Score calculation constants.
+const (
+	baseScoreWeight  = 0.3 // Weight of base score in composite hot score
+	deltaScoreWeight = 0.7 // Weight of delta score in composite hot score
+
+	logCompressionFactor = 100.0 // Multiplier after log10 compression
+	minDecayFactor       = 0.1   // Minimum decay factor to retain at least 10% weight
+	finishRateThreshold  = 0.5   // Completion rate threshold for quality bonus
+	finishRateBonusMul   = 0.5   // Multiplier for finish rate bonus
+
+	trendQueryLimit   = 200  // Max videos to query for trend analysis
+	trendRisingPct    = 20.0 // Growth rate (%) threshold for "rising"
+	trendFallingPct   = -20.0
+	cleanupRetainDays = 7 // Days to retain hot score records
+)
+
+// Trend type labels.
+const (
+	TrendTypeRising  = "rising"
+	TrendTypeStable  = "stable"
+	TrendTypeFalling = "falling"
+	TrendTypeNew     = "new"
+)
+
+// --- Type Definitions ---
+
+// TimeWindow defines a time window for hot score calculation.
 type TimeWindow struct {
-	Name     string        // 窗口名称: 1h/6h/24h/7d
-	Duration time.Duration // 时间跨度
-	Weight   float64       // 窗口权重（用于综合热度计算）
+	Name     string        // Window name: 1h/6h/24h/7d
+	Duration time.Duration // Time span
+	Weight   float64       // Window weight for composite score
 }
 
-// HotScoreConfig 热度计算配置
+// HotScoreConfig holds configuration for hot score calculation.
 type HotScoreConfig struct {
-	// 时间窗口配置
 	TimeWindows []TimeWindow
 
-	// 各指标权重
-	ViewWeight     float64 // 播放量权重
-	LikeWeight     float64 // 点赞权重
-	CommentWeight  float64 // 评论权重
-	ShareWeight    float64 // 分享权重
-	FavoriteWeight float64 // 收藏权重
+	ViewWeight     float64
+	LikeWeight     float64
+	CommentWeight  float64
+	ShareWeight    float64
+	FavoriteWeight float64
 
-	// 时间衰减参数
-	DecayHalfLife time.Duration // 半衰期
+	DecayHalfLife time.Duration // Half-life for exponential decay
+	QualityBonus  float64       // Multiplier for high-quality content
 
-	// 质量因子权重
-	QualityBonus float64 // 优质内容加成
-
-	// 计算参数
-	BatchSize       int           // 批量处理大小
-	CalculateWorker int           // 计算并发数
-	UpdateInterval  time.Duration // 更新间隔
+	BatchSize       int
+	CalculateWorker int
+	UpdateInterval  time.Duration
 }
 
-// DefaultHotScoreConfig 默认热度配置
+// VideoDetail holds video detail info for hot score calculation.
+type VideoDetail struct {
+	VideoId        int64
+	UserId         int64
+	VisitCount     uint64
+	LikesCount     uint64
+	CommentCount   uint64
+	ShareCount     uint64
+	FavoritesCount uint64
+	CreatedAt      time.Time
+	Duration       uint
+}
+
+// InteractionDelta holds interaction increments within a time window.
+type InteractionDelta struct {
+	VideoID      int64
+	TimeWindow   string
+	ViewDelta    int64
+	LikeDelta    int64
+	CommentDelta int64
+	ShareDelta   int64
+}
+
+// HotTrend represents a video's trending information.
+type HotTrend struct {
+	VideoID     int64   `json:"video_id"`
+	CurrentRank int     `json:"current_rank"`
+	TrendScore  float64 `json:"trend_score"`
+	TrendType   string  `json:"trend_type"` // rising/stable/falling/new
+}
+
+// CategoryHotStats holds hot score statistics per category.
+type CategoryHotStats struct {
+	Category   string  `json:"category"`
+	HotScore   float64 `json:"hot_score"`
+	VideoCount int     `json:"video_count"`
+	TrendScore float64 `json:"trend_score"`
+}
+
+// --- Default Configuration ---
+
+// DefaultHotScoreConfig returns the default hot score configuration.
 func DefaultHotScoreConfig() *HotScoreConfig {
 	return &HotScoreConfig{
 		TimeWindows: []TimeWindow{
@@ -71,16 +137,18 @@ func DefaultHotScoreConfig() *HotScoreConfig {
 	}
 }
 
-// VideoHotScoreService 视频热度计算服务
+// --- VideoHotScoreService ---
+
+// VideoHotScoreService calculates and manages video hot scores periodically.
 type VideoHotScoreService struct {
 	config    *HotScoreConfig
 	db        *gorm.DB
 	stopCh    chan struct{}
 	isRunning bool
-	mutex     sync.RWMutex
+	mu        sync.RWMutex
 }
 
-// NewVideoHotScoreService 创建热度计算服务
+// NewVideoHotScoreService creates a new hot score service.
 func NewVideoHotScoreService(config *HotScoreConfig, database *gorm.DB) *VideoHotScoreService {
 	if config == nil {
 		config = DefaultHotScoreConfig()
@@ -92,32 +160,32 @@ func NewVideoHotScoreService(config *HotScoreConfig, database *gorm.DB) *VideoHo
 	}
 }
 
-// Start 启动热度计算定时任务
+// Start launches the periodic hot score calculation.
+// NOTE: This only starts the ticker-based loop. The HotScoreScheduler should NOT
+// register a duplicate hot_score_calculation job; it is handled here.
 func (s *VideoHotScoreService) Start() {
-	s.mutex.Lock()
+	s.mu.Lock()
 	if s.isRunning {
-		s.mutex.Unlock()
+		s.mu.Unlock()
 		return
 	}
 	s.isRunning = true
-	s.mutex.Unlock()
+	s.mu.Unlock()
 
 	hlog.Info("[HotScoreService] Starting video hot score calculation service...")
 
-	// 启动时先执行一次完整计算
 	go func() {
+		// Run an initial calculation, then enter ticker loop.
 		s.CalculateAllHotScores(context.Background())
-	}()
 
-	// 定时执行
-	ticker := time.NewTicker(s.config.UpdateInterval)
-	go func() {
+		ticker := time.NewTicker(s.config.UpdateInterval)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
 				s.CalculateAllHotScores(context.Background())
 			case <-s.stopCh:
-				ticker.Stop()
 				hlog.Info("[HotScoreService] Hot score calculation service stopped")
 				return
 			}
@@ -125,10 +193,10 @@ func (s *VideoHotScoreService) Start() {
 	}()
 }
 
-// Stop 停止服务
+// Stop gracefully stops the service.
 func (s *VideoHotScoreService) Stop() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if !s.isRunning {
 		return
@@ -137,18 +205,18 @@ func (s *VideoHotScoreService) Stop() {
 	s.isRunning = false
 }
 
-// CalculateAllHotScores 计算所有视频的热度分数
+// --- Core Calculation ---
+
+// CalculateAllHotScores recalculates hot scores for all active videos.
 func (s *VideoHotScoreService) CalculateAllHotScores(ctx context.Context) {
 	startTime := time.Now()
 	hlog.Info("[HotScoreService] Starting hot score calculation...")
 
-	// 获取所有公开且审核通过的视频
 	videoIds, err := s.getActiveVideoIds(ctx)
 	if err != nil {
 		hlog.Errorf("[HotScoreService] Failed to get active video ids: %v", err)
 		return
 	}
-
 	if len(videoIds) == 0 {
 		hlog.Info("[HotScoreService] No active videos to calculate")
 		return
@@ -156,35 +224,31 @@ func (s *VideoHotScoreService) CalculateAllHotScores(ctx context.Context) {
 
 	hlog.Infof("[HotScoreService] Found %d active videos to calculate", len(videoIds))
 
-	// 分批处理
 	totalProcessed := 0
 	for i := 0; i < len(videoIds); i += s.config.BatchSize {
-		end := i + s.config.BatchSize
-		if end > len(videoIds) {
-			end = len(videoIds)
-		}
+		end := min(i+s.config.BatchSize, len(videoIds))
 		batch := videoIds[i:end]
 
-		processed, err := s.calculateBatchHotScores(ctx, batch)
-		if err != nil {
-			hlog.Errorf("[HotScoreService] Error calculating batch %d-%d: %v", i, end, err)
+		processed, batchErr := s.calculateBatchHotScores(ctx, batch)
+		if batchErr != nil {
+			hlog.Errorf("[HotScoreService] Error calculating batch [%d, %d): %v", i, end, batchErr)
 			continue
 		}
 		totalProcessed += processed
 	}
 
-	// 更新排名
+	// Update rankings per time window.
 	for _, tw := range s.config.TimeWindows {
-		if err := db.UpdateHotScoreRanks(ctx, tw.Name); err != nil {
-			hlog.Errorf("[HotScoreService] Failed to update ranks for %s: %v", tw.Name, err)
+		if rankErr := db.UpdateHotScoreRanks(ctx, tw.Name); rankErr != nil {
+			hlog.Errorf("[HotScoreService] Failed to update ranks for %s: %v", tw.Name, rankErr)
 		}
 	}
 
-	elapsed := time.Since(startTime)
-	hlog.Infof("[HotScoreService] Hot score calculation completed. Processed: %d videos, Time: %v", totalProcessed, elapsed)
+	hlog.Infof("[HotScoreService] Hot score calculation completed. Processed: %d videos, Time: %v",
+		totalProcessed, time.Since(startTime))
 }
 
-// getActiveVideoIds 获取所有活跃视频ID
+// getActiveVideoIds returns IDs of all public, audit-passed, non-deleted videos.
 func (s *VideoHotScoreService) getActiveVideoIds(ctx context.Context) ([]int64, error) {
 	var videoIds []int64
 	err := s.db.WithContext(ctx).Model(&model.Video{}).
@@ -193,55 +257,36 @@ func (s *VideoHotScoreService) getActiveVideoIds(ctx context.Context) ([]int64, 
 	return videoIds, err
 }
 
-// calculateBatchHotScores 批量计算热度分数
+// calculateBatchHotScores computes hot scores for a batch of video IDs.
 func (s *VideoHotScoreService) calculateBatchHotScores(ctx context.Context, videoIds []int64) (int, error) {
-	// 获取视频详情
 	videos, err := s.getVideoDetails(ctx, videoIds)
 	if err != nil {
 		return 0, err
 	}
 
-	// 获取视频特征（如果有）
 	featureMap := s.getVideoFeatureMap(ctx, videoIds)
-
-	// 获取时间窗口内的互动增量数据
 	interactionDeltas := s.getInteractionDeltas(ctx, videoIds)
 
-	// 计算每个视频在每个时间窗口的热度
-	var hotScores []*model.VideoHotScore
 	now := time.Now()
+	var hotScores []*model.VideoHotScore
 
 	for _, video := range videos {
 		for _, tw := range s.config.TimeWindows {
-			hotScore := s.calculateSingleVideoHotScore(video, tw, now, featureMap, interactionDeltas)
-			hotScores = append(hotScores, hotScore)
+			hs := s.computeHotScore(video, tw, now, featureMap, interactionDeltas)
+			hotScores = append(hotScores, hs)
 		}
 	}
 
-	// 批量保存
 	if len(hotScores) > 0 {
-		if err := db.BatchUpdateVideoHotScores(ctx, hotScores); err != nil {
-			return 0, err
+		if saveErr := db.BatchUpdateVideoHotScores(ctx, hotScores); saveErr != nil {
+			return 0, saveErr
 		}
 	}
 
 	return len(videos), nil
 }
 
-// VideoDetail 视频详情结构
-type VideoDetail struct {
-	VideoId        int64
-	UserId         int64
-	VisitCount     uint64
-	LikesCount     uint64
-	CommentCount   uint64
-	ShareCount     uint64
-	FavoritesCount uint64
-	CreatedAt      time.Time
-	Duration       uint
-}
-
-// getVideoDetails 获取视频详情
+// getVideoDetails fetches video details from DB for the given IDs.
 func (s *VideoHotScoreService) getVideoDetails(ctx context.Context, videoIds []int64) ([]*VideoDetail, error) {
 	var videos []*VideoDetail
 	err := s.db.WithContext(ctx).Model(&model.Video{}).
@@ -251,9 +296,9 @@ func (s *VideoHotScoreService) getVideoDetails(ctx context.Context, videoIds []i
 	return videos, err
 }
 
-// getVideoFeatureMap 获取视频特征映射
+// getVideoFeatureMap returns a map of VideoFeature keyed by video ID.
 func (s *VideoHotScoreService) getVideoFeatureMap(ctx context.Context, videoIds []int64) map[int64]*model.VideoFeature {
-	featureMap := make(map[int64]*model.VideoFeature)
+	featureMap := make(map[int64]*model.VideoFeature, len(videoIds))
 	features, err := db.BatchGetVideoFeatures(ctx, videoIds)
 	if err != nil {
 		hlog.Warnf("[HotScoreService] Failed to get video features: %v", err)
@@ -265,37 +310,25 @@ func (s *VideoHotScoreService) getVideoFeatureMap(ctx context.Context, videoIds 
 	return featureMap
 }
 
-// InteractionDelta 互动增量数据
-type InteractionDelta struct {
-	VideoID      int64
-	TimeWindow   string
-	ViewDelta    int64
-	LikeDelta    int64
-	CommentDelta int64
-	ShareDelta   int64
-}
-
-// getInteractionDeltas 获取时间窗口内的互动增量
-// 这里通过 recommendation_exposures 表来统计
+// getInteractionDeltas queries interaction increments per time window from exposure records.
 func (s *VideoHotScoreService) getInteractionDeltas(ctx context.Context, videoIds []int64) map[string]map[int64]*InteractionDelta {
-	deltas := make(map[string]map[int64]*InteractionDelta)
+	deltas := make(map[string]map[int64]*InteractionDelta, len(s.config.TimeWindows))
 	now := time.Now()
+
+	type exposureStat struct {
+		VideoID      int64 `gorm:"column:video_id"`
+		ClickCount   int64 `gorm:"column:click_count"`
+		LikeCount    int64 `gorm:"column:like_count"`
+		CommentCount int64 `gorm:"column:comment_count"`
+		ShareCount   int64 `gorm:"column:share_count"`
+	}
 
 	for _, tw := range s.config.TimeWindows {
 		windowStart := now.Add(-tw.Duration)
-		deltas[tw.Name] = make(map[int64]*InteractionDelta)
+		windowDeltas := make(map[int64]*InteractionDelta)
 
-		// 从曝光记录统计互动增量
-		type ExposureStat struct {
-			VideoID      int64 `gorm:"column:video_id"`
-			ClickCount   int64 `gorm:"column:click_count"`
-			LikeCount    int64 `gorm:"column:like_count"`
-			CommentCount int64 `gorm:"column:comment_count"`
-			ShareCount   int64 `gorm:"column:share_count"`
-		}
-
-		var stats []ExposureStat
-		s.db.WithContext(ctx).Model(&model.RecommendationExposure{}).
+		var stats []exposureStat
+		err := s.db.WithContext(ctx).Model(&model.RecommendationExposure{}).
 			Select(`
 				video_id,
 				COUNT(*) as click_count,
@@ -305,10 +338,15 @@ func (s *VideoHotScoreService) getInteractionDeltas(ctx context.Context, videoId
 			`).
 			Where("video_id IN ? AND exposure_time >= ? AND is_clicked = 1", videoIds, windowStart).
 			Group("video_id").
-			Find(&stats)
+			Find(&stats).Error
+		if err != nil {
+			hlog.Warnf("[HotScoreService] Failed to get interaction deltas for window %s: %v", tw.Name, err)
+			deltas[tw.Name] = windowDeltas
+			continue
+		}
 
 		for _, stat := range stats {
-			deltas[tw.Name][stat.VideoID] = &InteractionDelta{
+			windowDeltas[stat.VideoID] = &InteractionDelta{
 				VideoID:      stat.VideoID,
 				TimeWindow:   tw.Name,
 				ViewDelta:    stat.ClickCount,
@@ -317,56 +355,36 @@ func (s *VideoHotScoreService) getInteractionDeltas(ctx context.Context, videoId
 				ShareDelta:   stat.ShareCount,
 			}
 		}
+		deltas[tw.Name] = windowDeltas
 	}
 
 	return deltas
 }
 
-// calculateSingleVideoHotScore 计算单个视频的热度分数
-func (s *VideoHotScoreService) calculateSingleVideoHotScore(
+// --- Single Video Score Computation ---
+
+// computeHotScore calculates the composite hot score for a single video + time window.
+func (s *VideoHotScoreService) computeHotScore(
 	video *VideoDetail,
 	tw TimeWindow,
 	now time.Time,
 	featureMap map[int64]*model.VideoFeature,
 	interactionDeltas map[string]map[int64]*InteractionDelta,
 ) *model.VideoHotScore {
-	windowStart := now.Add(-tw.Duration)
 
-	// 基础热度计算（使用总量数据作为基础）
 	baseScore := s.calculateBaseScore(video)
+	deltaScore := s.calculateDeltaScore(tw.Name, video.VideoId, interactionDeltas)
 
-	// 时间窗口内的增量热度
-	deltaScore := 0.0
-	if delta, ok := interactionDeltas[tw.Name][video.VideoId]; ok {
-		deltaScore = float64(delta.ViewDelta)*s.config.ViewWeight +
-			float64(delta.LikeDelta)*s.config.LikeWeight +
-			float64(delta.CommentDelta)*s.config.CommentWeight +
-			float64(delta.ShareDelta)*s.config.ShareWeight
-	}
-
-	// 时间衰减因子
 	videoAge := now.Sub(video.CreatedAt)
 	decayFactor := s.calculateDecayFactor(videoAge)
+	qualityMul := s.calculateQualityMultiplier(video.VideoId, featureMap)
 
-	// 质量加成
-	qualityBonus := 1.0
-	if feature, ok := featureMap[video.VideoId]; ok {
-		if feature.IsHighQuality == 1 {
-			qualityBonus = s.config.QualityBonus
-		}
-		// 根据完播率额外加成
-		if feature.FinishRate > 0.5 {
-			qualityBonus *= (1 + feature.FinishRate*0.5)
-		}
-	}
+	// Composite: base * decay + delta, scaled by quality.
+	hotScore := (baseScore*baseScoreWeight*decayFactor + deltaScore*deltaScoreWeight) * qualityMul
 
-	// 综合热度分数
-	// 基础分 * 衰减因子 + 增量分 * 质量加成
-	hotScore := (baseScore*0.3*decayFactor + deltaScore*0.7) * qualityBonus
-
-	// 使用对数压缩避免数值过大
+	// Log compression to prevent extreme values.
 	if hotScore > 0 {
-		hotScore = math.Log10(hotScore+1) * 100
+		hotScore = math.Log10(hotScore+1) * logCompressionFactor
 	}
 
 	return &model.VideoHotScore{
@@ -377,13 +395,13 @@ func (s *VideoHotScoreService) calculateSingleVideoHotScore(
 		CommentCount: int64(video.CommentCount),
 		ShareCount:   int64(video.ShareCount),
 		HotScore:     hotScore,
-		WindowStart:  windowStart,
+		WindowStart:  now.Add(-tw.Duration),
 		WindowEnd:    now,
 		UpdatedAt:    now,
 	}
 }
 
-// calculateBaseScore 计算基础热度分
+// calculateBaseScore computes the weighted sum of all-time interaction counts.
 func (s *VideoHotScoreService) calculateBaseScore(video *VideoDetail) float64 {
 	return float64(video.VisitCount)*s.config.ViewWeight +
 		float64(video.LikesCount)*s.config.LikeWeight +
@@ -392,48 +410,84 @@ func (s *VideoHotScoreService) calculateBaseScore(video *VideoDetail) float64 {
 		float64(video.FavoritesCount)*s.config.FavoriteWeight
 }
 
-// calculateDecayFactor 计算时间衰减因子
-// 使用指数衰减模型: f(t) = e^(-λt), 其中 λ = ln(2) / 半衰期
+// calculateDeltaScore computes the weighted sum of incremental interactions in a time window.
+func (s *VideoHotScoreService) calculateDeltaScore(windowName string, videoId int64, deltas map[string]map[int64]*InteractionDelta) float64 {
+	windowDeltas, ok := deltas[windowName]
+	if !ok {
+		return 0
+	}
+	delta, ok := windowDeltas[videoId]
+	if !ok {
+		return 0
+	}
+	return float64(delta.ViewDelta)*s.config.ViewWeight +
+		float64(delta.LikeDelta)*s.config.LikeWeight +
+		float64(delta.CommentDelta)*s.config.CommentWeight +
+		float64(delta.ShareDelta)*s.config.ShareWeight
+}
+
+// calculateDecayFactor returns the exponential time-decay factor.
+// Formula: f(t) = e^(-λt), λ = ln(2) / half-life. Clamped to minDecayFactor.
 func (s *VideoHotScoreService) calculateDecayFactor(age time.Duration) float64 {
 	if age <= 0 {
 		return 1.0
 	}
 	lambda := math.Log(2) / float64(s.config.DecayHalfLife)
 	factor := math.Exp(-lambda * float64(age))
-	// 最低保留10%的权重
-	if factor < 0.1 {
-		factor = 0.1
+	if factor < minDecayFactor {
+		return minDecayFactor
 	}
 	return factor
 }
 
-// CalculateVideoHotScore 手动计算单个视频热度（实时接口）
+// calculateQualityMultiplier returns the quality bonus multiplier for a video.
+func (s *VideoHotScoreService) calculateQualityMultiplier(videoId int64, featureMap map[int64]*model.VideoFeature) float64 {
+	feature, ok := featureMap[videoId]
+	if !ok {
+		return 1.0
+	}
+
+	multiplier := 1.0
+	if feature.IsHighQuality == 1 {
+		multiplier = s.config.QualityBonus
+	}
+	if feature.FinishRate > finishRateThreshold {
+		multiplier *= (1 + feature.FinishRate*finishRateBonusMul)
+	}
+	return multiplier
+}
+
+// --- Public API ---
+
+// CalculateVideoHotScore recalculates hot scores for a single video (real-time API).
 func (s *VideoHotScoreService) CalculateVideoHotScore(ctx context.Context, videoId int64) error {
 	videos, err := s.getVideoDetails(ctx, []int64{videoId})
-	if err != nil || len(videos) == 0 {
+	if err != nil {
 		return err
+	}
+	if len(videos) == 0 {
+		return fmt.Errorf("video %d not found", videoId)
 	}
 
 	featureMap := s.getVideoFeatureMap(ctx, []int64{videoId})
 	interactionDeltas := s.getInteractionDeltas(ctx, []int64{videoId})
 
 	now := time.Now()
-	var hotScores []*model.VideoHotScore
-
+	hotScores := make([]*model.VideoHotScore, 0, len(s.config.TimeWindows))
 	for _, tw := range s.config.TimeWindows {
-		hotScore := s.calculateSingleVideoHotScore(videos[0], tw, now, featureMap, interactionDeltas)
-		hotScores = append(hotScores, hotScore)
+		hs := s.computeHotScore(videos[0], tw, now, featureMap, interactionDeltas)
+		hotScores = append(hotScores, hs)
 	}
 
 	return db.BatchUpdateVideoHotScores(ctx, hotScores)
 }
 
-// GetTopHotVideos 获取热门视频排行榜
+// GetTopHotVideos returns the top hot video IDs for a given time window.
 func (s *VideoHotScoreService) GetTopHotVideos(ctx context.Context, timeWindow string, limit int) ([]int64, error) {
 	return db.GetHotVideoIds(ctx, timeWindow, limit)
 }
 
-// GetVideoHotRank 获取视频热度排名
+// GetVideoHotRank returns the rank and score of a video in a given time window.
 func (s *VideoHotScoreService) GetVideoHotRank(ctx context.Context, videoId int64, timeWindow string) (int, float64, error) {
 	hotScore, err := db.GetVideoHotScore(ctx, videoId, timeWindow)
 	if err != nil {
@@ -445,74 +499,54 @@ func (s *VideoHotScoreService) GetVideoHotRank(ctx context.Context, videoId int6
 	return hotScore.Rank, hotScore.HotScore, nil
 }
 
-// =====================================================
-// 热度趋势分析
-// =====================================================
+// --- Trending Analysis ---
 
-// HotTrend 热度趋势
-type HotTrend struct {
-	VideoID     int64   `json:"video_id"`
-	CurrentRank int     `json:"current_rank"`
-	TrendScore  float64 `json:"trend_score"`  // 趋势分数 (正数上升，负数下降)
-	TrendType   string  `json:"trend_type"`   // rising/stable/falling/new
-}
-
-// GetTrendingVideos 获取趋势视频（上升最快的视频）
+// GetTrendingVideos returns videos with the fastest-rising hot scores.
 func (s *VideoHotScoreService) GetTrendingVideos(ctx context.Context, limit int) ([]*HotTrend, error) {
-	// 比较 1h 和 24h 的热度变化
-	hotScores1h, err := db.GetHotVideosByWindow(ctx, "1h", 200)
+	hotScores1h, err := db.GetHotVideosByWindow(ctx, "1h", trendQueryLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	hotScores24h, err := db.GetHotVideosByWindow(ctx, "24h", 200)
+	hotScores24h, err := db.GetHotVideosByWindow(ctx, "24h", trendQueryLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	// 构建24h热度映射
-	score24hMap := make(map[int64]float64)
+	score24hMap := make(map[int64]float64, len(hotScores24h))
 	for _, hs := range hotScores24h {
 		score24hMap[hs.VideoID] = hs.HotScore
 	}
 
-	// 计算趋势分数
-	var trends []*HotTrend
+	trends := make([]*HotTrend, 0, len(hotScores1h))
 	for i, hs := range hotScores1h {
 		trend := &HotTrend{
 			VideoID:     hs.VideoID,
 			CurrentRank: i + 1,
 		}
 
-		score24h, exists := score24hMap[hs.VideoID]
-		if !exists || score24h == 0 {
-			// 新晋热门
-			trend.TrendType = "new"
+		prev, exists := score24hMap[hs.VideoID]
+		if !exists || prev == 0 {
+			trend.TrendType = TrendTypeNew
 			trend.TrendScore = hs.HotScore
 		} else {
-			// 计算增长率
-			growthRate := (hs.HotScore - score24h) / score24h * 100
+			growthRate := (hs.HotScore - prev) / prev * 100
 			trend.TrendScore = growthRate
-
-			if growthRate > 20 {
-				trend.TrendType = "rising"
-			} else if growthRate < -20 {
-				trend.TrendType = "falling"
-			} else {
-				trend.TrendType = "stable"
-			}
+			trend.TrendType = classifyTrend(growthRate)
 		}
 
 		trends = append(trends, trend)
 	}
 
-	// 按趋势分数排序
-	sortTrendsByScore(trends)
+	// Sort descending by trend score.
+	sort.Slice(trends, func(i, j int) bool {
+		return trends[i].TrendScore > trends[j].TrendScore
+	})
 
-	// 只返回上升的视频
-	var risingTrends []*HotTrend
+	// Filter to rising/new only.
+	risingTrends := make([]*HotTrend, 0, limit)
 	for _, t := range trends {
-		if t.TrendType == "rising" || t.TrendType == "new" {
+		if t.TrendType == TrendTypeRising || t.TrendType == TrendTypeNew {
 			risingTrends = append(risingTrends, t)
 			if len(risingTrends) >= limit {
 				break
@@ -523,38 +557,29 @@ func (s *VideoHotScoreService) GetTrendingVideos(ctx context.Context, limit int)
 	return risingTrends, nil
 }
 
-// sortTrendsByScore 按趋势分数排序
-func sortTrendsByScore(trends []*HotTrend) {
-	for i := 0; i < len(trends)-1; i++ {
-		for j := i + 1; j < len(trends); j++ {
-			if trends[j].TrendScore > trends[i].TrendScore {
-				trends[i], trends[j] = trends[j], trends[i]
-			}
-		}
+// classifyTrend returns the trend label based on growth rate percentage.
+func classifyTrend(growthRate float64) string {
+	switch {
+	case growthRate > trendRisingPct:
+		return TrendTypeRising
+	case growthRate < trendFallingPct:
+		return TrendTypeFalling
+	default:
+		return TrendTypeStable
 	}
 }
 
-// =====================================================
-// 分类热度统计
-// =====================================================
+// --- Category Stats ---
 
-// CategoryHotStats 分类热度统计
-type CategoryHotStats struct {
-	Category   string  `json:"category"`
-	HotScore   float64 `json:"hot_score"`
-	VideoCount int     `json:"video_count"`
-	TrendScore float64 `json:"trend_score"`
-}
-
-// GetCategoryHotStats 获取分类热度统计
+// GetCategoryHotStats returns hot score statistics grouped by video category.
 func (s *VideoHotScoreService) GetCategoryHotStats(ctx context.Context) ([]*CategoryHotStats, error) {
-	type CategoryStat struct {
+	type categoryStat struct {
 		Category   string  `gorm:"column:category"`
 		TotalScore float64 `gorm:"column:total_score"`
 		VideoCount int     `gorm:"column:video_count"`
 	}
 
-	var stats []CategoryStat
+	var stats []categoryStat
 	err := s.db.WithContext(ctx).
 		Table("video_hot_scores vhs").
 		Select("v.category, SUM(vhs.hot_score) as total_score, COUNT(DISTINCT vhs.video_id) as video_count").
@@ -563,12 +588,11 @@ func (s *VideoHotScoreService) GetCategoryHotStats(ctx context.Context) ([]*Cate
 		Group("v.category").
 		Order("total_score DESC").
 		Find(&stats).Error
-
 	if err != nil {
 		return nil, err
 	}
 
-	var result []*CategoryHotStats
+	result := make([]*CategoryHotStats, 0, len(stats))
 	for _, stat := range stats {
 		result = append(result, &CategoryHotStats{
 			Category:   stat.Category,
@@ -580,91 +604,111 @@ func (s *VideoHotScoreService) GetCategoryHotStats(ctx context.Context) ([]*Cate
 	return result, nil
 }
 
-// =====================================================
-// 实时热度更新接口
-// =====================================================
+// --- Real-time Interaction Update ---
 
-// IncrementVideoInteraction 增量更新视频互动（可用于实时更新）
+// IncrementVideoInteraction updates a video's hot score incrementally upon user interaction.
 func (s *VideoHotScoreService) IncrementVideoInteraction(ctx context.Context, videoId int64, actionType string) error {
-	// 获取当前视频热度
+	weight, err := s.actionWeight(actionType)
+	if err != nil {
+		return err
+	}
+
+	var firstErr error
 	for _, tw := range s.config.TimeWindows {
-		hotScore, err := db.GetVideoHotScore(ctx, videoId, tw.Name)
-		if err != nil {
-			continue
-		}
-
-		if hotScore == nil {
-			// 如果不存在，创建新记录
-			hotScore = &model.VideoHotScore{
-				VideoID:     videoId,
-				TimeWindow:  tw.Name,
-				WindowStart: time.Now().Add(-tw.Duration),
-				WindowEnd:   time.Now(),
-				UpdatedAt:   time.Now(),
+		if updateErr := s.applyInteractionIncrement(ctx, videoId, tw, actionType, weight); updateErr != nil {
+			hlog.Warnf("[HotScoreService] Failed to update hot score for video %d window %s: %v",
+				videoId, tw.Name, updateErr)
+			if firstErr == nil {
+				firstErr = updateErr
 			}
-		}
-
-		// 根据动作类型增加计数
-		var deltaScore float64
-		switch actionType {
-		case "view":
-			hotScore.ViewCount++
-			deltaScore = s.config.ViewWeight
-		case "like":
-			hotScore.LikeCount++
-			deltaScore = s.config.LikeWeight
-		case "comment":
-			hotScore.CommentCount++
-			deltaScore = s.config.CommentWeight
-		case "share":
-			hotScore.ShareCount++
-			deltaScore = s.config.ShareWeight
-		}
-
-		// 更新热度分
-		hotScore.HotScore += deltaScore
-		hotScore.UpdatedAt = time.Now()
-
-		if err := db.CreateOrUpdateVideoHotScore(ctx, hotScore); err != nil {
-			hlog.Warnf("[HotScoreService] Failed to update hot score for video %d: %v", videoId, err)
 		}
 	}
 
-	return nil
+	return firstErr
 }
 
-// =====================================================
-// 定时任务调度器
-// =====================================================
+// actionWeight returns the configured weight for a given action type.
+func (s *VideoHotScoreService) actionWeight(actionType string) (float64, error) {
+	switch actionType {
+	case ActionView:
+		return s.config.ViewWeight, nil
+	case ActionLike:
+		return s.config.LikeWeight, nil
+	case ActionComment:
+		return s.config.CommentWeight, nil
+	case ActionShare:
+		return s.config.ShareWeight, nil
+	default:
+		return 0, fmt.Errorf("unknown action type: %s", actionType)
+	}
+}
 
-// HotScoreScheduler 热度计算调度器
+// applyInteractionIncrement applies a single interaction increment to a hot score record.
+func (s *VideoHotScoreService) applyInteractionIncrement(
+	ctx context.Context,
+	videoId int64,
+	tw TimeWindow,
+	actionType string,
+	weight float64,
+) error {
+	hotScore, err := db.GetVideoHotScore(ctx, videoId, tw.Name)
+	if err != nil {
+		return err
+	}
+
+	if hotScore == nil {
+		hotScore = &model.VideoHotScore{
+			VideoID:     videoId,
+			TimeWindow:  tw.Name,
+			WindowStart: time.Now().Add(-tw.Duration),
+			WindowEnd:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}
+	}
+
+	switch actionType {
+	case ActionView:
+		hotScore.ViewCount++
+	case ActionLike:
+		hotScore.LikeCount++
+	case ActionComment:
+		hotScore.CommentCount++
+	case ActionShare:
+		hotScore.ShareCount++
+	}
+
+	hotScore.HotScore += weight
+	hotScore.UpdatedAt = time.Now()
+
+	return db.CreateOrUpdateVideoHotScore(ctx, hotScore)
+}
+
+// --- Scheduler ---
+
+// HotScoreScheduler manages periodic auxiliary jobs (cleanup, category stats).
+// NOTE: The primary hot_score_calculation is handled by VideoHotScoreService.Start(),
+// so it is NOT registered here to avoid duplicate execution.
 type HotScoreScheduler struct {
 	service *VideoHotScoreService
 	jobs    []*ScheduledJob
 	stopCh  chan struct{}
 }
 
-// ScheduledJob 定时任务
+// ScheduledJob represents a periodic task.
 type ScheduledJob struct {
 	Name     string
 	Interval time.Duration
 	Task     func(ctx context.Context)
 }
 
-// NewHotScoreScheduler 创建调度器
+// NewHotScoreScheduler creates a scheduler with auxiliary jobs only.
 func NewHotScoreScheduler(service *VideoHotScoreService) *HotScoreScheduler {
 	scheduler := &HotScoreScheduler{
 		service: service,
 		stopCh:  make(chan struct{}),
 	}
 
-	// 注册定时任务
 	scheduler.jobs = []*ScheduledJob{
-		{
-			Name:     "hot_score_calculation",
-			Interval: 5 * time.Minute,
-			Task:     service.CalculateAllHotScores,
-		},
 		{
 			Name:     "clean_old_scores",
 			Interval: 24 * time.Hour,
@@ -680,29 +724,27 @@ func NewHotScoreScheduler(service *VideoHotScoreService) *HotScoreScheduler {
 	return scheduler
 }
 
-// Start 启动调度器
+// Start launches all scheduled jobs in separate goroutines.
 func (s *HotScoreScheduler) Start() {
 	hlog.Info("[HotScoreScheduler] Starting scheduler...")
-
 	for _, job := range s.jobs {
 		go s.runJob(job)
 	}
 }
 
-// Stop 停止调度器
+// Stop signals all jobs to stop.
 func (s *HotScoreScheduler) Stop() {
 	close(s.stopCh)
 	hlog.Info("[HotScoreScheduler] Scheduler stopped")
 }
 
-// runJob 运行单个任务
+// runJob executes a job immediately, then on each tick until stopped.
 func (s *HotScoreScheduler) runJob(job *ScheduledJob) {
+	hlog.Infof("[HotScoreScheduler] Running initial job: %s", job.Name)
+	job.Task(context.Background())
+
 	ticker := time.NewTicker(job.Interval)
 	defer ticker.Stop()
-
-	// 先执行一次
-	hlog.Infof("[HotScoreScheduler] Running job: %s", job.Name)
-	job.Task(context.Background())
 
 	for {
 		select {
@@ -715,18 +757,20 @@ func (s *HotScoreScheduler) runJob(job *ScheduledJob) {
 	}
 }
 
-// cleanOldHotScores 清理旧的热度记录
+// cleanOldHotScores removes hot score records older than cleanupRetainDays.
 func (s *HotScoreScheduler) cleanOldHotScores(ctx context.Context) {
-	// 保留最近7天的数据
-	cutoffTime := time.Now().AddDate(0, 0, -7)
-	s.service.db.WithContext(ctx).
-		Where("updated_at < ?", cutoffTime).
+	cutoff := time.Now().AddDate(0, 0, -cleanupRetainDays)
+	result := s.service.db.WithContext(ctx).
+		Where("updated_at < ?", cutoff).
 		Delete(&model.VideoHotScore{})
-
-	hlog.Info("[HotScoreScheduler] Cleaned old hot scores")
+	if result.Error != nil {
+		hlog.Errorf("[HotScoreScheduler] Failed to clean old hot scores: %v", result.Error)
+		return
+	}
+	hlog.Infof("[HotScoreScheduler] Cleaned old hot scores, rows affected: %d", result.RowsAffected)
 }
 
-// updateCategoryStats 更新分类统计
+// updateCategoryStats refreshes category-level aggregated statistics.
 func (s *HotScoreScheduler) updateCategoryStats(ctx context.Context) {
 	stats, err := s.service.GetCategoryHotStats(ctx)
 	if err != nil {
@@ -735,16 +779,25 @@ func (s *HotScoreScheduler) updateCategoryStats(ctx context.Context) {
 	}
 
 	for _, stat := range stats {
-		categoryStats := &model.CategoryVideoStats{
+		catStats := &model.CategoryVideoStats{
 			Category:    stat.Category,
 			TotalVideos: int64(stat.VideoCount),
 			HotScore:    stat.HotScore,
 			UpdatedAt:   time.Now(),
 		}
-		if err := db.UpdateCategoryStats(ctx, categoryStats); err != nil {
-			hlog.Warnf("[HotScoreScheduler] Failed to update category stats for %s: %v", stat.Category, err)
+		if updateErr := db.UpdateCategoryStats(ctx, catStats); updateErr != nil {
+			hlog.Warnf("[HotScoreScheduler] Failed to update category stats for %s: %v",
+				stat.Category, updateErr)
 		}
 	}
 
 	hlog.Infof("[HotScoreScheduler] Updated %d category stats", len(stats))
+}
+
+// min returns the smaller of two ints.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

@@ -223,3 +223,7 @@ func _videoidlistMw() []app.HandlerFunc {
 	// your code...
 	return authfunc.Auth()
 }
+
+func _searchHistoryMw() []app.HandlerFunc {
+	return authfunc.Auth()
+}

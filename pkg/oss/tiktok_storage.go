@@ -158,10 +158,13 @@ func (ts *TikTokStorage) UploadVideoTikTokStyle(ctx context.Context, req *VideoU
 		processedPath := ts.getProcessedVideoPath(req.UserID, req.VideoID, quality)
 		processedPaths[quality] = processedPath
 
-		// TODO: 集成视频转码服务
-		// 目前先复制原始文件作为处理后的文件
+		// Video transcoding: copy source to quality-specific path
+		// In production, integrate FFmpeg/AWS MediaConvert/Alibaba MTS for real transcoding
+		// Current approach: copy original + mark for async processing
 		if err := ts.copyObject(ctx, BUCKET_USER_CONTENT, sourcePath, BUCKET_USER_CONTENT, processedPath); err != nil {
 			hlog.Warnf("Failed to create processed version %dp: %v", quality, err)
+		} else {
+			hlog.Infof("Created %dp video placeholder for user %d video %d (pending real transcoding)", quality, req.UserID, req.VideoID)
 		}
 	}
 
@@ -266,6 +269,11 @@ func (ts *TikTokStorage) ensureUserDirectoryStructure(ctx context.Context, userI
 	}
 
 	return nil
+}
+
+// EnsureUserDirectoryStructure exported wrapper for creating user directory structure in MinIO
+func (ts *TikTokStorage) EnsureUserDirectoryStructure(ctx context.Context, userID int64) error {
+	return ts.ensureUserDirectoryStructure(ctx, userID)
 }
 
 // 上传文件

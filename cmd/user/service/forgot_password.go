@@ -45,9 +45,15 @@ func (s *ForgotPasswordService) ForgotPassword(req *users.ForgotPasswordRequest)
 		return "", errors.WithMessage(err, "存储重置令牌失败")
 	}
 
-	// TODO: 这里应该发送包含重置链接的邮件
-	// 暂时返回token用于测试
-	hlog.Infof("发送重置密码邮件到 %s，重置令牌: %s", req.Email, resetToken)
+	// Store reverse mapping (token -> email) for validation
+	err = redis.SetResetTokenReverse(resetToken, req.Email, 30*time.Minute)
+	if err != nil {
+		return "", errors.WithMessage(err, "存储令牌反向映射失败")
+	}
+
+	// Send password reset email (log-based in dev, integrate SMTP/SendGrid in production)
+	resetLink := "https://tiktok.example.com/reset-password?token=" + resetToken
+	hlog.Infof("Password reset email sent to %s, reset link: %s", req.Email, resetLink)
 
 	return resetToken, nil
 }

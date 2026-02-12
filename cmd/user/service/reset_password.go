@@ -57,11 +57,20 @@ func (s *ResetPasswordService) ResetPassword(req *users.ResetPasswordRequest) er
 
 // validateResetToken 验证重置令牌并返回对应的邮箱
 func (s *ResetPasswordService) validateResetToken(token string) (string, error) {
-	// 这里需要反向查找令牌对应的邮箱
-	// 由于Redis的限制，我们需要一种方式来存储令牌到邮箱的映射
-	// 暂时通过简单的方式实现，生产环境应该使用更安全的方法
+	// Lookup email from reverse mapping (token -> email)
+	email, err := redis.GetResetTokenReverse(token)
+	if err != nil {
+		return "", errors.New("重置令牌无效或已过期")
+	}
 
-	// TODO: 实际实现中应该在设置令牌时同时设置反向映射
-	// 这里暂时返回错误，需要在实际使用时完善
-	return "", errors.New("令牌验证功能待完善")
+	// Double-check: verify forward mapping (email -> token) matches
+	storedToken, err := redis.GetResetToken(email)
+	if err != nil || storedToken != token {
+		return "", errors.New("重置令牌不匹配或已过期")
+	}
+
+	// Clean up reverse mapping after successful validation
+	_ = redis.DelResetTokenReverse(token)
+
+	return email, nil
 }

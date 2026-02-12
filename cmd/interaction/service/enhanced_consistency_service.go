@@ -14,7 +14,17 @@ import (
 	"gorm.io/gorm"
 )
 
-// EnhancedConsistencyService 增强的数据一致性服务
+// Consistency service configuration constants.
+const (
+	defaultConsistencyInterval = 5 * time.Minute
+	defaultConsistencyBatch    = 100
+	defaultConsistencyRetries  = 3
+	maxInconsistencyLogSize    = 1000
+	inconsistencyLogTrimSize   = 500
+)
+
+// EnhancedConsistencyService periodically checks and fixes data consistency
+// between Redis cache and the database.
 type EnhancedConsistencyService struct {
 	db           *gorm.DB
 	cacheManager *redis.LikeCacheManager
@@ -23,26 +33,25 @@ type EnhancedConsistencyService struct {
 	cancel       context.CancelFunc
 	mu           sync.RWMutex
 
-	// 配置参数
 	checkInterval    time.Duration
 	batchSize        int
 	maxRetries       int
 	inconsistencyLog []InconsistencyRecord
 }
 
-// InconsistencyRecord 不一致记录
+// InconsistencyRecord records a detected cache-DB inconsistency.
 type InconsistencyRecord struct {
-	ResourceType  string     `json:"resource_type"` // video, comment
+	ResourceType  string     `json:"resource_type"` // "video" or "comment"
 	ResourceID    int64      `json:"resource_id"`
 	CacheValue    int64      `json:"cache_value"`
 	DatabaseValue int64      `json:"database_value"`
 	Difference    int64      `json:"difference"`
 	DetectedAt    time.Time  `json:"detected_at"`
 	FixedAt       *time.Time `json:"fixed_at,omitempty"`
-	Status        string     `json:"status"` // detected, fixing, fixed, failed
+	Status        string     `json:"status"` // detected / fixing / fixed / failed
 }
 
-// ConsistencyReport 一致性报告
+// ConsistencyReport summarizes a single consistency check run.
 type ConsistencyReport struct {
 	CheckTime         time.Time             `json:"check_time"`
 	TotalChecked      int                   `json:"total_checked"`
@@ -53,92 +62,84 @@ type ConsistencyReport struct {
 	Details           []InconsistencyRecord `json:"details"`
 }
 
-// NewEnhancedConsistencyService 创建增强的一致性服务
+// NewEnhancedConsistencyService creates a new consistency service.
 func NewEnhancedConsistencyService(db *gorm.DB, cacheManager *redis.LikeCacheManager, producer mq.MessageProducer) *EnhancedConsistencyService {
 	ctx, cancel := context.WithCancel(context.Background())
-
 	return &EnhancedConsistencyService{
 		db:               db,
 		cacheManager:     cacheManager,
 		producer:         producer,
 		ctx:              ctx,
 		cancel:           cancel,
-		checkInterval:    5 * time.Minute, // 每5分钟检查一次
-		batchSize:        100,             // 每批处理100条记录
-		maxRetries:       3,               // 最大重试3次
+		checkInterval:    defaultConsistencyInterval,
+		batchSize:        defaultConsistencyBatch,
+		maxRetries:       defaultConsistencyRetries,
 		inconsistencyLog: make([]InconsistencyRecord, 0),
 	}
 }
 
-// Start 启动一致性检查服务
-func (ecs *EnhancedConsistencyService) Start() {
-	hlog.Info("Enhanced consistency service started")
+// Start launches the periodic consistency checker.
+func (s *EnhancedConsistencyService) Start() {
+	hlog.Info("[ConsistencyService] Started")
 
-	ticker := time.NewTicker(ecs.checkInterval)
+	ticker := time.NewTicker(s.checkInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ecs.ctx.Done():
-			hlog.Info("Enhanced consistency service stopped")
+		case <-s.ctx.Done():
+			hlog.Info("[ConsistencyService] Stopped")
 			return
 		case <-ticker.C:
-			if err := ecs.performConsistencyCheck(); err != nil {
-				hlog.Errorf("Consistency check failed: %v", err)
+			if err := s.runCheck(); err != nil {
+				hlog.Errorf("[ConsistencyService] Check failed: %v", err)
 			}
 		}
 	}
 }
 
-// Stop 停止一致性检查服务
-func (ecs *EnhancedConsistencyService) Stop() {
-	ecs.cancel()
+// Stop stops the consistency service.
+func (s *EnhancedConsistencyService) Stop() {
+	s.cancel()
 }
 
-// performConsistencyCheck 执行一致性检查
-func (ecs *EnhancedConsistencyService) performConsistencyCheck() error {
-	hlog.Info("Starting consistency check...")
+// runCheck performs a full consistency check across videos and comments.
+func (s *EnhancedConsistencyService) runCheck() error {
+	hlog.Info("[ConsistencyService] Starting check...")
 
 	report := &ConsistencyReport{
 		CheckTime: time.Now(),
 		Details:   make([]InconsistencyRecord, 0),
 	}
 
-	// 检查视频点赞数一致性
-	if err := ecs.checkVideoLikeConsistency(report); err != nil {
-		hlog.Errorf("Video like consistency check failed: %v", err)
+	if err := s.checkVideoLikes(report); err != nil {
+		hlog.Errorf("[ConsistencyService] Video like check failed: %v", err)
+	}
+	if err := s.checkCommentLikes(report); err != nil {
+		hlog.Errorf("[ConsistencyService] Comment like check failed: %v", err)
 	}
 
-	// 检查评论点赞数一致性
-	if err := ecs.checkCommentLikeConsistency(report); err != nil {
-		hlog.Errorf("Comment like consistency check failed: %v", err)
-	}
-
-	// 计算统计信息
 	report.InconsistentCount = len(report.Details)
 	if report.TotalChecked > 0 {
 		report.InconsistencyRate = float64(report.InconsistentCount) / float64(report.TotalChecked)
 	}
 
-	// 记录报告
-	ecs.logConsistencyReport(report)
+	s.logReport(report)
 
-	hlog.Infof("Consistency check completed: checked=%d, inconsistent=%d, rate=%.2f%%",
+	hlog.Infof("[ConsistencyService] Check completed: checked=%d, inconsistent=%d, rate=%.2f%%",
 		report.TotalChecked, report.InconsistentCount, report.InconsistencyRate*100)
 
 	return nil
 }
 
-// checkVideoLikeConsistency 检查视频点赞数一致性
-func (ecs *EnhancedConsistencyService) checkVideoLikeConsistency(report *ConsistencyReport) error {
-	// 分批获取视频数据
+// checkVideoLikes checks like-count consistency for videos in batches.
+func (s *EnhancedConsistencyService) checkVideoLikes(report *ConsistencyReport) error {
 	offset := 0
 	for {
 		var videos []model.Video
-		if err := ecs.db.Offset(offset).Limit(ecs.batchSize).Find(&videos).Error; err != nil {
+		if err := s.db.Offset(offset).Limit(s.batchSize).Find(&videos).Error; err != nil {
 			return fmt.Errorf("failed to fetch videos: %w", err)
 		}
-
 		if len(videos) == 0 {
 			break
 		}
@@ -146,60 +147,56 @@ func (ecs *EnhancedConsistencyService) checkVideoLikeConsistency(report *Consist
 		for _, video := range videos {
 			report.TotalChecked++
 
-			// 获取缓存中的点赞数
-			cacheCount, err := ecs.cacheManager.GetVideoLikeCount(ecs.ctx, video.VideoId)
+			cacheCount, err := s.cacheManager.GetVideoLikeCount(s.ctx, video.VideoId)
 			if err != nil {
 				hlog.Warnf("Failed to get cache count for video %d: %v", video.VideoId, err)
 				continue
 			}
 
-			// 比较数据库和缓存的值
-			if int64(cacheCount) != int64(video.LikesCount) {
-				record := InconsistencyRecord{
-					ResourceType:  "video",
-					ResourceID:    video.VideoId,
-					CacheValue:    cacheCount,
-					DatabaseValue: int64(video.LikesCount),
-					Difference:    cacheCount - int64(video.LikesCount),
-					DetectedAt:    time.Now(),
-					Status:        "detected",
-				}
-
-				report.Details = append(report.Details, record)
-
-				// 尝试修复不一致
-				if err := ecs.fixVideoLikeInconsistency(video.VideoId, cacheCount, int64(video.LikesCount)); err != nil {
-					hlog.Errorf("Failed to fix video %d inconsistency: %v", video.VideoId, err)
-					record.Status = "failed"
-					report.FailedCount++
-				} else {
-					record.Status = "fixed"
-					now := time.Now()
-					record.FixedAt = &now
-					report.FixedCount++
-				}
-
-				// 记录不一致
-				ecs.recordInconsistency(record)
+			dbCount := int64(video.LikesCount)
+			if cacheCount == dbCount {
+				continue
 			}
+
+			record := InconsistencyRecord{
+				ResourceType:  "video",
+				ResourceID:    video.VideoId,
+				CacheValue:    cacheCount,
+				DatabaseValue: dbCount,
+				Difference:    cacheCount - dbCount,
+				DetectedAt:    time.Now(),
+				Status:        "detected",
+			}
+
+			if err := s.fixVideoLike(video.VideoId, cacheCount); err != nil {
+				hlog.Errorf("Failed to fix video %d: %v", video.VideoId, err)
+				record.Status = "failed"
+				report.FailedCount++
+			} else {
+				now := time.Now()
+				record.Status = "fixed"
+				record.FixedAt = &now
+				report.FixedCount++
+			}
+
+			report.Details = append(report.Details, record)
+			s.recordInconsistency(record)
 		}
 
-		offset += ecs.batchSize
+		offset += s.batchSize
 	}
 
 	return nil
 }
 
-// checkCommentLikeConsistency 检查评论点赞数一致性
-func (ecs *EnhancedConsistencyService) checkCommentLikeConsistency(report *ConsistencyReport) error {
-	// 分批获取评论数据
+// checkCommentLikes checks like-count consistency for comments in batches.
+func (s *EnhancedConsistencyService) checkCommentLikes(report *ConsistencyReport) error {
 	offset := 0
 	for {
 		var comments []model.Comment
-		if err := ecs.db.Offset(offset).Limit(ecs.batchSize).Find(&comments).Error; err != nil {
+		if err := s.db.Offset(offset).Limit(s.batchSize).Find(&comments).Error; err != nil {
 			return fmt.Errorf("failed to fetch comments: %w", err)
 		}
-
 		if len(comments) == 0 {
 			break
 		}
@@ -207,138 +204,113 @@ func (ecs *EnhancedConsistencyService) checkCommentLikeConsistency(report *Consi
 		for _, comment := range comments {
 			report.TotalChecked++
 
-			// 获取缓存中的点赞数
-			cacheCount, err := ecs.cacheManager.GetCommentLikeCount(ecs.ctx, comment.CommentId)
+			cacheCount, err := s.cacheManager.GetCommentLikeCount(s.ctx, comment.CommentId)
 			if err != nil {
 				hlog.Warnf("Failed to get cache count for comment %d: %v", comment.CommentId, err)
 				continue
 			}
 
-			// 比较数据库和缓存的值
-			if cacheCount != comment.LikeCount {
-				record := InconsistencyRecord{
-					ResourceType:  "comment",
-					ResourceID:    comment.CommentId,
-					CacheValue:    cacheCount,
-					DatabaseValue: comment.LikeCount,
-					Difference:    cacheCount - comment.LikeCount,
-					DetectedAt:    time.Now(),
-					Status:        "detected",
-				}
-
-				report.Details = append(report.Details, record)
-
-				// 尝试修复不一致
-				if err := ecs.fixCommentLikeInconsistency(comment.CommentId, cacheCount, comment.LikeCount); err != nil {
-					hlog.Errorf("Failed to fix comment %d inconsistency: %v", comment.CommentId, err)
-					record.Status = "failed"
-					report.FailedCount++
-				} else {
-					record.Status = "fixed"
-					now := time.Now()
-					record.FixedAt = &now
-					report.FixedCount++
-				}
-
-				// 记录不一致
-				ecs.recordInconsistency(record)
+			if cacheCount == comment.LikeCount {
+				continue
 			}
+
+			record := InconsistencyRecord{
+				ResourceType:  "comment",
+				ResourceID:    comment.CommentId,
+				CacheValue:    cacheCount,
+				DatabaseValue: comment.LikeCount,
+				Difference:    cacheCount - comment.LikeCount,
+				DetectedAt:    time.Now(),
+				Status:        "detected",
+			}
+
+			if err := s.fixCommentLike(comment.CommentId, cacheCount); err != nil {
+				hlog.Errorf("Failed to fix comment %d: %v", comment.CommentId, err)
+				record.Status = "failed"
+				report.FailedCount++
+			} else {
+				now := time.Now()
+				record.Status = "fixed"
+				record.FixedAt = &now
+				report.FixedCount++
+			}
+
+			report.Details = append(report.Details, record)
+			s.recordInconsistency(record)
 		}
 
-		offset += ecs.batchSize
+		offset += s.batchSize
 	}
 
 	return nil
 }
 
-// fixVideoLikeInconsistency 修复视频点赞数不一致
-func (ecs *EnhancedConsistencyService) fixVideoLikeInconsistency(videoID, cacheCount, dbCount int64) error {
-	// 策略：以缓存为准更新数据库（因为缓存是实时更新的）
-	if err := ecs.db.Model(&model.Video{}).
+// fixVideoLike updates a video's DB like count to match the cache value.
+func (s *EnhancedConsistencyService) fixVideoLike(videoID, cacheCount int64) error {
+	return s.db.Model(&model.Video{}).
 		Where("video_id = ?", videoID).
-		Update("like_count", cacheCount).Error; err != nil {
-		return fmt.Errorf("failed to update video like count: %w", err)
-	}
-
-	hlog.Infof("Fixed video %d like count: %d -> %d", videoID, dbCount, cacheCount)
-	return nil
+		Update("like_count", cacheCount).Error
 }
 
-// fixCommentLikeInconsistency 修复评论点赞数不一致
-func (ecs *EnhancedConsistencyService) fixCommentLikeInconsistency(commentID, cacheCount, dbCount int64) error {
-	// 策略：以缓存为准更新数据库（因为缓存是实时更新的）
-	if err := ecs.db.Model(&model.Comment{}).
+// fixCommentLike updates a comment's DB like count to match the cache value.
+func (s *EnhancedConsistencyService) fixCommentLike(commentID, cacheCount int64) error {
+	return s.db.Model(&model.Comment{}).
 		Where("comment_id = ?", commentID).
-		Update("like_count", cacheCount).Error; err != nil {
-		return fmt.Errorf("failed to update comment like count: %w", err)
-	}
-
-	hlog.Infof("Fixed comment %d like count: %d -> %d", commentID, dbCount, cacheCount)
-	return nil
+		Update("like_count", cacheCount).Error
 }
 
-// recordInconsistency 记录不一致情况
-func (ecs *EnhancedConsistencyService) recordInconsistency(record InconsistencyRecord) {
-	ecs.mu.Lock()
-	defer ecs.mu.Unlock()
+// recordInconsistency appends a record to the in-memory log, trimming if necessary.
+func (s *EnhancedConsistencyService) recordInconsistency(record InconsistencyRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	ecs.inconsistencyLog = append(ecs.inconsistencyLog, record)
-
-	// 保持日志大小在合理范围内
-	if len(ecs.inconsistencyLog) > 1000 {
-		ecs.inconsistencyLog = ecs.inconsistencyLog[len(ecs.inconsistencyLog)-500:]
+	s.inconsistencyLog = append(s.inconsistencyLog, record)
+	if len(s.inconsistencyLog) > maxInconsistencyLogSize {
+		s.inconsistencyLog = s.inconsistencyLog[len(s.inconsistencyLog)-inconsistencyLogTrimSize:]
 	}
 }
 
-// logConsistencyReport 记录一致性报告
-func (ecs *EnhancedConsistencyService) logConsistencyReport(report *ConsistencyReport) {
-	hlog.Infof("=== Consistency Report ===")
-	hlog.Infof("Check Time: %s", report.CheckTime.Format("2006-01-02 15:04:05"))
-	hlog.Infof("Total Checked: %d", report.TotalChecked)
-	hlog.Infof("Inconsistent Count: %d", report.InconsistentCount)
-	hlog.Infof("Fixed Count: %d", report.FixedCount)
-	hlog.Infof("Failed Count: %d", report.FailedCount)
-	hlog.Infof("Inconsistency Rate: %.2f%%", report.InconsistencyRate*100)
+// logReport logs a consistency report summary.
+func (s *EnhancedConsistencyService) logReport(report *ConsistencyReport) {
+	hlog.Infof("[ConsistencyReport] Time=%s Checked=%d Inconsistent=%d Fixed=%d Failed=%d Rate=%.2f%%",
+		report.CheckTime.Format("2006-01-02 15:04:05"),
+		report.TotalChecked, report.InconsistentCount,
+		report.FixedCount, report.FailedCount,
+		report.InconsistencyRate*100)
 
-	if len(report.Details) > 0 {
-		hlog.Infof("=== Inconsistency Details ===")
-		for _, detail := range report.Details {
-			hlog.Infof("%s %d: cache=%d, db=%d, diff=%d, status=%s",
-				detail.ResourceType, detail.ResourceID,
-				detail.CacheValue, detail.DatabaseValue,
-				detail.Difference, detail.Status)
-		}
+	for _, d := range report.Details {
+		hlog.Infof("[ConsistencyReport] %s %d: cache=%d db=%d diff=%d status=%s",
+			d.ResourceType, d.ResourceID, d.CacheValue, d.DatabaseValue, d.Difference, d.Status)
 	}
 }
 
-// GetConsistencyReport 获取一致性报告
-func (ecs *EnhancedConsistencyService) GetConsistencyReport() []InconsistencyRecord {
-	ecs.mu.RLock()
-	defer ecs.mu.RUnlock()
+// GetConsistencyReport returns a copy of the inconsistency log.
+func (s *EnhancedConsistencyService) GetConsistencyReport() []InconsistencyRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	// 返回副本
-	result := make([]InconsistencyRecord, len(ecs.inconsistencyLog))
-	copy(result, ecs.inconsistencyLog)
+	result := make([]InconsistencyRecord, len(s.inconsistencyLog))
+	copy(result, s.inconsistencyLog)
 	return result
 }
 
-// HealthCheck 健康检查
-func (ecs *EnhancedConsistencyService) HealthCheck() map[string]interface{} {
-	ecs.mu.RLock()
-	defer ecs.mu.RUnlock()
+// HealthCheck returns the service health status.
+func (s *EnhancedConsistencyService) HealthCheck() map[string]interface{} {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 
-	recentInconsistencies := 0
-	for _, record := range ecs.inconsistencyLog {
-		if time.Since(record.DetectedAt) < time.Hour {
-			recentInconsistencies++
+	recentCount := 0
+	for _, r := range s.inconsistencyLog {
+		if time.Since(r.DetectedAt) < time.Hour {
+			recentCount++
 		}
 	}
 
 	return map[string]interface{}{
 		"service_status":         "running",
-		"check_interval":         ecs.checkInterval.String(),
-		"total_inconsistencies":  len(ecs.inconsistencyLog),
-		"recent_inconsistencies": recentInconsistencies,
+		"check_interval":         s.checkInterval.String(),
+		"total_inconsistencies":  len(s.inconsistencyLog),
+		"recent_inconsistencies": recentCount,
 		"last_check":             time.Now().Format("2006-01-02 15:04:05"),
 	}
 }

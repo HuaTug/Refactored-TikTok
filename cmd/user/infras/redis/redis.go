@@ -65,3 +65,30 @@ func DelResetToken(email string) error {
 	key := "reset_token:" + email
 	return DeleteKey(key)
 }
+
+// SetResetTokenReverse stores reverse mapping (token -> email) for token validation
+func SetResetTokenReverse(token, email string, expiration time.Duration) error {
+	key := "reset_token_reverse:" + token
+	if err := redisDB.Set(key, email, expiration).Err(); err != nil {
+		hlog.Info("Redis set reverse token mapping failed : ", err)
+		return err
+	}
+	return nil
+}
+
+// GetResetTokenReverse retrieves email by reset token (reverse lookup)
+func GetResetTokenReverse(token string) (string, error) {
+	key := "reset_token_reverse:" + token
+	email, err := redisDB.Get(key).Result()
+	if err != nil {
+		hlog.Info("Redis get reverse token mapping failed : ", err)
+		return "", err
+	}
+	return email, nil
+}
+
+// DelResetTokenReverse deletes the reverse token mapping
+func DelResetTokenReverse(token string) error {
+	key := "reset_token_reverse:" + token
+	return DeleteKey(key)
+}

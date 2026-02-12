@@ -299,10 +299,41 @@ func (s *VideoServiceImpl) GetVideoVisitCountV2(ctx context.Context, req *videos
 }
 
 func (s *VideoServiceImpl) VideoDeleteV2(ctx context.Context, req *videos.VideoDeleteRequestV2) (resp *videos.VideoDeleteResponseV2, err error) {
+	resp = new(videos.VideoDeleteResponseV2)
+	resp.Base = &base.Status{}
+
+	deleteService := service.NewVideoDeleteService(ctx)
+	result, err := deleteService.DeleteVideo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.DeleteVideo failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to delete video: " + err.Error()
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully deleted video"
+	resp.StorageRecoveredBytes = result.StorageRecoveredBytes
+	resp.UpdatedQuota = result.UpdatedQuota
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) VideoIdList(ctx context.Context, req *videos.VideoFeedListRequestV2) (resp *videos.VideoFeedListResponseV2, err error) {
+	resp = new(videos.VideoFeedListResponseV2)
+	resp.Base = &base.Status{}
+
+	video, count, err := service.NewVideoListService(ctx).VideoList(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.VideoIdList failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get video id list"
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Get video id list success"
+	resp.VideoList = video
+	resp.Total = count
 	return resp, nil
 }
 
@@ -323,22 +354,66 @@ func (s *VideoServiceImpl) VideoInfoV2(ctx context.Context, req *videos.VideoInf
 }
 
 func (s *VideoServiceImpl) UpdateVisitCountV2(ctx context.Context, req *videos.UpdateVisitCountRequestV2) (resp *videos.UpdateVisitCountResponseV2, err error) {
+	resp = new(videos.UpdateVisitCountResponseV2)
+	resp.Base = &base.Status{}
+
+	countService := service.NewUpdateCountService(ctx)
+	result, err := countService.UpdateVisitCount(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.UpdateVisitCount failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to update visit count"
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully updated visit count"
+	resp.NewTotalCount_ = result.NewTotalCount_
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) UpdateVideoCommentCountV2(ctx context.Context, req *videos.UpdateVideoCommentCountRequestV2) (resp *videos.UpdateVideoCommentCountResponseV2, err error) {
+	resp = new(videos.UpdateVideoCommentCountResponseV2)
+	resp.Base = &base.Status{}
+
+	countService := service.NewUpdateCountService(ctx)
+	result, err := countService.UpdateCommentCount(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.UpdateCommentCount failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to update comment count"
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully updated comment count"
+	resp.NewTotalCount_ = result.NewTotalCount_
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) UpdateVideoLikeCountV2(ctx context.Context, req *videos.UpdateLikeCountRequestV2) (resp *videos.UpdateLikeCountResponseV2, err error) {
+	resp = new(videos.UpdateLikeCountResponseV2)
+	resp.Base = &base.Status{}
+
+	countService := service.NewUpdateCountService(ctx)
+	result, err := countService.UpdateLikeCount(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.UpdateLikeCount failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to update like count"
+		return resp, err
+	}
+
+	resp.Base.Code = consts.StatusOK
+	resp.Base.Msg = "Successfully updated like count"
+	resp.NewTotalCount_ = result.NewTotalCount_
 	return resp, nil
 }
 
 func (s *VideoServiceImpl) GetFavoriteVideoList(ctx context.Context, req *videos.GetFavoriteVideoListRequestV2) (resp *videos.GetFavoriteVideoListResponseV2, err error) {
 	resp = new(videos.GetFavoriteVideoListResponseV2)
 	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
+
 	var videos []*base.Video
 	videos, err = service.NewVideoFavoritesService(ctx).GetFavoriteVideoList(req)
 	if err != nil {
@@ -419,13 +494,14 @@ func (s *VideoServiceImpl) SharedVideoV2(ctx context.Context, req *videos.Shared
 	resp = new(videos.SharedVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement shared video logic
-	// err = service.NewVideoShareService(ctx).ShareVideo(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to share video"
-	// 	return resp, err
-	// }
+	shareService := service.NewSharedVideoService(ctx)
+	err = shareService.SharedVideo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.SharedVideo failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to share video: " + err.Error()
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully shared video"
@@ -437,15 +513,17 @@ func (s *VideoServiceImpl) RecommendVideoV2(ctx context.Context, req *videos.Rec
 	resp = new(videos.RecommendVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement video recommendation logic
-	// videos, err := service.NewVideoRecommendService(ctx).GetRecommendedVideos(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to get recommended videos"
-	// 	return resp, err
-	// }
+	recommendService := service.NewRecommendVideoService(ctx)
+	videoList, err := recommendService.RecommendVideo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.RecommendVideo failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get recommended videos: " + err.Error()
+		return resp, err
+	}
 
-	// resp.RecommendedVideos = videos
+	resp.VideoList = videoList
+	resp.AlgorithmUsed = req.AlgorithmType
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved recommended videos"
 	return resp, nil
@@ -456,16 +534,20 @@ func (s *VideoServiceImpl) ManageVideoHeatV2(ctx context.Context, req *videos.Vi
 	resp = new(videos.VideoHeatManagementResponse)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement video heat management logic
-	// err = service.NewVideoHeatService(ctx).ManageVideoHeat(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to manage video heat"
-	// 	return resp, err
-	// }
+	heatService := service.NewVideoHeatService(ctx)
+	result, err := heatService.ManageVideoHeat(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.ManageVideoHeat failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to manage video heat: " + err.Error()
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully managed video heat"
+	resp.OldTier = result.OldTier
+	resp.NewTier_ = result.NewTier_
+	resp.OperationCostBytes = result.OperationCostBytes
 	return resp, nil
 }
 
@@ -474,16 +556,20 @@ func (s *VideoServiceImpl) ManageUserQuotaV2(ctx context.Context, req *videos.Us
 	resp = new(videos.UserQuotaManagementResponse)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement user quota management logic
-	// err = service.NewUserQuotaService(ctx).ManageUserQuota(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to manage user quota"
-	// 	return resp, err
-	// }
+	quotaService := service.NewUserQuotaService(ctx)
+	result, err := quotaService.ManageUserQuota(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.ManageUserQuota failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to manage user quota: " + err.Error()
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully managed user quota"
+	resp.CurrentQuota = result.CurrentQuota
+	resp.QuotaWarnings = result.QuotaWarnings
+	resp.QuotaExceeded = result.QuotaExceeded
 	return resp, nil
 }
 
@@ -492,16 +578,20 @@ func (s *VideoServiceImpl) BatchOperateVideosV2(ctx context.Context, req *videos
 	resp = new(videos.BatchVideoOperationResponse)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement batch video operations logic
-	// err = service.NewVideoBatchService(ctx).BatchOperateVideos(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to perform batch video operations"
-	// 	return resp, err
-	// }
+	batchService := service.NewVideoBatchService(ctx)
+	result, err := batchService.BatchOperateVideos(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.BatchOperateVideos failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to perform batch video operations: " + err.Error()
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully performed batch video operations"
+	resp.SuccessVideoIds = result.SuccessVideoIds
+	resp.FailedVideoErrors = result.FailedVideoErrors
+	resp.UpdatedQuota = result.UpdatedQuota
 	return resp, nil
 }
 
@@ -568,17 +658,20 @@ func (s *VideoServiceImpl) StreamVideoV2(ctx context.Context, req *videos.Stream
 	resp = new(videos.StreamVideoResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement stream video logic
-	// streamInfo, err := service.NewVideoStreamService(ctx).GetStreamInfo(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to get stream video info"
-	// 	return resp, err
-	// }
+	streamService := service.NewVideoStreamServiceV2(ctx)
+	result, err := streamService.GetStreamInfo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.StreamVideoV2 failed, original error: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get stream video info: " + err.Error()
+		return resp, err
+	}
 
-	// resp.StreamUrl = streamInfo.StreamUrl
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved stream video info"
+	resp.StreamUrl = result.StreamUrl
+	resp.StreamMetadata = result.StreamMetadata
+	resp.ExpiresAt = result.ExpiresAt
 	return resp, nil
 }
 
@@ -587,17 +680,26 @@ func (s *VideoServiceImpl) GetUploadProgressV2(ctx context.Context, req *videos.
 	resp = new(videos.VideoPublishProgressResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement get upload progress logic
-	// progress, err := service.NewVideoPublishService(ctx).GetUploadProgress(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to get upload progress"
-	// 	return resp, err
-	// }
+	uploadService := service.NewVideoUploadServiceV2(ctx)
+	progress, err := uploadService.GetUploadProgress(req.UploadSessionUuid, req.UserId)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetUploadProgress failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get upload progress: " + err.Error()
+		return resp, err
+	}
 
-	// resp.UploadProgress = progress
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved upload progress"
+	resp.SessionStatus = progress.Status
+	resp.TotalChunks = int32(progress.TotalChunks)
+	resp.UploadedChunks = int32(progress.UploadedChunks)
+	resp.UploadProgressPercent = progress.ProgressPercent
+	if progress.Status == "completed" {
+		resp.CurrentStage = "completed"
+	} else {
+		resp.CurrentStage = "uploading"
+	}
 	return resp, nil
 }
 
@@ -606,16 +708,34 @@ func (s *VideoServiceImpl) ResumeUploadV2(ctx context.Context, req *videos.Video
 	resp = new(videos.VideoPublishResumeResponseV2)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement resume upload logic
-	// err = service.NewVideoPublishService(ctx).ResumeUpload(req)
-	// if err != nil {
-	// 	resp.Base.Code = errno.ServiceErrCode
-	// 	resp.Base.Msg = "Failed to resume upload"
-	// 	return resp, err
-	// }
+	uploadService := service.NewVideoUploadServiceV2(ctx)
+	progress, err := uploadService.GetUploadProgress(req.UploadSessionUuid, req.UserId)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.ResumeUpload failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to resume upload: " + err.Error()
+		resp.CanResume = false
+		return resp, err
+	}
+
+	// Determine missing chunks
+	missingChunks := make([]int32, 0)
+	for i := int32(1); i <= int32(progress.TotalChunks); i++ {
+		if i > int32(progress.UploadedChunks) {
+			missingChunks = append(missingChunks, i)
+		}
+	}
 
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Successfully resumed upload"
+	resp.Base.Msg = "Successfully retrieved resume info"
+	resp.LastUploadedChunk = int32(progress.UploadedChunks)
+	resp.MissingChunks = missingChunks
+	resp.CanResume = progress.Status != "completed" && progress.Status != "failed"
+	if resp.CanResume {
+		resp.ResumeStrategy = "continue_from_missing"
+	} else {
+		resp.ResumeStrategy = "restart"
+	}
 	return resp, nil
 }
 
@@ -624,10 +744,21 @@ func (s *VideoServiceImpl) GetVideoAnalyticsV2(ctx context.Context, req *videos.
 	resp = new(videos.VideoAnalyticsResponse)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement video analytics logic
-	// For now, return success with empty response
+	analyticsService := service.NewVideoAnalyticsService(ctx)
+	result, err := analyticsService.GetVideoAnalytics(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.GetVideoAnalytics failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to get video analytics: " + err.Error()
+		return resp, err
+	}
+
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved video analytics"
+	resp.VideoMetrics = result.VideoMetrics
+	resp.TotalMetrics = result.TotalMetrics
+	resp.TopPerformingVideos = result.TopPerformingVideos
+	resp.ReportGeneratedAt = result.ReportGeneratedAt
 	return resp, nil
 }
 
@@ -636,10 +767,22 @@ func (s *VideoServiceImpl) TranscodeVideoV2(ctx context.Context, req *videos.Vid
 	resp = new(videos.VideoTranscodingResponse)
 	resp.Base = &base.Status{}
 
-	// TODO: Implement video transcoding logic
-	// For now, return success with empty response
+	transcodeService := service.NewVideoTranscodeService(ctx)
+	result, err := transcodeService.TranscodeVideo(req)
+	if err != nil {
+		hlog.CtxErrorf(ctx, "service.TranscodeVideo failed: %v", errors.Cause(err))
+		resp.Base.Code = errno.ServiceErrCode
+		resp.Base.Msg = "Failed to submit transcoding request: " + err.Error()
+		return resp, err
+	}
+
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully submitted video transcoding request"
+	resp.TranscodingJobId = result.TranscodingJobId
+	resp.JobStatus = result.JobStatus
+	resp.TranscodedUrls = result.TranscodedUrls
+	resp.ThumbnailUrls = result.ThumbnailUrls
+	resp.EstimatedCompletionTime = result.EstimatedCompletionTime
 	return resp, nil
 }
 

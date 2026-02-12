@@ -3,6 +3,7 @@
 package router
 
 import (
+	"HuaTug.com/cmd/api/router/ai"
 	"HuaTug.com/cmd/api/router/interactions"
 	"HuaTug.com/cmd/api/router/relations"
 	"HuaTug.com/cmd/api/router/users"
@@ -22,5 +23,7 @@ func GeneratedRegister(r *server.Hertz) {
 	relations.Register(r)
 
 	interactions.Register(r)
+
+	ai.Register(r)
 
 }

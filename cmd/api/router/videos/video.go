@@ -101,8 +101,8 @@ func Register(r *server.Hertz) {
 			_favorite.DELETE("/video/delete", append(_deleteVideoFromFavoriteMv(), videos.DeleteVideoFromFavorite)...)
 			_favorite.POST("/batch_status", append(_getFavoriteListMv(), videos.BatchFavoriteStatus)...)
 			_favorite.POST("/sync_count", append(_createFavoriteMv(), videos.SyncFavoriteVideoCount)...)
-			_favorite.POST("/sync_video_count", videos.SyncVideoFavoritesCount)        // 同步单个视频的收藏数量
-			_favorite.POST("/sync_all_videos", videos.SyncAllVideosFavoritesCount)     // 同步所有视频的收藏数量（管理员）
+			_favorite.POST("/sync_video_count", videos.SyncVideoFavoritesCount)    // 同步单个视频的收藏数量
+			_favorite.POST("/sync_all_videos", videos.SyncAllVideosFavoritesCount) // 同步所有视频的收藏数量（管理员）
 		}
 
 		{
@@ -130,6 +130,20 @@ func Register(r *server.Hertz) {
 		{
 			_visit := _v1.Group("/visit", _visitMw()...)
 			_visit.POST("/:id", append(_videoidlistMw(), videos.VideoVisit)...)
+		}
+
+		// ========== Search History & Suggestions ==========
+		{
+			_search := _v1.Group("/search")
+			_search.POST("/history", append(_searchHistoryMw(), videos.AddSearchHistory)...)
+			_search.GET("/history", videos.GetSearchHistory)
+			_search.DELETE("/history", append(_searchHistoryMw(), videos.DeleteSearchHistory)...)
+			_search.GET("/suggestions", videos.GetSearchSuggestions)
+		}
+
+		// ========== Video Categories ==========
+		{
+			_v1.GET("/video/categories", videos.GetVideoCategories)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"HuaTug.com/cmd/model"
 	"HuaTug.com/pkg/cache"
 	"HuaTug.com/pkg/constants"
+	"github.com/cloudwego/hertz/pkg/common/hlog"
 
 	"gorm.io/gorm"
 )
@@ -79,14 +80,14 @@ func (s *ShardedCommentDB) GetCommentByID(ctx context.Context, commentID int64) 
 		return nil, errors.New("comment_id cannot be zero")
 	}
 
-	// TODO: 这里可以先检查缓存
-	// if s.cacheManager != nil {
-	//     if cached := s.cacheManager.GetComment(commentID); cached != nil {
-	//         return cached, nil
-	//     }
-	// }
+	// Check cache first
+	if s.cacheManager != nil {
+		if cached, err := s.cacheManager.GetCachedCommentDetail(ctx, commentID); err == nil && cached != nil {
+			return cached, nil
+		}
+	}
 
-	// 由于只有commentID，需要遍历所有分片查找
+	// Since we only have commentID, need to search across all shards
 	// 在实际生产环境中，应该有更好的索引策略，比如：
 	// 1. 维护一个commentID到videoID的映射表
 	// 2. 使用全局索引服务
@@ -105,10 +106,10 @@ func (s *ShardedCommentDB) GetCommentByID(ctx context.Context, commentID int64) 
 			err := db.WithContext(ctx).Table(tableName).Where("comment_id = ?", commentID).First(&tempComment).Error
 			if err == nil {
 				comment = &tempComment
-				// TODO: 缓存结果
-				// if s.cacheManager != nil {
-				//     s.cacheManager.SetComment(commentID, comment)
-				// }
+				// Cache the result for future lookups
+				if s.cacheManager != nil {
+					_ = s.cacheManager.CacheCommentDetail(ctx, comment)
+				}
 				return comment, nil
 			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 				foundErr = fmt.Errorf("failed to query comment from %s.%s: %w", dbKey, tableName, err)
@@ -392,10 +393,16 @@ func CreateCommentWithTransaction(ctx context.Context, comment *model.Comment) e
 	})
 }
 
-// AddUserCommentBehavior 添加用户评论行为记录
+// AddUserCommentBehavior records user comment behavior for recommendation
 func AddUserCommentBehavior(ctx context.Context, userBehavior interface{}) error {
-	// TODO: 实现用户行为记录逻辑
-	// 这里可以记录用户的评论行为，用于推荐系统等
+	if userBehavior == nil {
+		return nil
+	}
+	// Insert behavior record into the main database
+	if err := DB.WithContext(ctx).Create(userBehavior).Error; err != nil {
+		hlog.Warnf("Failed to record user comment behavior: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -635,14 +642,29 @@ func DeleteComment(ctx context.Context, commentID int64) error {
 	})
 }
 
-// CreateNotification 创建通知
+// CreateNotification creates a notification record in the database
 func CreateNotification(ctx context.Context, notification interface{}) error {
-	// TODO: 实现通知创建逻辑
+	if notification == nil {
+		return nil
+	}
+	if err := DB.WithContext(ctx).Create(notification).Error; err != nil {
+		hlog.Warnf("Failed to create notification: %v", err)
+		return err
+	}
 	return nil
 }
 
-// GetVideoInfo 获取视频信息
+// GetVideoInfo retrieves basic video info for notification display
 func GetVideoInfo(ctx context.Context, videoID int64) (interface{}, error) {
-	// TODO: 实现获取视频信息逻辑
-	return nil, nil
+	type VideoBasicInfo struct {
+		VideoId  int64  `gorm:"column:video_id"`
+		Title    string `gorm:"column:title"`
+		CoverUrl string `gorm:"column:cover_url"`
+		UserId   int64  `gorm:"column:user_id"`
+	}
+	var info VideoBasicInfo
+	if err := DB.WithContext(ctx).Table("video").Where("video_id = ?", videoID).First(&info).Error; err != nil {
+		return nil, fmt.Errorf("failed to get video info: %w", err)
+	}
+	return &info, nil
 }

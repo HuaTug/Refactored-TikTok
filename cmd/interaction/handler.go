@@ -12,41 +12,32 @@ import (
 	"github.com/pkg/errors"
 )
 
+// InteractionServiceImpl implements the interaction RPC service.
 type InteractionServiceImpl struct{}
 
+// LikeAction handles like/unlike requests.
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
-	likeService := service.NewLikeActionService(ctx)
-
-	resp, err = likeService.LikeAction(ctx, req)
+	resp, err = service.NewLikeActionService(ctx).LikeAction(ctx, req)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.LikeAction failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		logServiceError(ctx, "LikeAction", err)
 		if resp == nil {
 			resp = &interactions.LikeActionResponse{
-				Base: &base.Status{
-					Code: consts.StatusInternalServerError,
-					Msg:  "内部服务错误",
-				},
+				Base: &base.Status{Code: consts.StatusInternalServerError, Msg: "内部服务错误"},
 			}
 		}
 		return resp, err
 	}
-
 	return resp, nil
 }
 
+// LikeList returns the like list for a user.
 func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *interactions.LikeListResponse, err error) {
-	likeService := service.NewLikeActionService(ctx)
-	resp, err = likeService.GetLikeList(ctx, req)
+	resp, err = service.NewLikeActionService(ctx).GetLikeList(ctx, req)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.LikeList failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		logServiceError(ctx, "LikeList", err)
 		if resp == nil {
 			resp = &interactions.LikeListResponse{
-				Base: &base.Status{
-					Code: consts.StatusBadRequest,
-					Msg:  "Fail to ListLike_Video!",
-				},
+				Base: &base.Status{Code: consts.StatusBadRequest, Msg: "获取点赞列表失败"},
 			}
 		}
 		return resp, err
@@ -54,15 +45,10 @@ func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions
 	return resp, nil
 }
 
+// BatchLikeStatus checks like status for multiple videos.
 func (s *InteractionServiceImpl) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (resp *interactions.BatchLikeStatusResponse, err error) {
-	likeService := service.NewLikeActionService(ctx)
-
-	// 初始化响应
 	resp = &interactions.BatchLikeStatusResponse{
-		Base: &base.Status{
-			Code: consts.StatusOK,
-			Msg:  "success",
-		},
+		Base:       &base.Status{Code: consts.StatusOK, Msg: "success"},
 		LikeStatus: make(map[int64]bool),
 	}
 
@@ -70,10 +56,9 @@ func (s *InteractionServiceImpl) BatchLikeStatus(ctx context.Context, req *inter
 		return resp, nil
 	}
 
-	// 批量检查点赞状态
-	likeStatus, err := likeService.BatchCheckUserLikes(ctx, req.UserId, 1, req.VideoIds) // 1 = BusinessTypeVideo
+	likeStatus, err := service.NewLikeActionService(ctx).BatchCheckUserLikes(ctx, req.UserId, 1, req.VideoIds)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.BatchCheckUserLikes failed: %v", err)
+		logServiceError(ctx, "BatchLikeStatus", err)
 		resp.Base.Code = consts.StatusInternalServerError
 		resp.Base.Msg = "获取点赞状态失败"
 		return resp, err
@@ -83,137 +68,133 @@ func (s *InteractionServiceImpl) BatchLikeStatus(ctx context.Context, req *inter
 	return resp, nil
 }
 
+// CreateComment creates a new comment.
 func (s *InteractionServiceImpl) CreateComment(ctx context.Context, req *interactions.CreateCommentRequest) (resp *interactions.CreateCommentResponse, err error) {
-	resp = new(interactions.CreateCommentResponse)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewCommentService(ctx).CreateComment(ctx, req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.CreateComment failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+	resp = &interactions.CreateCommentResponse{Base: &base.Status{}}
+
+	if err := service.NewCommentService(ctx).CreateComment(ctx, req); err != nil {
+		logServiceError(ctx, "CreateComment", err)
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Create Comment!"
+		resp.Base.Msg = "创建评论失败"
 		return resp, err
 	}
+
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Create Comment Successfully"
+	resp.Base.Msg = "创建评论成功"
 	return resp, nil
 }
 
+// ListComment returns paginated comments.
 func (s *InteractionServiceImpl) ListComment(ctx context.Context, req *interactions.ListCommentRequest) (resp *interactions.ListCommentResponse, err error) {
-	// TODO: Add your implementation logic here
-	// Example:
 	resp, err = service.NewCommentService(ctx).ListComment(ctx, req)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.ListComment failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
-		// Ensure resp is not nil before accessing its fields
+		logServiceError(ctx, "ListComment", err)
 		if resp == nil {
-			resp = &interactions.ListCommentResponse{
-				Base: &base.Status{},
-			}
+			resp = &interactions.ListCommentResponse{Base: &base.Status{}}
 		}
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to List Comment!"
+		resp.Base.Msg = "获取评论列表失败"
 		return resp, err
 	}
-	// Ensure resp.Base is not nil
+
 	if resp.Base == nil {
 		resp.Base = &base.Status{}
 	}
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "ListComment Successfully"
+	resp.Base.Msg = "获取评论成功"
 	return resp, nil
 }
 
+// DeleteComment deletes a comment with permission checks.
 func (s *InteractionServiceImpl) DeleteComment(ctx context.Context, req *interactions.CommentDeleteRequest) (resp *interactions.CommentDeleteResponse, err error) {
-	resp = new(interactions.CommentDeleteResponse)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewCommentService(ctx).NewDeleteEvent(ctx, req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.DeleteEvent failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+	resp = &interactions.CommentDeleteResponse{Base: &base.Status{}}
+
+	if err := service.NewCommentService(ctx).NewDeleteEvent(ctx, req); err != nil {
+		logServiceError(ctx, "DeleteComment", err)
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Delete Comment"
+		resp.Base.Msg = "删除评论失败"
 		return resp, err
 	}
+
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Delete Comment Successfully"
+	resp.Base.Msg = "删除评论成功"
 	return resp, nil
 }
 
+// DeleteVideoInfo deletes all interaction data for a video.
 func (s *InteractionServiceImpl) DeleteVideoInfo(ctx context.Context, req *interactions.DeleteVideoInfoRequest) (resp *interactions.DeleteVideoInfoResponse, err error) {
+	resp = &interactions.DeleteVideoInfoResponse{Base: &base.Status{}}
 
-	resp = new(interactions.DeleteVideoInfoResponse)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	err = service.NewCommentService(ctx).NewDeleteVideoInfoEvent(req)
-	if err != nil {
-		hlog.CtxErrorf(ctx, "service.DeleteVideoInfo failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+	if err := service.NewCommentService(ctx).NewDeleteVideoInfoEvent(req); err != nil {
+		logServiceError(ctx, "DeleteVideoInfo", err)
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Delete VideoInfo!"
+		resp.Base.Msg = "删除视频信息失败"
 		return resp, err
 	}
+
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Delete VideoInfo Successfully"
+	resp.Base.Msg = "删除视频信息成功"
 	return resp, nil
 }
 
+// VideoPopularList returns the popular video list.
 func (s *InteractionServiceImpl) VideoPopularList(ctx context.Context, req *interactions.VideoPopularListRequest) (resp *interactions.VideoPopularListResponse, err error) {
+	resp = &interactions.VideoPopularListResponse{Base: &base.Status{}}
 
-	resp = new(interactions.VideoPopularListResponse)
-	resp.Base = &base.Status{}
-	// TODO: Add your implementation logic here
-	// Example:
-	temp := new([]string)
-	temp, err = service.NewCommentService(ctx).NewVideoPopularListEvent(req)
+	list, err := service.NewCommentService(ctx).NewVideoPopularListEvent(req)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "service.VideoPopular failed, original error: %v", errors.Cause(err))
-		hlog.CtxErrorf(ctx, "stack trace: \n%+v\n", err)
+		logServiceError(ctx, "VideoPopularList", err)
 		resp.Base.Code = consts.StatusBadRequest
-		resp.Base.Msg = "Fail to Show VideoPopular Visit!"
+		resp.Base.Msg = "获取热门视频失败"
 		return resp, err
 	}
+
 	resp.Base.Code = consts.StatusOK
-	resp.Base.Msg = "Show VideoPopular Successfully"
-	resp.Data = *temp
+	resp.Base.Msg = "获取热门视频成功"
+	resp.Data = *list
 	return resp, nil
 }
 
-// ========== 通知功能实现 ==========
-
+// GetNotifications returns the notification list for a user.
 func (s *InteractionServiceImpl) GetNotifications(ctx context.Context, req *interactions.GetNotificationsRequest) (resp *interactions.GetNotificationsResponse, err error) {
-	resp = &interactions.GetNotificationsResponse{
-		Base: &base.Status{},
-	}
+	resp = &interactions.GetNotificationsResponse{Base: &base.Status{}}
 
-	// TODO: 实现获取通知列表的逻辑
-	// 这里需要从数据库或缓存中查询用户的通知
+	notifications, totalCount, unreadCount, err := service.NewNotificationService(ctx).GetNotifications(req)
+	if err != nil {
+		logServiceError(ctx, "GetNotifications", err)
+		resp.Base.Code = consts.StatusInternalServerError
+		resp.Base.Msg = "获取通知列表失败"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "获取通知列表成功"
-	resp.Notifications = []*interactions.NotificationInfo{} // 暂时返回空列表
-	resp.TotalCount = 0
-	resp.UnreadCount = 0
-
+	resp.Notifications = notifications
+	resp.TotalCount = totalCount
+	resp.UnreadCount = unreadCount
 	return resp, nil
 }
 
+// MarkNotificationRead marks notifications as read.
 func (s *InteractionServiceImpl) MarkNotificationRead(ctx context.Context, req *interactions.MarkNotificationReadRequest) (resp *interactions.MarkNotificationReadResponse, err error) {
-	resp = &interactions.MarkNotificationReadResponse{
-		Base: &base.Status{},
-	}
+	resp = &interactions.MarkNotificationReadResponse{Base: &base.Status{}}
 
-	// TODO: 实现标记通知为已读的逻辑
+	markedCount, err := service.NewNotificationService(ctx).MarkNotificationRead(req)
+	if err != nil {
+		logServiceError(ctx, "MarkNotificationRead", err)
+		resp.Base.Code = consts.StatusInternalServerError
+		resp.Base.Msg = "标记通知失败"
+		return resp, err
+	}
 
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "标记通知为已读成功"
-	resp.MarkedCount = int64(len(req.NotificationIds))
-
+	resp.MarkedCount = markedCount
 	return resp, nil
+}
+
+// logServiceError logs the service error with cause and stack trace.
+func logServiceError(ctx context.Context, method string, err error) {
+	hlog.CtxErrorf(ctx, "service.%s failed, cause: %v", method, errors.Cause(err))
+	hlog.CtxErrorf(ctx, "stack trace:\n%+v\n", err)
 }
