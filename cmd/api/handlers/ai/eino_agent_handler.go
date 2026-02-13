@@ -171,7 +171,9 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 	message := req.Message
 
 	// Build the agent
+	buildStart := time.Now()
 	runner, err := aiagent.BuildChatAgent(agentCtx)
+	hlog.Infof("[Eino Agent] BuildChatAgent took %v", time.Since(buildStart))
 	useEinoAgent := err == nil
 	if err != nil {
 		hlog.Errorf("[Eino Agent] Failed to build chat agent for stream: %v", err)
@@ -192,12 +194,16 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 
 		if useEinoAgent {
 			// Use Eino Agent stream
+			streamStart := time.Now()
+			hlog.Infof("[Eino Agent] Starting stream for query: %s", message)
 			sr, err := runner.Stream(agentCtx, userMessage)
 			if err != nil {
 				hlog.Errorf("[Eino Agent] Stream failed: %v, falling back to Ollama", err)
 				useEinoAgent = false
 			} else {
 				defer sr.Close()
+				firstChunk := true
+				chunkCount := 0
 				for {
 					chunk, err := sr.Recv()
 					if errors.Is(err, io.EOF) {
@@ -208,9 +214,15 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 						writeSSE(map[string]string{"type": "error", "content": err.Error()})
 						break
 					}
+					if firstChunk {
+						hlog.Infof("[Eino Agent] First token arrived in %v", time.Since(streamStart))
+						firstChunk = false
+					}
+					chunkCount++
 					fullResponse.WriteString(chunk.Content)
 					writeSSE(map[string]string{"type": "content", "content": chunk.Content})
 				}
+				hlog.Infof("[Eino Agent] Stream completed: %d chunks in %v", chunkCount, time.Since(streamStart))
 			}
 		}
 
@@ -418,6 +430,9 @@ func KnowledgeReindexHandler(ctx context.Context, c *app.RequestContext) {
 		sendResponse(c, errno.ParamErr.WithMessage("AI Agent is not enabled"), nil)
 		return
 	}
+
+	// Reset the cached agent so it picks up new knowledge on next request
+	aiagent.ResetChatAgent()
 
 	// Run the auto-indexing process (this re-scans and indexes all docs)
 	go func() {

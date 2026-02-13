@@ -3,7 +3,8 @@ services:
     image: mysql:8.0.35
     container_name: kitex_mysql
     volumes:
-      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ./config/mysql/recommendation_init.sql:/docker-entrypoint-initdb.d/02_recommendation_init.sql
       - ./config/mysql/my.cnf:/etc/mysql/my.cnf
     environment:
       - MYSQL_DATABASE=TikTok

@@ -3,6 +3,7 @@ package aiagent
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
@@ -11,7 +12,25 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
+// Cached agent pipeline singleton to avoid rebuilding on every request.
+var (
+	cachedAgent     compose.Runnable[*UserMessage, *schema.Message]
+	cachedAgentErr  error
+	cachedAgentOnce sync.Once
+)
+
+// ResetChatAgent resets the cached agent, forcing a rebuild on next call.
+// Useful after knowledge base re-indexing or config changes.
+func ResetChatAgent() {
+	cachedAgentOnce = sync.Once{}
+	cachedAgent = nil
+	cachedAgentErr = nil
+	hlog.Info("[AI Agent] Chat agent cache reset, will rebuild on next request")
+}
+
 // BuildChatAgent constructs the complete RAG-enhanced ReAct Agent pipeline.
+// The pipeline is cached after the first successful build to avoid expensive
+// re-initialization (Milvus connection, Embedder, ChatModel) on every request.
 //
 // Pipeline architecture (referencing OncallAgent's chat_pipeline):
 //
@@ -28,6 +47,22 @@ import (
 // 4. Both merge at ChatTemplate which constructs the full prompt
 // 5. ReActAgent processes the prompt with tool-calling capabilities
 func BuildChatAgent(ctx context.Context) (compose.Runnable[*UserMessage, *schema.Message], error) {
+	cachedAgentOnce.Do(func() {
+		hlog.Info("[AI Agent] Building chat agent pipeline (first time)...")
+		cachedAgent, cachedAgentErr = buildChatAgentInternal(ctx)
+		if cachedAgentErr != nil {
+			hlog.Errorf("[AI Agent] Failed to build chat agent: %v", cachedAgentErr)
+			// Reset so next request will retry
+			cachedAgentOnce = sync.Once{}
+		} else {
+			hlog.Info("[AI Agent] Chat agent pipeline built and cached successfully")
+		}
+	})
+	return cachedAgent, cachedAgentErr
+}
+
+// buildChatAgentInternal does the actual pipeline construction.
+func buildChatAgentInternal(ctx context.Context) (compose.Runnable[*UserMessage, *schema.Message], error) {
 	const (
 		InputToRag      = "InputToRag"
 		ChatTemplate    = "ChatTemplate"
@@ -99,7 +134,7 @@ func BuildChatAgent(ctx context.Context) (compose.Runnable[*UserMessage, *schema
 // newReactAgentLambda creates the ReAct agent with all available tools.
 func newReactAgentLambda(ctx context.Context) (*compose.Lambda, error) {
 	agentConfig := &react.AgentConfig{
-		MaxStep:            25,
+		MaxStep:            4,
 		ToolReturnDirectly: map[string]struct{}{},
 	}
 

@@ -6,19 +6,19 @@ build:
 	cd cmd/api && go build -o api
 	cd cmd/user && go build -o user
 	cd cmd/video && go build -o video
-	cd cmd/relation && go build -o relation	
+	cd cmd/relation && go build -o relation
 	cd cmd/interaction && go build -o interaction
-# 	cd cmd/message && go build -o message 
+# 	cd cmd/message && go build -o message
 api:
 	cd cmd/api && ./api
-users:	
+users:
 	cd cmd/user &&./user
 videos:
 	cd cmd/video &&./video
 interactions:
 	cd cmd/interaction && ./interaction
 relations:
-	cd cmd/relation && ./relation		
+	cd cmd/relation && ./relation
 # message:
 # 	cd cmd/message && ./message
 
@@ -26,6 +26,11 @@ go:env build
 
 init-db:
 	docker-compose exec -T mysql mysql -u root -p'TikTok@MySQL#2025!Secure' < config/mysql/init.sql
+
+init-rec-db:
+	docker-compose exec -T mysql mysql -u root -p'TikTok@MySQL#2025!Secure' < config/mysql/recommendation_init.sql
+
+init-all-db: init-db init-rec-db
 
 clean:
 	-rm -f message
