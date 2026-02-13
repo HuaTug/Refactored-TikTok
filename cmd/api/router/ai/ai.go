@@ -14,7 +14,7 @@ func Register(r *server.Hertz) {
 	{
 		_v1 := root.Group("/v1")
 
-		// AI Chat routes
+		// AI Chat routes (legacy Ollama-based)
 		_ai := _v1.Group("/ai", _aiGroupMw()...)
 		_ai.POST("/chat", append(_aiChatMw(), aihandler.ChatHandler)...)
 		_ai.POST("/chat/stream", append(_aiChatMw(), aihandler.ChatSSE)...)
@@ -23,6 +23,14 @@ func Register(r *server.Hertz) {
 		_ai.DELETE("/session", append(_aiSessionMw(), aihandler.DeleteSession)...)
 		_ai.GET("/tools", aihandler.GetTools)
 		_ai.GET("/health", aihandler.HealthCheck)
+
+		// Eino-based AI Agent routes (upgraded with RAG + ReAct Agent)
+		_agent := _v1.Group("/agent", _aiGroupMw()...)
+		_agent.POST("/chat", append(_aiChatMw(), aihandler.EinoChatHandler)...)
+		_agent.POST("/chat/stream", append(_aiChatMw(), aihandler.EinoChatSSE)...)
+		_agent.GET("/health", aihandler.EinoHealthCheck)
+		_agent.POST("/knowledge/upload", append(_aiChatMw(), aihandler.KnowledgeUploadHandler)...)
+		_agent.POST("/knowledge/reindex", append(_aiChatMw(), aihandler.KnowledgeReindexHandler)...)
 	}
 }
 

@@ -8,7 +8,9 @@ import (
 	"HuaTug.com/cmd/api/rpc"
 	videodb "HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/cmd/video/infras/redis"
+	"HuaTug.com/config"
 	jwt "HuaTug.com/pkg"
+	"HuaTug.com/pkg/aiagent"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/logger"
 	"HuaTug.com/pkg/logsystem"
@@ -25,8 +27,8 @@ import (
 func Init() {
 	rpc.InitRPC()
 	redis.Load()
-	dal.InitDB()     // 初始化 API 服务数据库连接
-	videodb.Init()   // 初始化 video 模块数据库连接（用于收藏同步等功能）
+	dal.InitDB()   // 初始化 API 服务数据库连接
+	videodb.Init() // 初始化 video 模块数据库连接（用于收藏同步等功能）
 
 	// 初始化日志系统 (Kafka + ES)
 	if err := logsystem.Init(&logsystem.LogSystemConfig{
@@ -50,6 +52,19 @@ func Init() {
 		hlog.Fatalf("Failed to initialize TikTok storage buckets: %v", err)
 	}
 	hlog.Info("TikTok storage architecture initialized successfully")
+
+	// Initialize AI Agent knowledge base (auto-index documents on startup)
+	if config.ConfigInfo.AIAgent.Enabled {
+		go func() {
+			ctx := context.Background()
+			hlog.Info("[AI Agent] Starting knowledge base auto-indexing...")
+			if err := aiagent.InitKnowledgeBase(ctx); err != nil {
+				hlog.Warnf("[AI Agent] Knowledge base initialization failed: %v (RAG will work without pre-indexed docs)", err)
+			} else {
+				hlog.Info("[AI Agent] Knowledge base initialized successfully")
+			}
+		}()
+	}
 
 	// 启动热度存储管理器（可选，用于生产环境）
 	// go func() {

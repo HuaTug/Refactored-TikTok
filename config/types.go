@@ -10,6 +10,7 @@ type config struct {
 	Kafka           kafka           `yaml:"kafka" mapstructure:"kafka"`
 	Elasticsearch   elasticsearch   `yaml:"elasticsearch" mapstructure:"elasticsearch"`
 	Ollama          ollamaConfig    `yaml:"ollama" mapstructure:"ollama"`
+	AIAgent         aiAgentConfig   `yaml:"ai_agent" mapstructure:"ai_agent"`
 }
 
 // kafka 配置
@@ -81,4 +82,37 @@ type ollamaConfig struct {
 	Timeout      int     `yaml:"timeout" mapstructure:"timeout"`             // Request timeout in seconds
 	SystemPrompt string  `yaml:"system_prompt" mapstructure:"system_prompt"` // Default system prompt
 	Enabled      bool    `yaml:"enabled" mapstructure:"enabled"`             // Whether Ollama integration is enabled
+}
+
+// AI Agent configuration (Eino-based with RAG, ReAct agent, and knowledge base)
+// All LLM/Embedding calls go through the local Ollama service's OpenAI-compatible API.
+type aiAgentConfig struct {
+	Enabled    bool              `yaml:"enabled" mapstructure:"enabled"`         // Whether the Eino-based AI Agent is enabled
+	ChatModel  aiModelConfig     `yaml:"chat_model" mapstructure:"chat_model"`   // Chat LLM (via Ollama's OpenAI-compatible endpoint)
+	ThinkModel aiModelConfig     `yaml:"think_model" mapstructure:"think_model"` // Reasoning LLM (via Ollama, can be same as chat model)
+	Embedding  aiEmbeddingConfig `yaml:"embedding" mapstructure:"embedding"`     // Embedding model (via Ollama, e.g. nomic-embed-text)
+	Milvus     aiMilvusConfig    `yaml:"milvus" mapstructure:"milvus"`           // Milvus vector database configuration
+	DocsDir    string            `yaml:"docs_dir" mapstructure:"docs_dir"`       // Directory for knowledge base documents
+}
+
+// aiModelConfig holds LLM model connection settings.
+// When using Ollama, base_url can be left empty (auto-derived from ollama.base_url),
+// and api_key should be set to "ollama" (placeholder, not needed by Ollama).
+type aiModelConfig struct {
+	APIKey  string `yaml:"api_key" mapstructure:"api_key"`   // API key ("ollama" for local Ollama)
+	BaseURL string `yaml:"base_url" mapstructure:"base_url"` // API base URL (empty = use Ollama's /v1 endpoint)
+	Model   string `yaml:"model" mapstructure:"model"`       // Model name (e.g. qwen3-coder:30b)
+}
+
+// aiEmbeddingConfig holds embedding model settings.
+// When using Ollama, specify a local embedding model like nomic-embed-text.
+type aiEmbeddingConfig struct {
+	APIKey     string `yaml:"api_key" mapstructure:"api_key"`       // API key ("ollama" for local Ollama)
+	Model      string `yaml:"model" mapstructure:"model"`           // Embedding model name (e.g. nomic-embed-text)
+	Dimensions int    `yaml:"dimensions" mapstructure:"dimensions"` // Embedding vector dimensions (768 for nomic-embed-text)
+}
+
+// aiMilvusConfig holds Milvus vector database connection settings.
+type aiMilvusConfig struct {
+	Address string `yaml:"address" mapstructure:"address"` // Milvus server address (e.g. localhost:19530)
 }
