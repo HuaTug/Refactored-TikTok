@@ -8,10 +8,21 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
+
+// thinkTagRegex matches <think>...</think> blocks in thinking model output
+var thinkTagRegex = regexp.MustCompile(`(?s)<think>.*?</think>`)
+
+// StripThinkTags removes <think>...</think> blocks from model output
+func StripThinkTags(content string) string {
+	result := thinkTagRegex.ReplaceAllString(content, "")
+	return strings.TrimSpace(result)
+}
 
 // Client is an Ollama API client supporting streaming and tool calling
 type Client struct {
@@ -232,7 +243,7 @@ func (c *Client) IsAvailable(ctx context.Context) bool {
 		return false
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		hlog.Warnf("[Ollama] Service not available at %s: %v", c.baseURL, err)

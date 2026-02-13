@@ -350,6 +350,8 @@ func generateAIResponseWithOllama(ctx context.Context, session *ChatSession, use
 		return generateAIResponseFallback(ctx, session, userMessage)
 	}
 
+	hlog.Infof("[AI Agent] Using Ollama model: %s for message: %s", client.GetModel(), userMessage)
+
 	// Build messages for Ollama
 	messages := buildOllamaMessages(session)
 	tools := getOllamaTools()
@@ -360,6 +362,8 @@ func generateAIResponseWithOllama(ctx context.Context, session *ChatSession, use
 		hlog.Errorf("[AI Agent] Ollama chat failed: %v", err)
 		return generateAIResponseFallback(ctx, session, userMessage)
 	}
+
+	hlog.Infof("[AI Agent] Ollama response received, tool_calls=%d, content_len=%d", len(resp.Message.ToolCalls), len(resp.Message.Content))
 
 	// Handle tool calls (may need multiple rounds)
 	maxToolRounds := 3
@@ -411,7 +415,13 @@ func generateAIResponseWithOllama(ctx context.Context, session *ChatSession, use
 		return "抱歉，我暂时无法生成回复。请稍后再试。"
 	}
 
-	return resp.Message.Content
+	// Strip <think>...</think> tags from thinking models (e.g. qwen3-coder)
+	finalContent := ollama.StripThinkTags(resp.Message.Content)
+	if finalContent == "" {
+		return "抱歉，模型返回了空内容。请稍后再试。"
+	}
+
+	return finalContent
 }
 
 // generateAIResponseWithOllamaStream uses Ollama LLM for streaming response
@@ -425,6 +435,8 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 		return "", fmt.Errorf("ollama service not reachable")
 	}
 
+	hlog.Infof("[AI Agent] Starting Ollama stream for message: %s", userMessage)
+
 	messages := buildOllamaMessages(session)
 	tools := getOllamaTools()
 
@@ -433,6 +445,8 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 	if err != nil {
 		return "", fmt.Errorf("ollama chat failed: %w", err)
 	}
+
+	hlog.Infof("[AI Agent] Stream first call: tool_calls=%d, done=%v", len(resp.Message.ToolCalls), resp.Done)
 
 	// Handle tool calls
 	if len(resp.Message.ToolCalls) > 0 {
@@ -463,10 +477,43 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 		}
 
 		// Stream the final response with tool results
+		// For thinking models, filter <think> tags
 		var fullContent strings.Builder
+		inThinkBlock := false
+		thinkBuf := ""
+
 		_, err = client.ChatStream(ctx, messages, nil, func(content string) {
-			fullContent.WriteString(content)
-			onChunk(content)
+			thinkBuf += content
+			for {
+				if inThinkBlock {
+					closeIdx := strings.Index(thinkBuf, "</think>")
+					if closeIdx >= 0 {
+						thinkBuf = thinkBuf[closeIdx+len("</think>"):]
+						inThinkBlock = false
+						continue
+					}
+					if len(thinkBuf) > 20 {
+						thinkBuf = thinkBuf[len(thinkBuf)-20:]
+					}
+					return
+				}
+				openIdx := strings.Index(thinkBuf, "<think>")
+				if openIdx >= 0 {
+					if openIdx > 0 {
+						fullContent.WriteString(thinkBuf[:openIdx])
+						onChunk(thinkBuf[:openIdx])
+					}
+					thinkBuf = thinkBuf[openIdx+len("<think>"):]
+					inThinkBlock = true
+					continue
+				}
+				if thinkBuf != "" {
+					fullContent.WriteString(thinkBuf)
+					onChunk(thinkBuf)
+				}
+				thinkBuf = ""
+				return
+			}
 		})
 		if err != nil {
 			return fullContent.String(), err
@@ -476,11 +523,78 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 
 	// No tool calls needed - stream directly
 	// Re-do the call in streaming mode (without tools to avoid tool call loop)
+	// For thinking models, we need to filter out <think> tags during streaming
 	var fullContent strings.Builder
+	inThinkBlock := false
+	thinkBuffer := ""
+
 	_, err = client.ChatStream(ctx, messages, nil, func(content string) {
-		fullContent.WriteString(content)
-		onChunk(content)
+		// Buffer and filter <think>...</think> tags in streaming mode
+		thinkBuffer += content
+
+		for {
+			if inThinkBlock {
+				// Look for closing </think> tag
+				closeIdx := strings.Index(thinkBuffer, "</think>")
+				if closeIdx >= 0 {
+					thinkBuffer = thinkBuffer[closeIdx+len("</think>"):]
+					inThinkBlock = false
+					continue
+				}
+				// Still inside think block, discard buffer but keep potential partial tag
+				if len(thinkBuffer) > 20 {
+					thinkBuffer = thinkBuffer[len(thinkBuffer)-20:]
+				}
+				return
+			}
+
+			// Look for opening <think> tag
+			openIdx := strings.Index(thinkBuffer, "<think>")
+			if openIdx >= 0 {
+				// Output everything before the think tag
+				if openIdx > 0 {
+					cleanContent := thinkBuffer[:openIdx]
+					if cleanContent != "" {
+						fullContent.WriteString(cleanContent)
+						onChunk(cleanContent)
+					}
+				}
+				thinkBuffer = thinkBuffer[openIdx+len("<think>"):]
+				inThinkBlock = true
+				continue
+			}
+
+			// Check for potential partial <think tag at end
+			partialCheck := "<think>"
+			for i := 1; i < len(partialCheck) && i <= len(thinkBuffer); i++ {
+				if strings.HasSuffix(thinkBuffer, partialCheck[:i]) {
+					// Keep the potential partial tag in buffer
+					safe := thinkBuffer[:len(thinkBuffer)-i]
+					if safe != "" {
+						fullContent.WriteString(safe)
+						onChunk(safe)
+					}
+					thinkBuffer = thinkBuffer[len(thinkBuffer)-i:]
+					return
+				}
+			}
+
+			// No think tags found, output everything
+			if thinkBuffer != "" {
+				fullContent.WriteString(thinkBuffer)
+				onChunk(thinkBuffer)
+			}
+			thinkBuffer = ""
+			return
+		}
 	})
+
+	// Flush any remaining buffer
+	if thinkBuffer != "" && !inThinkBlock {
+		fullContent.WriteString(thinkBuffer)
+		onChunk(thinkBuffer)
+	}
+
 	if err != nil {
 		return fullContent.String(), err
 	}

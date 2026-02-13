@@ -137,16 +137,16 @@ func Init() {
 		ConfigInfo.Ollama.BaseURL = "http://localhost:11434"
 	}
 	if ConfigInfo.Ollama.Model == "" {
-		ConfigInfo.Ollama.Model = "llama3"
+		ConfigInfo.Ollama.Model = "qwen3-coder:30b"
 	}
 	if ConfigInfo.Ollama.Temperature == 0 {
 		ConfigInfo.Ollama.Temperature = 0.7
 	}
 	if ConfigInfo.Ollama.MaxTokens == 0 {
-		ConfigInfo.Ollama.MaxTokens = 2048
+		ConfigInfo.Ollama.MaxTokens = 4096
 	}
 	if ConfigInfo.Ollama.Timeout == 0 {
-		ConfigInfo.Ollama.Timeout = 120
+		ConfigInfo.Ollama.Timeout = 300
 	}
 
 	// 设置默认值
