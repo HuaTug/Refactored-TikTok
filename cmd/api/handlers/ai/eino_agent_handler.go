@@ -14,6 +14,7 @@ import (
 	"HuaTug.com/config"
 	"HuaTug.com/pkg/aiagent"
 	"HuaTug.com/pkg/errno"
+	ollamapkg "HuaTug.com/pkg/ollama"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -43,6 +44,10 @@ func EinoChatHandler(ctx context.Context, c *app.RequestContext) {
 		sessionID = fmt.Sprintf("eino_%d_%d", userID, time.Now().UnixNano())
 	}
 
+	// Use a generous timeout for large local models (e.g. qwen3-coder:30b)
+	agentCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
 	// Get conversation memory
 	memory := aiagent.GetSimpleMemory(sessionID)
 
@@ -54,20 +59,19 @@ func EinoChatHandler(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// Build and invoke the chat agent pipeline
-	runner, err := aiagent.BuildChatAgent(ctx)
+	runner, err := aiagent.BuildChatAgent(agentCtx)
 	if err != nil {
 		hlog.Errorf("[Eino Agent] Failed to build chat agent: %v", err)
-		// Fallback to Ollama if Eino agent fails
 		hlog.Info("[Eino Agent] Falling back to Ollama handler")
-		ChatHandler(ctx, c)
+		// Fallback: use Ollama directly within this handler (avoid body re-consumption)
+		fallbackOllamaChat(ctx, c, req, sessionID)
 		return
 	}
 
-	out, err := runner.Invoke(ctx, userMessage)
+	out, err := runner.Invoke(agentCtx, userMessage)
 	if err != nil {
 		hlog.Errorf("[Eino Agent] Chat invocation failed: %v", err)
-		// Fallback to Ollama
-		ChatHandler(ctx, c)
+		fallbackOllamaChat(ctx, c, req, sessionID)
 		return
 	}
 
@@ -86,6 +90,41 @@ func EinoChatHandler(ctx context.Context, c *app.RequestContext) {
 		"session_id": sessionID,
 		"title":      title,
 		"mode":       "eino_agent",
+	})
+}
+
+// fallbackOllamaChat handles non-streaming fallback using Ollama directly.
+// This avoids the body re-consumption issue when calling ChatHandler.
+func fallbackOllamaChat(ctx context.Context, c *app.RequestContext, req ChatRequest, sessionID string) {
+	client := getOllamaClient()
+	if client == nil || !client.IsAvailable(ctx) {
+		hlog.Warn("[Eino Fallback] Ollama also unavailable, returning error")
+		sendResponse(c, errno.ServiceErr.WithMessage("AI service temporarily unavailable"), nil)
+		return
+	}
+
+	// Simple Ollama chat without session management
+	messages := []ollamapkg.ChatMessage{
+		{Role: "system", Content: getSystemPrompt()},
+		{Role: "user", Content: req.Message},
+	}
+	resp, err := client.Chat(ctx, messages, nil)
+	if err != nil {
+		hlog.Errorf("[Eino Fallback] Ollama chat failed: %v", err)
+		sendResponse(c, errno.ServiceErr.WithMessage("AI service failed"), nil)
+		return
+	}
+
+	title := req.Message
+	if len([]rune(title)) > 20 {
+		title = string([]rune(title)[:20]) + "..."
+	}
+
+	sendResponse(c, nil, map[string]interface{}{
+		"reply":      resp.Message.Content,
+		"session_id": sessionID,
+		"title":      title,
+		"mode":       "ollama_fallback",
 	})
 }
 
@@ -108,6 +147,9 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 		sessionID = fmt.Sprintf("eino_%d_%d", userID, time.Now().UnixNano())
 	}
 
+	// Use a generous timeout for large local models (e.g. qwen3-coder:30b)
+	agentCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+
 	memory := aiagent.GetSimpleMemory(sessionID)
 	userMessage := &aiagent.UserMessage{
 		ID:      sessionID,
@@ -115,16 +157,7 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 		History: memory.GetMessages(),
 	}
 
-	// Build the agent
-	runner, err := aiagent.BuildChatAgent(ctx)
-	if err != nil {
-		hlog.Errorf("[Eino Agent] Failed to build chat agent for stream: %v", err)
-		// Fallback to Ollama SSE
-		ChatSSE(ctx, c)
-		return
-	}
-
-	// Set SSE headers
+	// Set SSE headers first (before any fallback, so the client always gets SSE format)
 	c.Response.Header.Set("Content-Type", "text/event-stream")
 	c.Response.Header.Set("Cache-Control", "no-cache")
 	c.Response.Header.Set("Connection", "keep-alive")
@@ -137,37 +170,68 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 
 	message := req.Message
 
+	// Build the agent
+	runner, err := aiagent.BuildChatAgent(agentCtx)
+	useEinoAgent := err == nil
+	if err != nil {
+		hlog.Errorf("[Eino Agent] Failed to build chat agent for stream: %v", err)
+		hlog.Info("[Eino Agent] Will fallback to Ollama SSE within the same stream")
+	}
+
 	go func() {
 		defer pw.Close()
+		defer cancel()
 
 		writeSSE := func(eventData interface{}) {
 			data, _ := json.Marshal(eventData)
 			pw.Write([]byte(fmt.Sprintf("data: %s\n\n", data))) //nolint:errcheck
 		}
 
-		// Use Eino stream
-		sr, err := runner.Stream(ctx, userMessage)
-		if err != nil {
-			hlog.Errorf("[Eino Agent] Stream failed: %v", err)
-			writeSSE(map[string]string{"type": "error", "content": "AI agent stream failed"})
-			return
-		}
-		defer sr.Close()
-
 		var fullResponse strings.Builder
+		mode := "eino_agent"
 
-		for {
-			chunk, err := sr.Recv()
-			if errors.Is(err, io.EOF) {
-				break
-			}
+		if useEinoAgent {
+			// Use Eino Agent stream
+			sr, err := runner.Stream(agentCtx, userMessage)
 			if err != nil {
-				hlog.Errorf("[Eino Agent] Stream recv error: %v", err)
-				writeSSE(map[string]string{"type": "error", "content": err.Error()})
-				break
+				hlog.Errorf("[Eino Agent] Stream failed: %v, falling back to Ollama", err)
+				useEinoAgent = false
+			} else {
+				defer sr.Close()
+				for {
+					chunk, err := sr.Recv()
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					if err != nil {
+						hlog.Errorf("[Eino Agent] Stream recv error: %v", err)
+						writeSSE(map[string]string{"type": "error", "content": err.Error()})
+						break
+					}
+					fullResponse.WriteString(chunk.Content)
+					writeSSE(map[string]string{"type": "content", "content": chunk.Content})
+				}
 			}
-			fullResponse.WriteString(chunk.Content)
-			writeSSE(map[string]string{"type": "content", "content": chunk.Content})
+		}
+
+		// Fallback to Ollama SSE if Eino Agent is not available
+		if !useEinoAgent {
+			mode = "ollama_fallback"
+			client := getOllamaClient()
+			if client != nil && client.IsAvailable(ctx) {
+				messages := buildSimpleOllamaMessages(message)
+				_, ollamaErr := client.ChatStream(ctx, messages, nil, func(content string) {
+					fullResponse.WriteString(content)
+					writeSSE(map[string]string{"type": "content", "content": content})
+				})
+				if ollamaErr != nil {
+					hlog.Errorf("[Eino Fallback] Ollama stream also failed: %v", ollamaErr)
+					writeSSE(map[string]string{"type": "error", "content": "AI service temporarily unavailable, please try again later."})
+				}
+			} else {
+				hlog.Warn("[Eino Fallback] Ollama client not available")
+				writeSSE(map[string]string{"type": "error", "content": "AI service temporarily unavailable."})
+			}
 		}
 
 		// Store conversation history
@@ -187,9 +251,17 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 			"type":       "done",
 			"session_id": sessionID,
 			"title":      title,
-			"mode":       "eino_agent",
+			"mode":       mode,
 		})
 	}()
+}
+
+// buildSimpleOllamaMessages constructs a minimal Ollama message list for fallback.
+func buildSimpleOllamaMessages(userMsg string) []ollamapkg.ChatMessage {
+	return []ollamapkg.ChatMessage{
+		{Role: "system", Content: getSystemPrompt()},
+		{Role: "user", Content: userMsg},
+	}
 }
 
 // EinoHealthCheck checks both Eino agent and Ollama connectivity.
