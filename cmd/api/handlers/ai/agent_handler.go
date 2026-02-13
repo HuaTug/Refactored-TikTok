@@ -235,13 +235,39 @@ func executeSearchVideos(ctx context.Context, args map[string]interface{}) (stri
 		PageNum:  1,
 		PageSize: int64(limit),
 	})
-	if err != nil {
-		hlog.Warnf("[AI Agent] Video search failed: %v", err)
-		return fmt.Sprintf("Video search for '%s' returned no results at this time.", keyword), nil
+	if err != nil || resp == nil || len(resp.VideoSearch) == 0 {
+		hlog.Warnf("[AI Agent] Video search failed or empty: %v", err)
+		return fmt.Sprintf("No videos found for keyword '%s'.", keyword), nil
 	}
 
-	result, _ := json.Marshal(resp)
-	return fmt.Sprintf("Search results for '%s':\n%s", keyword, string(result)), nil
+	// Format results in a structured way that LLM can easily understand and summarize
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Found %d videos for '%s':\n\n", len(resp.VideoSearch), keyword))
+	for i, v := range resp.VideoSearch {
+		sb.WriteString(fmt.Sprintf("Video %d:\n", i+1))
+		sb.WriteString(fmt.Sprintf("  Title: %s\n", v.Title))
+		if v.Description != "" {
+			desc := v.Description
+			if len([]rune(desc)) > 100 {
+				desc = string([]rune(desc)[:100]) + "..."
+			}
+			sb.WriteString(fmt.Sprintf("  Description: %s\n", desc))
+		}
+		sb.WriteString(fmt.Sprintf("  Views: %d, Likes: %d, Comments: %d\n", v.VisitCount, v.LikesCount, v.CommentCount))
+		if v.LabelNames != "" {
+			sb.WriteString(fmt.Sprintf("  Tags: %s\n", v.LabelNames))
+		}
+		if v.Category != "" {
+			sb.WriteString(fmt.Sprintf("  Category: %s\n", v.Category))
+		}
+		sb.WriteString(fmt.Sprintf("  Created: %s\n", v.CreatedAt))
+		sb.WriteString("\n")
+	}
+	if resp.Count > int64(limit) {
+		sb.WriteString(fmt.Sprintf("(Showing %d of %d total results)\n", limit, resp.Count))
+	}
+
+	return sb.String(), nil
 }
 
 func executeGetHotTopics(ctx context.Context, args map[string]interface{}) (string, error) {
@@ -250,17 +276,26 @@ func executeGetHotTopics(ctx context.Context, args map[string]interface{}) (stri
 		limit = int(l)
 	}
 
-	// Use the local recommendation service directly (not RPC)
+	// Try hot score service first
 	service := recommendation.GetHotScoreService()
 	if service != nil {
 		videoIds, err := service.GetTopHotVideos(ctx, "24h", limit)
 		if err == nil && len(videoIds) > 0 {
-			result, _ := json.Marshal(map[string]interface{}{
-				"hot_videos": videoIds,
-				"count":      len(videoIds),
-				"time_range": "24h",
-			})
-			return fmt.Sprintf("Current hot topics and trending videos:\n%s", string(result)), nil
+			// Fetch video details for these hot video IDs to give AI meaningful info
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("Top %d hot videos in the last 24 hours:\n\n", len(videoIds)))
+			for i, vid := range videoIds {
+				sb.WriteString(fmt.Sprintf("%d. Video ID: %d\n", i+1, vid))
+			}
+			// Also try to get trending info
+			trends, tErr := service.GetTrendingVideos(ctx, 5)
+			if tErr == nil && len(trends) > 0 {
+				sb.WriteString("\nTrending (fastest rising):\n")
+				for _, t := range trends {
+					sb.WriteString(fmt.Sprintf("  - Video ID %d (trend score: %.1f)\n", t.VideoID, t.TrendScore))
+				}
+			}
+			return sb.String(), nil
 		}
 	}
 
@@ -269,12 +304,30 @@ func executeGetHotTopics(ctx context.Context, args map[string]interface{}) (stri
 		PageNum:  1,
 		PageSize: int64(limit),
 	})
-	if err != nil {
-		return "Currently unable to fetch hot topics. The platform has diverse content trending across categories.", nil
+	if err != nil || resp == nil || len(resp.Popular) == 0 {
+		return "Currently unable to fetch hot topics. Please try again later.", nil
 	}
 
-	result, _ := json.Marshal(resp)
-	return fmt.Sprintf("Current popular videos:\n%s", string(result)), nil
+	// Format popular videos in readable text
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Top %d popular videos:\n\n", len(resp.Popular)))
+	for i, v := range resp.Popular {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, v.Title))
+		if v.Description != "" {
+			desc := v.Description
+			if len([]rune(desc)) > 80 {
+				desc = string([]rune(desc)[:80]) + "..."
+			}
+			sb.WriteString(fmt.Sprintf("   %s\n", desc))
+		}
+		sb.WriteString(fmt.Sprintf("   Views: %d | Likes: %d | Comments: %d\n", v.VisitCount, v.LikesCount, v.CommentCount))
+		if v.Category != "" {
+			sb.WriteString(fmt.Sprintf("   Category: %s\n", v.Category))
+		}
+		sb.WriteString("\n")
+	}
+
+	return sb.String(), nil
 }
 
 func executeSuggestContentStrategy(ctx context.Context, args map[string]interface{}) (string, error) {
@@ -284,35 +337,53 @@ func executeSuggestContentStrategy(ctx context.Context, args map[string]interfac
 		contentType = "video"
 	}
 
-	suggestion := fmt.Sprintf(`Content Strategy for topic "%s" (%s):
+	// Gather real platform data to enhance the suggestion
+	var trendingInfo string
 
-📝 Title Suggestions:
-1. "你不知道的%s秘密 | 深度解析"
-2. "%s完全攻略：从入门到精通"
-3. "3分钟带你了解%s的最新趋势"
+	// Search for existing content on this topic to understand competition
+	resp, err := rpc.VideoSearch(ctx, &videos.VideoSearchRequestV2{
+		Keyword:  topic,
+		PageNum:  1,
+		PageSize: 5,
+	})
+	if err == nil && resp != nil && len(resp.VideoSearch) > 0 {
+		var avgViews, avgLikes int64
+		var topTags []string
+		for _, v := range resp.VideoSearch {
+			avgViews += v.VisitCount
+			avgLikes += v.LikesCount
+			if v.LabelNames != "" {
+				topTags = append(topTags, v.LabelNames)
+			}
+		}
+		avgViews /= int64(len(resp.VideoSearch))
+		avgLikes /= int64(len(resp.VideoSearch))
+		trendingInfo = fmt.Sprintf(`\nPlatform data for topic "%s":
+- Existing videos: %d found
+- Average views: %d
+- Average likes: %d
+- Common tags used: %s
+`, topic, resp.Count, avgViews, avgLikes, strings.Join(topTags, ", "))
+	}
 
-📋 Description Template:
-"深入探讨%s相关话题，分享最新见解和实用技巧。关注我获取更多优质内容！#%s #知识分享 #干货"
+	// Also check hot score service for trending categories
+	service := recommendation.GetHotScoreService()
+	if service != nil {
+		trends, tErr := service.GetTrendingVideos(ctx, 5)
+		if tErr == nil && len(trends) > 0 {
+			trendingInfo += fmt.Sprintf("\nCurrently %d videos are trending on the platform.", len(trends))
+		}
+	}
 
-🏷️ Recommended Tags:
-- %s
-- 知识分享
-- 干货分享
-- 热门话题
-- 涨知识
+	result := fmt.Sprintf(`Content strategy analysis for topic "%s" (type: %s):
+%s
+Best posting times (based on platform patterns):
+- Weekdays: 12:00-13:00 (lunch), 18:00-20:00 (evening peak)
+- Weekends: 10:00-12:00 (morning), 20:00-22:00 (highest engagement)
 
-⏰ Best Posting Time:
-- Weekdays: 12:00-13:00 (lunch break), 18:00-20:00 (commute & evening)
-- Weekends: 10:00-12:00 (morning), 20:00-22:00 (peak engagement)
+Please use this data to provide personalized content creation advice to the user.`, topic, contentType, trendingInfo)
 
-💡 Tips:
-- Keep the opening hook within the first 3 seconds
-- Add captions/subtitles for better engagement
-- Use trending background music
-- End with a call-to-action (like, follow, comment)`,
-		topic, contentType, topic, topic, topic, topic, topic, topic)
-
-	return suggestion, nil
+	return result, nil
 }
 
 // ========== Ollama-Powered AI Response Generation ==========
@@ -506,7 +577,7 @@ func (f *thinkTagFilter) String() string {
 // Key design: directly stream from Ollama -> filter <think> tags -> SSE to frontend.
 // Tool calls are detected via a non-streaming probe first, because Ollama cannot
 // stream and return tool_calls at the same time.
-func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSession, userMessage string, onChunk func(content string)) (string, error) {
+func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSession, userMessage string, onChunk func(content string), onToolCall func(toolName string)) (string, error) {
 	client := getOllamaClient()
 	if client == nil {
 		return "", fmt.Errorf("ollama client not available")
@@ -539,6 +610,10 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 
 		for _, tc := range resp.Message.ToolCalls {
 			hlog.Infof("[AI Agent] Stream executing tool: %s", tc.Function.Name)
+			// Notify frontend about tool calling (transparent progress indicator)
+			if onToolCall != nil {
+				onToolCall(tc.Function.Name)
+			}
 			result, execErr := executeToolCallFromMap(ctx, tc.Function.Name, tc.Function.Arguments)
 			if execErr != nil {
 				result = fmt.Sprintf("Error: %v", execErr)
@@ -956,9 +1031,14 @@ func ChatSSE(ctx context.Context, c *app.RequestContext) {
 		// Try Ollama streaming
 		ollamaErr := func() error {
 			var err error
-			fullResponse, err = generateAIResponseWithOllamaStream(ctx, session, message, func(content string) {
-				writeSSE(map[string]string{"type": "content", "content": content})
-			})
+			fullResponse, err = generateAIResponseWithOllamaStream(ctx, session, message,
+				func(content string) {
+					writeSSE(map[string]string{"type": "content", "content": content})
+				},
+				func(toolName string) {
+					writeSSE(map[string]string{"type": "tool_calling", "tool": toolName})
+				},
+			)
 			return err
 		}()
 
