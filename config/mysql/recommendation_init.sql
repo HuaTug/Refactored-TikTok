@@ -149,7 +149,7 @@ CREATE TABLE `recommendation_exposures` (
     `completion_rate` DECIMAL(5,4) DEFAULT 0.0000 COMMENT '完播率',
     `exposure_time` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '曝光时间',
     `request_id` VARCHAR(64) DEFAULT NULL COMMENT '请求ID',
-    PRIMARY KEY (`id`),
+    PRIMARY KEY (`id`, `exposure_time`),
     KEY `idx_user_exposure` (`user_id`, `exposure_time`),
     KEY `idx_user_video` (`user_id`, `video_id`),
     KEY `idx_video_id` (`video_id`),

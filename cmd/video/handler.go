@@ -514,7 +514,7 @@ func (s *VideoServiceImpl) RecommendVideoV2(ctx context.Context, req *videos.Rec
 	resp.Base = &base.Status{}
 
 	recommendService := service.NewRecommendVideoService(ctx)
-	videoList, err := recommendService.RecommendVideo(req)
+	result, err := recommendService.RecommendVideo(req)
 	if err != nil {
 		hlog.CtxErrorf(ctx, "service.RecommendVideo failed, original error: %v", errors.Cause(err))
 		resp.Base.Code = errno.ServiceErrCode
@@ -522,8 +522,9 @@ func (s *VideoServiceImpl) RecommendVideoV2(ctx context.Context, req *videos.Rec
 		return resp, err
 	}
 
-	resp.VideoList = videoList
-	resp.AlgorithmUsed = req.AlgorithmType
+	resp.VideoList = result.VideoList
+	resp.AlgorithmUsed = result.AlgorithmUsed
+	resp.RecommendationId = result.RecommendationID
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Successfully retrieved recommended videos"
 	return resp, nil
