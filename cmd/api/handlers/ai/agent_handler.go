@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -321,7 +322,7 @@ func getSystemPrompt() string {
 	if config.ConfigInfo.Ollama.SystemPrompt != "" {
 		return config.ConfigInfo.Ollama.SystemPrompt
 	}
-	return "你是一个TikTok短视频平台的AI智能助手。你可以帮助用户搜索视频、查看热门趋势、提供创作建议。请用中文回答，语气友好、专业。"
+	return "你是ZhiShi短视频平台的AI智能助手「小知」。你可以和用户聊任何话题，也可以帮助搜索视频、查看热门趋势、提供创作建议。请用中文回答，语气友好、自然。"
 }
 
 // buildOllamaMessages converts session messages to Ollama format
@@ -424,7 +425,87 @@ func generateAIResponseWithOllama(ctx context.Context, session *ChatSession, use
 	return finalContent
 }
 
-// generateAIResponseWithOllamaStream uses Ollama LLM for streaming response
+// thinkTagFilter is a streaming filter that strips <think>...</think> blocks in real time
+type thinkTagFilter struct {
+	inThinkBlock bool
+	buffer       string
+	output       strings.Builder
+	onChunk      func(content string)
+}
+
+func newThinkTagFilter(onChunk func(content string)) *thinkTagFilter {
+	return &thinkTagFilter{onChunk: onChunk}
+}
+
+func (f *thinkTagFilter) Write(content string) {
+	f.buffer += content
+	for {
+		if f.inThinkBlock {
+			closeIdx := strings.Index(f.buffer, "</think>")
+			if closeIdx >= 0 {
+				f.buffer = f.buffer[closeIdx+len("</think>"):]
+				f.inThinkBlock = false
+				continue
+			}
+			// Still inside think block, keep only tail for partial match
+			if len(f.buffer) > 20 {
+				f.buffer = f.buffer[len(f.buffer)-20:]
+			}
+			return
+		}
+
+		openIdx := strings.Index(f.buffer, "<think>")
+		if openIdx >= 0 {
+			if openIdx > 0 {
+				chunk := f.buffer[:openIdx]
+				f.output.WriteString(chunk)
+				f.onChunk(chunk)
+			}
+			f.buffer = f.buffer[openIdx+len("<think>"):]
+			f.inThinkBlock = true
+			continue
+		}
+
+		// Check for potential partial "<think>" at end of buffer
+		partial := "<think>"
+		for i := 1; i < len(partial) && i <= len(f.buffer); i++ {
+			if strings.HasSuffix(f.buffer, partial[:i]) {
+				safe := f.buffer[:len(f.buffer)-i]
+				if safe != "" {
+					f.output.WriteString(safe)
+					f.onChunk(safe)
+				}
+				f.buffer = f.buffer[len(f.buffer)-i:]
+				return
+			}
+		}
+
+		// No think tags found, output everything
+		if f.buffer != "" {
+			f.output.WriteString(f.buffer)
+			f.onChunk(f.buffer)
+		}
+		f.buffer = ""
+		return
+	}
+}
+
+func (f *thinkTagFilter) Flush() {
+	if f.buffer != "" && !f.inThinkBlock {
+		f.output.WriteString(f.buffer)
+		f.onChunk(f.buffer)
+		f.buffer = ""
+	}
+}
+
+func (f *thinkTagFilter) String() string {
+	return f.output.String()
+}
+
+// generateAIResponseWithOllamaStream uses Ollama LLM for streaming response.
+// Key design: directly stream from Ollama -> filter <think> tags -> SSE to frontend.
+// Tool calls are detected via a non-streaming probe first, because Ollama cannot
+// stream and return tool_calls at the same time.
 func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSession, userMessage string, onChunk func(content string)) (string, error) {
 	client := getOllamaClient()
 	if client == nil {
@@ -440,25 +521,24 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 	messages := buildOllamaMessages(session)
 	tools := getOllamaTools()
 
-	// First call with tools (non-streaming to check for tool calls)
+	// Probe: non-streaming call with tools to detect if model wants tool calls
 	resp, err := client.Chat(ctx, messages, tools)
 	if err != nil {
 		return "", fmt.Errorf("ollama chat failed: %w", err)
 	}
 
-	hlog.Infof("[AI Agent] Stream first call: tool_calls=%d, done=%v", len(resp.Message.ToolCalls), resp.Done)
+	hlog.Infof("[AI Agent] Stream probe: tool_calls=%d, content_len=%d", len(resp.Message.ToolCalls), len(resp.Message.Content))
 
-	// Handle tool calls
+	// If tools were called, execute them then stream the final answer
 	if len(resp.Message.ToolCalls) > 0 {
-		// Add assistant message with tool calls
 		messages = append(messages, ollama.ChatMessage{
 			Role:      "assistant",
 			Content:   resp.Message.Content,
 			ToolCalls: resp.Message.ToolCalls,
 		})
 
-		// Execute tool calls
 		for _, tc := range resp.Message.ToolCalls {
+			hlog.Infof("[AI Agent] Stream executing tool: %s", tc.Function.Name)
 			result, execErr := executeToolCallFromMap(ctx, tc.Function.Name, tc.Function.Arguments)
 			if execErr != nil {
 				result = fmt.Sprintf("Error: %v", execErr)
@@ -469,136 +549,37 @@ func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSessio
 				Content:  result,
 				ToolName: tc.Function.Name,
 			})
-
 			messages = append(messages, ollama.ChatMessage{
 				Role:    "tool",
 				Content: result,
 			})
 		}
 
-		// Stream the final response with tool results
-		// For thinking models, filter <think> tags
-		var fullContent strings.Builder
-		inThinkBlock := false
-		thinkBuf := ""
-
+		// Stream the final answer (no tools, to avoid another round of tool calls)
+		filter := newThinkTagFilter(onChunk)
 		_, err = client.ChatStream(ctx, messages, nil, func(content string) {
-			thinkBuf += content
-			for {
-				if inThinkBlock {
-					closeIdx := strings.Index(thinkBuf, "</think>")
-					if closeIdx >= 0 {
-						thinkBuf = thinkBuf[closeIdx+len("</think>"):]
-						inThinkBlock = false
-						continue
-					}
-					if len(thinkBuf) > 20 {
-						thinkBuf = thinkBuf[len(thinkBuf)-20:]
-					}
-					return
-				}
-				openIdx := strings.Index(thinkBuf, "<think>")
-				if openIdx >= 0 {
-					if openIdx > 0 {
-						fullContent.WriteString(thinkBuf[:openIdx])
-						onChunk(thinkBuf[:openIdx])
-					}
-					thinkBuf = thinkBuf[openIdx+len("<think>"):]
-					inThinkBlock = true
-					continue
-				}
-				if thinkBuf != "" {
-					fullContent.WriteString(thinkBuf)
-					onChunk(thinkBuf)
-				}
-				thinkBuf = ""
-				return
-			}
+			filter.Write(content)
 		})
+		filter.Flush()
 		if err != nil {
-			return fullContent.String(), err
+			return filter.String(), err
 		}
-		return fullContent.String(), nil
+		return filter.String(), nil
 	}
 
-	// No tool calls needed - stream directly
-	// Re-do the call in streaming mode (without tools to avoid tool call loop)
-	// For thinking models, we need to filter out <think> tags during streaming
-	var fullContent strings.Builder
-	inThinkBlock := false
-	thinkBuffer := ""
-
+	// No tool calls — the probe already generated a full response.
+	// Instead of calling the model again, directly stream from a new call WITHOUT tools
+	// so the model generates a fresh streaming response.
+	filter := newThinkTagFilter(onChunk)
 	_, err = client.ChatStream(ctx, messages, nil, func(content string) {
-		// Buffer and filter <think>...</think> tags in streaming mode
-		thinkBuffer += content
-
-		for {
-			if inThinkBlock {
-				// Look for closing </think> tag
-				closeIdx := strings.Index(thinkBuffer, "</think>")
-				if closeIdx >= 0 {
-					thinkBuffer = thinkBuffer[closeIdx+len("</think>"):]
-					inThinkBlock = false
-					continue
-				}
-				// Still inside think block, discard buffer but keep potential partial tag
-				if len(thinkBuffer) > 20 {
-					thinkBuffer = thinkBuffer[len(thinkBuffer)-20:]
-				}
-				return
-			}
-
-			// Look for opening <think> tag
-			openIdx := strings.Index(thinkBuffer, "<think>")
-			if openIdx >= 0 {
-				// Output everything before the think tag
-				if openIdx > 0 {
-					cleanContent := thinkBuffer[:openIdx]
-					if cleanContent != "" {
-						fullContent.WriteString(cleanContent)
-						onChunk(cleanContent)
-					}
-				}
-				thinkBuffer = thinkBuffer[openIdx+len("<think>"):]
-				inThinkBlock = true
-				continue
-			}
-
-			// Check for potential partial <think tag at end
-			partialCheck := "<think>"
-			for i := 1; i < len(partialCheck) && i <= len(thinkBuffer); i++ {
-				if strings.HasSuffix(thinkBuffer, partialCheck[:i]) {
-					// Keep the potential partial tag in buffer
-					safe := thinkBuffer[:len(thinkBuffer)-i]
-					if safe != "" {
-						fullContent.WriteString(safe)
-						onChunk(safe)
-					}
-					thinkBuffer = thinkBuffer[len(thinkBuffer)-i:]
-					return
-				}
-			}
-
-			// No think tags found, output everything
-			if thinkBuffer != "" {
-				fullContent.WriteString(thinkBuffer)
-				onChunk(thinkBuffer)
-			}
-			thinkBuffer = ""
-			return
-		}
+		filter.Write(content)
 	})
-
-	// Flush any remaining buffer
-	if thinkBuffer != "" && !inThinkBlock {
-		fullContent.WriteString(thinkBuffer)
-		onChunk(thinkBuffer)
-	}
+	filter.Flush()
 
 	if err != nil {
-		return fullContent.String(), err
+		return filter.String(), err
 	}
-	return fullContent.String(), nil
+	return filter.String(), nil
 }
 
 // ========== Fallback AI Response (when Ollama is unavailable) ==========
@@ -888,7 +869,8 @@ func ChatHandler(ctx context.Context, c *app.RequestContext) {
 	})
 }
 
-// ChatSSE handles SSE streaming chat requests
+// ChatSSE handles SSE streaming chat requests.
+// Uses io.Pipe + SetBodyStream(-1) for true chunked streaming in Hertz.
 func ChatSSE(ctx context.Context, c *app.RequestContext) {
 	userID := getUserIDFromContext(c)
 
@@ -950,51 +932,67 @@ func ChatSSE(ctx context.Context, c *app.RequestContext) {
 	c.Response.Header.Set("Access-Control-Allow-Origin", "*")
 	c.SetStatusCode(consts.StatusOK)
 
-	// Try Ollama streaming first
-	var fullResponse string
-	ollamaErr := func() error {
-		var err error
-		fullResponse, err = generateAIResponseWithOllamaStream(ctx, session, req.Message, func(content string) {
-			data, _ := json.Marshal(map[string]string{"type": "content", "content": content})
-			c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
-			c.Flush()
-		})
-		return err
-	}()
+	// Create a pipe for streaming: pw.Write() -> pr is read by Hertz -> sent to client
+	pr, pw := io.Pipe()
 
-	if ollamaErr != nil {
-		hlog.Warnf("[AI Agent] Ollama streaming failed: %v, falling back", ollamaErr)
+	// SetBodyStream with -1 means chunked transfer encoding (true streaming)
+	c.SetBodyStream(pr, -1)
 
-		// Fallback: generate response and stream it character by character
-		fullResponse = generateAIResponseFallback(ctx, session, req.Message)
-		runes := []rune(fullResponse)
-		for i := 0; i < len(runes); {
-			chunkSize := 3 + (i % 4) // Vary chunk size for natural feel
-			if i+chunkSize > len(runes) {
-				chunkSize = len(runes) - i
-			}
-			chunk := string(runes[i : i+chunkSize])
-			data, _ := json.Marshal(map[string]string{"type": "content", "content": chunk})
-			c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
-			c.Flush()
-			i += chunkSize
+	// Capture message for goroutine
+	message := req.Message
+
+	// Launch a goroutine that writes SSE events to the pipe writer
+	go func() {
+		defer pw.Close()
+
+		// Helper: write an SSE event
+		writeSSE := func(eventData interface{}) {
+			data, _ := json.Marshal(eventData)
+			pw.Write([]byte(fmt.Sprintf("data: %s\n\n", data))) //nolint:errcheck
 		}
-	}
 
-	// Store assistant message
-	sessionMu.Lock()
-	session.Messages = append(session.Messages, ChatMessage{
-		Role:    "assistant",
-		Content: fullResponse,
-	})
-	sessionMu.Unlock()
+		var fullResponse string
 
-	// Send done event
-	doneData, _ := json.Marshal(map[string]interface{}{
-		"type": "done", "session_id": session.ID, "title": session.Title,
-	})
-	c.Write([]byte(fmt.Sprintf("data: %s\n\n", doneData)))
-	c.Flush()
+		// Try Ollama streaming
+		ollamaErr := func() error {
+			var err error
+			fullResponse, err = generateAIResponseWithOllamaStream(ctx, session, message, func(content string) {
+				writeSSE(map[string]string{"type": "content", "content": content})
+			})
+			return err
+		}()
+
+		if ollamaErr != nil {
+			hlog.Warnf("[AI Agent] Ollama streaming failed: %v, falling back", ollamaErr)
+
+			// Fallback: generate response and stream it in small chunks
+			fullResponse = generateAIResponseFallback(ctx, session, message)
+			runes := []rune(fullResponse)
+			for i := 0; i < len(runes); {
+				chunkSize := 3 + (i % 4)
+				if i+chunkSize > len(runes) {
+					chunkSize = len(runes) - i
+				}
+				chunk := string(runes[i : i+chunkSize])
+				writeSSE(map[string]string{"type": "content", "content": chunk})
+				i += chunkSize
+				time.Sleep(15 * time.Millisecond)
+			}
+		}
+
+		// Store assistant message
+		sessionMu.Lock()
+		session.Messages = append(session.Messages, ChatMessage{
+			Role:    "assistant",
+			Content: fullResponse,
+		})
+		sessionMu.Unlock()
+
+		// Send done event
+		writeSSE(map[string]interface{}{
+			"type": "done", "session_id": session.ID, "title": session.Title,
+		})
+	}()
 }
 
 // ListSessions lists all chat sessions for a user
