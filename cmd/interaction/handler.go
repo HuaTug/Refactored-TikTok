@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"sync"
 
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/kitex_gen/base"
@@ -15,9 +16,37 @@ import (
 // InteractionServiceImpl implements the interaction RPC service.
 type InteractionServiceImpl struct{}
 
+// --- Singleton Enhanced Services ---
+
+var (
+	enhancedLikeSvc     *service.EnhancedLikeService
+	enhancedLikeOnce    sync.Once
+	enhancedCommentSvc  *service.EnhancedCommentService
+	enhancedCommentOnce sync.Once
+)
+
+// getEnhancedLikeService returns a singleton EnhancedLikeService.
+func getEnhancedLikeService(ctx context.Context) *service.EnhancedLikeService {
+	enhancedLikeOnce.Do(func() {
+		enhancedLikeSvc = service.NewEnhancedLikeService(ctx, service.DefaultEnhancedLikeConfig())
+		hlog.Info("EnhancedLikeService initialized (singleton)")
+	})
+	return enhancedLikeSvc
+}
+
+// getEnhancedCommentService returns a singleton EnhancedCommentService.
+func getEnhancedCommentService(ctx context.Context) *service.EnhancedCommentService {
+	enhancedCommentOnce.Do(func() {
+		enhancedCommentSvc = service.NewEnhancedCommentService(ctx)
+		hlog.Info("EnhancedCommentService initialized (singleton)")
+	})
+	return enhancedCommentSvc
+}
+
 // LikeAction handles like/unlike requests.
+// Now backed by EnhancedLikeService (Redis-First + Async DB Sync).
 func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (resp *interactions.LikeActionResponse, err error) {
-	resp, err = service.NewLikeActionService(ctx).LikeAction(ctx, req)
+	resp, err = getEnhancedLikeService(ctx).LikeAction(ctx, req)
 	if err != nil {
 		logServiceError(ctx, "LikeAction", err)
 		if resp == nil {
@@ -32,7 +61,7 @@ func (s *InteractionServiceImpl) LikeAction(ctx context.Context, req *interactio
 
 // LikeList returns the like list for a user.
 func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions.LikeListRequest) (resp *interactions.LikeListResponse, err error) {
-	resp, err = service.NewLikeActionService(ctx).GetLikeList(ctx, req)
+	resp, err = getEnhancedLikeService(ctx).GetLikeList(ctx, req)
 	if err != nil {
 		logServiceError(ctx, "LikeList", err)
 		if resp == nil {
@@ -47,32 +76,33 @@ func (s *InteractionServiceImpl) LikeList(ctx context.Context, req *interactions
 
 // BatchLikeStatus checks like status for multiple videos.
 func (s *InteractionServiceImpl) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (resp *interactions.BatchLikeStatusResponse, err error) {
-	resp = &interactions.BatchLikeStatusResponse{
-		Base:       &base.Status{Code: consts.StatusOK, Msg: "success"},
-		LikeStatus: make(map[int64]bool),
-	}
-
 	if len(req.VideoIds) == 0 {
-		return resp, nil
+		return &interactions.BatchLikeStatusResponse{
+			Base:       &base.Status{Code: consts.StatusOK, Msg: "success"},
+			LikeStatus: make(map[int64]bool),
+		}, nil
 	}
 
-	likeStatus, err := service.NewLikeActionService(ctx).BatchCheckUserLikes(ctx, req.UserId, 1, req.VideoIds)
+	resp, err = getEnhancedLikeService(ctx).BatchLikeStatus(ctx, req)
 	if err != nil {
 		logServiceError(ctx, "BatchLikeStatus", err)
-		resp.Base.Code = consts.StatusInternalServerError
-		resp.Base.Msg = "获取点赞状态失败"
+		if resp == nil {
+			resp = &interactions.BatchLikeStatusResponse{
+				Base:       &base.Status{Code: consts.StatusInternalServerError, Msg: "获取点赞状态失败"},
+				LikeStatus: make(map[int64]bool),
+			}
+		}
 		return resp, err
 	}
-
-	resp.LikeStatus = likeStatus
 	return resp, nil
 }
 
 // CreateComment creates a new comment.
+// Now backed by EnhancedCommentService with rate limiting + spam detection.
 func (s *InteractionServiceImpl) CreateComment(ctx context.Context, req *interactions.CreateCommentRequest) (resp *interactions.CreateCommentResponse, err error) {
 	resp = &interactions.CreateCommentResponse{Base: &base.Status{}}
 
-	if err := service.NewCommentService(ctx).CreateComment(ctx, req); err != nil {
+	if err := getEnhancedCommentService(ctx).CreateComment(ctx, req); err != nil {
 		logServiceError(ctx, "CreateComment", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "创建评论失败"
@@ -86,7 +116,7 @@ func (s *InteractionServiceImpl) CreateComment(ctx context.Context, req *interac
 
 // ListComment returns paginated comments.
 func (s *InteractionServiceImpl) ListComment(ctx context.Context, req *interactions.ListCommentRequest) (resp *interactions.ListCommentResponse, err error) {
-	resp, err = service.NewCommentService(ctx).ListComment(ctx, req)
+	resp, err = getEnhancedCommentService(ctx).ListComment(ctx, req)
 	if err != nil {
 		logServiceError(ctx, "ListComment", err)
 		if resp == nil {
@@ -109,7 +139,7 @@ func (s *InteractionServiceImpl) ListComment(ctx context.Context, req *interacti
 func (s *InteractionServiceImpl) DeleteComment(ctx context.Context, req *interactions.CommentDeleteRequest) (resp *interactions.CommentDeleteResponse, err error) {
 	resp = &interactions.CommentDeleteResponse{Base: &base.Status{}}
 
-	if err := service.NewCommentService(ctx).NewDeleteEvent(ctx, req); err != nil {
+	if err := getEnhancedCommentService(ctx).DeleteComment(ctx, req); err != nil {
 		logServiceError(ctx, "DeleteComment", err)
 		resp.Base.Code = consts.StatusBadRequest
 		resp.Base.Msg = "删除评论失败"
@@ -122,6 +152,7 @@ func (s *InteractionServiceImpl) DeleteComment(ctx context.Context, req *interac
 }
 
 // DeleteVideoInfo deletes all interaction data for a video.
+// Falls back to the basic CommentService since it has the required method.
 func (s *InteractionServiceImpl) DeleteVideoInfo(ctx context.Context, req *interactions.DeleteVideoInfoRequest) (resp *interactions.DeleteVideoInfoResponse, err error) {
 	resp = &interactions.DeleteVideoInfoResponse{Base: &base.Status{}}
 

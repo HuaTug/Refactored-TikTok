@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/cmd/model"
-	"HuaTug.com/cmd/video/infras/redis"
+	"HuaTug.com/internal/model"
+	redis "HuaTug.com/cmd/video/cache"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 

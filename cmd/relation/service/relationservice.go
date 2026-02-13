@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/cmd/relation/dal/db"
 	"HuaTug.com/kitex_gen/relations"
 	"HuaTug.com/pkg/errno"

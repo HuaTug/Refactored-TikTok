@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/pkg/cache"
 	"HuaTug.com/pkg/constants"
 	"github.com/cloudwego/hertz/pkg/common/hlog"

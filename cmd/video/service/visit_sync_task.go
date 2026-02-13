@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/video/dal/db"
-	"HuaTug.com/cmd/video/infras/redis"
+	redis "HuaTug.com/cmd/video/cache"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )

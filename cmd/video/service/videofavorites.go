@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"

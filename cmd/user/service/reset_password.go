@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"HuaTug.com/cmd/user/dal/db"
-	"HuaTug.com/cmd/user/infras/redis"
+	redis "HuaTug.com/cmd/user/cache"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/pkg/utils"
 

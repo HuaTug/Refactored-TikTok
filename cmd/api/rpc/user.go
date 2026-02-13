@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"HuaTug.com/config"
-	"HuaTug.com/config/jaeger"
+	"HuaTug.com/pkg/infra/jaeger"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/users/userservice"
 

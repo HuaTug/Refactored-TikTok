@@ -1,7 +1,7 @@
 package ai
 
 import (
-	aihandler "HuaTug.com/cmd/api/handlers/ai"
+	aihandler "HuaTug.com/cmd/api/handler/ai"
 	"HuaTug.com/cmd/api/router/authfunc"
 
 	"github.com/cloudwego/hertz/pkg/app"

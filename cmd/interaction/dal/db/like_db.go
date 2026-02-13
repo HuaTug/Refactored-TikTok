@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"gorm.io/gorm"
 )
 

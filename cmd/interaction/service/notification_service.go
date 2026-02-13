@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/kitex_gen/interactions"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"

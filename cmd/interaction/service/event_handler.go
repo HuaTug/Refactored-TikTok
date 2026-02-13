@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"HuaTug.com/cmd/interaction/common"
+	common "HuaTug.com/cmd/interaction/sync"
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/config/cache"
+	redis "HuaTug.com/cmd/interaction/cache"
+	"HuaTug.com/pkg/infra/cache"
 	"HuaTug.com/pkg/mq"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"

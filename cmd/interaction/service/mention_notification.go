@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"time"
 
-	"HuaTug.com/cmd/interaction/infras/client"
+	client "HuaTug.com/cmd/interaction/client_rpc"
 	"HuaTug.com/config"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/pkg/mq"

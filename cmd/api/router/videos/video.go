@@ -3,7 +3,7 @@
 package videos
 
 import (
-	videos "HuaTug.com/cmd/api/handlers/video"
+	videos "HuaTug.com/cmd/api/handler/video"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 )

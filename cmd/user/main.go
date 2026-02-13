@@ -19,9 +19,9 @@ import (
 	"net"
 
 	"HuaTug.com/cmd/user/dal"
-	"HuaTug.com/cmd/user/infras/redis"
+	redis "HuaTug.com/cmd/user/cache"
 	"HuaTug.com/config"
-	"HuaTug.com/config/jaeger"
+	"HuaTug.com/pkg/infra/jaeger"
 	user "HuaTug.com/kitex_gen/users/userservice"
 	"HuaTug.com/pkg/bound"
 	"HuaTug.com/pkg/middleware"

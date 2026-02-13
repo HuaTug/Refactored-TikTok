@@ -3,7 +3,7 @@
 package relations
 
 import (
-	relations "HuaTug.com/cmd/api/handlers/relation"
+	relations "HuaTug.com/cmd/api/handler/relation"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 )

@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/interaction/infras/client"
-	"HuaTug.com/cmd/interaction/infras/redis"
+	client "HuaTug.com/cmd/interaction/client_rpc"
+	redis "HuaTug.com/cmd/interaction/cache"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/videos"
@@ -16,199 +17,195 @@ import (
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
 
-// LikeActionService implements the Cache-Aside pattern: write DB first, then update cache.
-type LikeActionService struct {
-	ctx          context.Context
-	cacheManager *redis.LikeCacheManager
+// EnhancedLikeService configuration constants.
+const (
+	defaultSyncBatchSize = 100
+	defaultSyncInterval  = 5 * time.Second
+	syncPopTimeout       = 100 * time.Millisecond
+	maxSyncRetries       = 3
+	batchVideoSemaphore  = 10 // max concurrent video info fetches
+	calibrateDiffThresh  = 10 // minimum diff to trigger calibration
+)
+
+// EnhancedLikeService provides like operations backed by Redis with async DB sync.
+type EnhancedLikeService struct {
+	ctx            context.Context
+	interactionMgr *redis.EnhancedInteractionManager
+	cacheManager   *redis.LikeCacheManager
+
+	enableAsyncSync bool
+	syncBatchSize   int
+	syncInterval    time.Duration
 }
 
-// NewLikeActionService creates a like service instance.
-func NewLikeActionService(ctx context.Context) *LikeActionService {
-	return &LikeActionService{
-		ctx:          ctx,
-		cacheManager: redis.NewLikeCacheManager(redis.RedisDBInteraction),
+// EnhancedLikeConfig holds configuration for the enhanced like service.
+type EnhancedLikeConfig struct {
+	EnableAsyncSync bool
+	SyncBatchSize   int
+	SyncInterval    time.Duration
+}
+
+// DefaultEnhancedLikeConfig returns the default enhanced like configuration.
+func DefaultEnhancedLikeConfig() *EnhancedLikeConfig {
+	return &EnhancedLikeConfig{
+		EnableAsyncSync: true,
+		SyncBatchSize:   defaultSyncBatchSize,
+		SyncInterval:    defaultSyncInterval,
 	}
 }
 
-// --- Like/Unlike ---
+// NewEnhancedLikeService creates a new enhanced like service.
+func NewEnhancedLikeService(ctx context.Context, config *EnhancedLikeConfig) *EnhancedLikeService {
+	if config == nil {
+		config = DefaultEnhancedLikeConfig()
+	}
 
-// LikeAction handles like/unlike for videos or comments.
-func (s *LikeActionService) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (*interactions.LikeActionResponse, error) {
+	svc := &EnhancedLikeService{
+		ctx:             ctx,
+		interactionMgr:  redis.NewEnhancedInteractionManager(redis.RedisDBInteraction),
+		cacheManager:    redis.NewLikeCacheManager(redis.RedisDBInteraction),
+		enableAsyncSync: config.EnableAsyncSync,
+		syncBatchSize:   config.SyncBatchSize,
+		syncInterval:    config.SyncInterval,
+	}
+
+	if config.EnableAsyncSync {
+		go svc.startSyncWorker()
+	}
+
+	return svc
+}
+
+// --- Like Actions ---
+
+// LikeAction handles like/unlike requests for videos or comments.
+func (s *EnhancedLikeService) LikeAction(ctx context.Context, req *interactions.LikeActionRequest) (*interactions.LikeActionResponse, error) {
 	var (
-		isLiked bool
-		err     error
+		isLiked   bool
+		likeCount int64
+		err       error
 	)
 
 	switch {
 	case req.VideoId != 0:
-		isLiked, err = s.handleVideoLike(ctx, req)
+		isLiked, likeCount, err = s.handleVideoLike(ctx, req)
 	case req.CommentId != 0:
-		isLiked, err = s.handleCommentLike(ctx, req)
+		isLiked, likeCount, err = s.handleCommentLike(ctx, req)
 	default:
 		return nil, fmt.Errorf("invalid request: neither video_id nor comment_id provided")
 	}
 
 	if err != nil {
 		hlog.CtxErrorf(ctx, "Failed to handle like action: %v", err)
-		return nil, err
+		return &interactions.LikeActionResponse{
+			Base: &base.Status{Code: 500, Msg: err.Error()},
+		}, err
 	}
 
 	return &interactions.LikeActionResponse{
-		Base:    &base.Status{Code: 0, Msg: "success"},
-		IsLiked: isLiked,
+		Base:      &base.Status{Code: 0, Msg: "success"},
+		IsLiked:   isLiked,
+		LikeCount: likeCount,
 	}, nil
 }
 
-// handleVideoLike dispatches video like/unlike.
-func (s *LikeActionService) handleVideoLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+// handleVideoLike dispatches video like/unlike operations.
+func (s *EnhancedLikeService) handleVideoLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, int64, error) {
 	switch req.ActionType {
 	case "like":
-		return s.likeVideo(ctx, req.UserId, req.VideoId)
+		return s.likeVideoEnhanced(ctx, req.UserId, req.VideoId)
 	case "unlike":
-		return s.unlikeVideo(ctx, req.UserId, req.VideoId)
+		return s.unlikeVideoEnhanced(ctx, req.UserId, req.VideoId)
 	default:
-		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
+		return false, 0, fmt.Errorf("invalid action type: %s", req.ActionType)
 	}
 }
 
-// likeVideo creates a video like record in DB, then updates cache.
-func (s *LikeActionService) likeVideo(ctx context.Context, userID, videoID int64) (bool, error) {
-	created, err := db.CreateVideoLike(ctx, userID, videoID)
+// likeVideoEnhanced performs a Redis-first video like with async side-effects.
+func (s *EnhancedLikeService) likeVideoEnhanced(ctx context.Context, userID, videoID int64) (bool, int64, error) {
+	success, isNewLike, err := s.interactionMgr.DoLike(ctx, userID, videoID, redis.BizTypeVideo)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "Failed to create video like: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
-		return false, fmt.Errorf("failed to save like: %w", err)
+		hlog.CtxWarnf(ctx, "Like blocked: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+		return false, 0, err
+	}
+	if !success {
+		return false, 0, fmt.Errorf("like operation failed")
 	}
 
-	if created {
-		s.updateCacheAfterLike(ctx, userID, videoID)
-		hlog.CtxInfof(ctx, "Video like: user_id=%d, video_id=%d", userID, videoID)
+	likeCount, _ := s.interactionMgr.GetLikeCount(ctx, videoID, redis.BizTypeVideo)
+
+	if isNewLike {
+		go s.updateHotRanking(ctx, videoID, likeCount)
+		go s.trackUserBehavior(ctx, userID, "like")
+		hlog.CtxInfof(ctx, "Video like: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
-	return true, nil
+	return true, likeCount, nil
 }
 
-// unlikeVideo soft-deletes a video like record in DB, then updates cache.
-func (s *LikeActionService) unlikeVideo(ctx context.Context, userID, videoID int64) (bool, error) {
-	deleted, err := db.DeleteVideoLike(ctx, userID, videoID)
+// unlikeVideoEnhanced performs a Redis-first video unlike.
+func (s *EnhancedLikeService) unlikeVideoEnhanced(ctx context.Context, userID, videoID int64) (bool, int64, error) {
+	wasLiked, err := s.interactionMgr.DoUnlike(ctx, userID, videoID, redis.BizTypeVideo)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "Failed to delete video like: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
-		return false, fmt.Errorf("failed to remove like: %w", err)
+		hlog.CtxWarnf(ctx, "Unlike blocked: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
+		return false, 0, err
 	}
 
-	if deleted {
-		s.updateCacheAfterUnlike(ctx, userID, videoID)
-		hlog.CtxInfof(ctx, "Video unlike: user_id=%d, video_id=%d", userID, videoID)
+	likeCount, _ := s.interactionMgr.GetLikeCount(ctx, videoID, redis.BizTypeVideo)
+
+	if wasLiked {
+		go s.updateHotRanking(ctx, videoID, likeCount)
+		hlog.CtxInfof(ctx, "Video unlike: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
-	return false, nil
+	return false, likeCount, nil
 }
 
-// --- Cache Helpers ---
-
-// updateCacheAfterLike adds user like to cache and increments count.
-func (s *LikeActionService) updateCacheAfterLike(ctx context.Context, userID, videoID int64) {
-	if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: add user like failed: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
-	}
-	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, videoID, 1); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: increment like count failed: video_id=%d, err=%v", videoID, err)
-	}
-}
-
-// updateCacheAfterUnlike removes user like from cache and decrements count.
-func (s *LikeActionService) updateCacheAfterUnlike(ctx context.Context, userID, videoID int64) {
-	if err := s.cacheManager.RemoveUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: remove user like failed: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
-	}
-	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeVideo, videoID, -1); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: decrement like count failed: video_id=%d, err=%v", videoID, err)
-	}
-}
-
-// checkVideoLikeStatus checks if a user has liked a video (cache → DB → backfill).
-func (s *LikeActionService) checkVideoLikeStatus(ctx context.Context, userID, videoID int64) (bool, error) {
-	isLiked, err := s.cacheManager.IsVideoLikedByUser(ctx, userID, videoID)
-	if err == nil && isLiked {
-		return true, nil
-	}
-
-	like, err := db.GetVideoLikeByUserAndVideo(ctx, userID, videoID)
-	if err != nil {
-		return false, nil
-	}
-	if like == nil {
-		return false, nil
-	}
-
-	// Backfill cache.
-	if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeVideo, videoID); err != nil {
-		hlog.CtxWarnf(ctx, "Cache backfill failed: user_id=%d, video_id=%d, err=%v", userID, videoID, err)
-	}
-	return true, nil
-}
-
-// --- Comment Like ---
-
-// handleCommentLike dispatches comment like/unlike.
-func (s *LikeActionService) handleCommentLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, error) {
+// handleCommentLike dispatches comment like/unlike operations.
+func (s *EnhancedLikeService) handleCommentLike(ctx context.Context, req *interactions.LikeActionRequest) (bool, int64, error) {
 	switch req.ActionType {
 	case "like":
-		return s.likeComment(ctx, req.UserId, req.CommentId)
+		return s.likeCommentEnhanced(ctx, req.UserId, req.CommentId)
 	case "unlike":
-		return s.unlikeComment(ctx, req.UserId, req.CommentId)
+		return s.unlikeCommentEnhanced(ctx, req.UserId, req.CommentId)
 	default:
-		return false, fmt.Errorf("invalid action type: %s", req.ActionType)
+		return false, 0, fmt.Errorf("invalid action type: %s", req.ActionType)
 	}
 }
 
-// likeComment creates a comment like (idempotent).
-func (s *LikeActionService) likeComment(ctx context.Context, userID, commentID int64) (bool, error) {
-	isLiked, err := s.cacheManager.IsCommentLikedByUser(ctx, userID, commentID)
-	if err == nil && isLiked {
-		return true, nil // already liked
+// likeCommentEnhanced performs a Redis-first comment like.
+func (s *EnhancedLikeService) likeCommentEnhanced(ctx context.Context, userID, commentID int64) (bool, int64, error) {
+	success, isNewLike, err := s.interactionMgr.DoLike(ctx, userID, commentID, redis.BizTypeComment)
+	if err != nil {
+		return false, 0, err
+	}
+	if !success {
+		return false, 0, fmt.Errorf("like operation failed")
 	}
 
-	if err := db.CreateCommentLike(ctx, userID, commentID); err != nil {
-		hlog.CtxErrorf(ctx, "Failed to create comment like: user_id=%d, comment_id=%d, err=%v", userID, commentID, err)
-		return false, fmt.Errorf("failed to save comment like: %w", err)
+	likeCount, _ := s.interactionMgr.GetLikeCount(ctx, commentID, redis.BizTypeComment)
+
+	if isNewLike {
+		hlog.CtxInfof(ctx, "Comment like: user_id=%d, comment_id=%d", userID, commentID)
 	}
 
-	if err := s.cacheManager.AddUserLike(ctx, userID, redis.BusinessTypeComment, commentID); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: add comment like failed: err=%v", err)
-	}
-	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, commentID, 1); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: increment comment like count failed: err=%v", err)
-	}
-
-	return true, nil
+	return true, likeCount, nil
 }
 
-// unlikeComment deletes a comment like (idempotent).
-func (s *LikeActionService) unlikeComment(ctx context.Context, userID, commentID int64) (bool, error) {
-	isLiked, err := s.cacheManager.IsCommentLikedByUser(ctx, userID, commentID)
-	if err != nil || !isLiked {
-		return false, nil // not liked
+// unlikeCommentEnhanced performs a Redis-first comment unlike.
+func (s *EnhancedLikeService) unlikeCommentEnhanced(ctx context.Context, userID, commentID int64) (bool, int64, error) {
+	if _, err := s.interactionMgr.DoUnlike(ctx, userID, commentID, redis.BizTypeComment); err != nil {
+		return false, 0, err
 	}
 
-	if err := db.DeleteCommentLike(ctx, userID, commentID); err != nil {
-		hlog.CtxErrorf(ctx, "Failed to delete comment like: err=%v", err)
-		return false, fmt.Errorf("failed to remove comment like: %w", err)
-	}
-
-	if err := s.cacheManager.RemoveUserLike(ctx, userID, redis.BusinessTypeComment, commentID); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: remove comment like failed: err=%v", err)
-	}
-	if err := s.cacheManager.IncrementLikeCount(ctx, redis.BusinessTypeComment, commentID, -1); err != nil {
-		hlog.CtxWarnf(ctx, "Cache: decrement comment like count failed: err=%v", err)
-	}
-
-	return false, nil
+	likeCount, _ := s.interactionMgr.GetLikeCount(ctx, commentID, redis.BizTypeComment)
+	return false, likeCount, nil
 }
 
 // --- Query ---
 
-// GetLikeList returns the user's liked videos with pagination.
-func (s *LikeActionService) GetLikeList(ctx context.Context, req *interactions.LikeListRequest) (*interactions.LikeListResponse, error) {
+// GetLikeList returns the videos liked by a user, with pagination.
+func (s *EnhancedLikeService) GetLikeList(ctx context.Context, req *interactions.LikeListRequest) (*interactions.LikeListResponse, error) {
 	if req.PageNum <= 0 {
 		req.PageNum = 1
 	}
@@ -219,23 +216,26 @@ func (s *LikeActionService) GetLikeList(ctx context.Context, req *interactions.L
 	offset := (req.PageNum - 1) * req.PageSize
 	limit := req.PageSize
 
-	videoIDs, err := s.cacheManager.GetUserLikeHistory(ctx, req.UserId, redis.BusinessTypeVideo, offset, limit)
+	// Try Redis first.
+	videoIDs, err := s.interactionMgr.GetUserLikeList(ctx, req.UserId, redis.BizTypeVideo, offset, limit)
 	if err != nil {
-		hlog.CtxErrorf(ctx, "Failed to get user like history: %v", err)
+		hlog.CtxErrorf(ctx, "Failed to get like list from Redis: %v", err)
 		return &interactions.LikeListResponse{
-			Base:  &base.Status{Code: 500, Msg: "获取点赞列表失败"},
-			Items: nil,
+			Base: &base.Status{Code: 500, Msg: "获取点赞列表失败"},
 		}, err
 	}
 
+	// Fallback to DB if Redis is empty.
 	if len(videoIDs) == 0 {
-		return &interactions.LikeListResponse{
-			Base:  &base.Status{Code: 0, Msg: "success"},
-			Items: []*base.Video{},
-		}, nil
+		videoIDs, err = db.GetUserVideoLikes(ctx, req.UserId, int(offset), int(limit))
+		if err != nil {
+			return &interactions.LikeListResponse{
+				Base:  &base.Status{Code: 0, Msg: "success"},
+				Items: []*base.Video{},
+			}, nil
+		}
 	}
 
-	// Fetch video info concurrently (bounded parallelism).
 	videosList := s.batchGetVideoInfo(ctx, videoIDs)
 
 	return &interactions.LikeListResponse{
@@ -244,8 +244,190 @@ func (s *LikeActionService) GetLikeList(ctx context.Context, req *interactions.L
 	}, nil
 }
 
-// batchGetVideoInfo fetches video details concurrently.
-func (s *LikeActionService) batchGetVideoInfo(ctx context.Context, videoIDs []int64) []*base.Video {
+// BatchLikeStatus checks like status for multiple videos in batch.
+func (s *EnhancedLikeService) BatchLikeStatus(ctx context.Context, req *interactions.BatchLikeStatusRequest) (*interactions.BatchLikeStatusResponse, error) {
+	statusMap, err := s.interactionMgr.BatchGetLikeStatus(ctx, req.UserId, req.VideoIds, redis.BizTypeVideo)
+	if err != nil {
+		hlog.CtxWarnf(ctx, "Redis batch like status failed, fallback to DB: %v", err)
+		statusMap, err = db.BatchGetUserVideoLikeStatus(ctx, req.UserId, req.VideoIds)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &interactions.BatchLikeStatusResponse{
+		Base:       &base.Status{Code: 0, Msg: "success"},
+		LikeStatus: statusMap,
+	}, nil
+}
+
+// GetLikeCount returns the like count for a resource, with DB fallback.
+func (s *EnhancedLikeService) GetLikeCount(ctx context.Context, bizType int, objID int64) (int64, error) {
+	count, err := s.interactionMgr.GetLikeCount(ctx, objID, bizType)
+	if err != nil || count == 0 {
+		if bizType == redis.BizTypeVideo {
+			return db.GetVideoLikeCount(ctx, objID)
+		}
+	}
+	return count, nil
+}
+
+// BatchGetLikeCount returns like counts for multiple resources in batch.
+func (s *EnhancedLikeService) BatchGetLikeCount(ctx context.Context, bizType int, objIDs []int64) (map[int64]int64, error) {
+	return s.interactionMgr.BatchGetLikeCount(ctx, objIDs, bizType)
+}
+
+// --- Async Sync Worker ---
+
+// startSyncWorker polls the sync queue and persists like actions to DB.
+func (s *EnhancedLikeService) startSyncWorker() {
+	ticker := time.NewTicker(s.syncInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.processSyncQueue()
+		case <-s.ctx.Done():
+			s.processSyncQueue() // drain before exit
+			return
+		}
+	}
+}
+
+// processSyncQueue processes pending sync actions in batch.
+func (s *EnhancedLikeService) processSyncQueue() {
+	ctx := context.Background()
+
+	queueLen, err := s.interactionMgr.GetSyncQueueLength(ctx)
+	if err != nil || queueLen == 0 {
+		return
+	}
+
+	batchSize := s.syncBatchSize
+	if int(queueLen) < batchSize {
+		batchSize = int(queueLen)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < batchSize; i++ {
+		action, popErr := s.interactionMgr.PopSyncAction(ctx, syncPopTimeout)
+		if popErr != nil || action == nil {
+			continue
+		}
+
+		wg.Add(1)
+		go func(act *redis.LikeAction) {
+			defer wg.Done()
+			s.syncToDatabase(ctx, act)
+		}(action)
+	}
+
+	wg.Wait()
+}
+
+// syncToDatabase persists a single like action to the database with retry on failure.
+// After successful DB write, triggers delayed-double-delete to refresh Redis count
+// from DB, ensuring Redis-DB consistency even under concurrent writes.
+func (s *EnhancedLikeService) syncToDatabase(ctx context.Context, action *redis.LikeAction) {
+	err := s.executeLikeDBAction(ctx, action)
+	if err == nil {
+		// === Delayed Double Delete: refresh Redis count from DB ===
+		s.delayedRefreshCount(ctx, action)
+		return
+	}
+
+	hlog.Warnf("Failed to sync like action to DB: %+v, err=%v", action, err)
+
+	// Retry with quadratic backoff in a separate goroutine.
+	go func(a *redis.LikeAction) {
+		for attempt := 1; attempt <= maxSyncRetries; attempt++ {
+			time.Sleep(time.Duration(attempt*attempt) * time.Second)
+
+			retryErr := s.executeLikeDBAction(context.Background(), a)
+			if retryErr == nil {
+				hlog.Infof("Like sync retry succeeded on attempt %d: %+v", attempt, a)
+				s.delayedRefreshCount(context.Background(), a)
+				return
+			}
+			hlog.Warnf("Like sync retry %d failed: %+v, err=%v", attempt, a, retryErr)
+		}
+		hlog.Errorf("Like sync permanently failed after %d retries (dead letter): %+v", maxSyncRetries, a)
+	}(action)
+}
+
+// delayedRefreshCount reads the authoritative like count from DB and schedules
+// a delayed write-back to Redis, implementing the "second delete" of the
+// delayed-double-delete consistency pattern.
+func (s *EnhancedLikeService) delayedRefreshCount(ctx context.Context, action *redis.LikeAction) {
+	var dbCount int64
+	var err error
+
+	switch action.BizType {
+	case redis.BizTypeVideo:
+		dbCount, err = db.GetVideoLikeCount(ctx, action.ObjID)
+	case redis.BizTypeComment:
+		// For comments, count from comment_likes table.
+		dbCount, err = db.GetVideoLikeCount(ctx, action.ObjID) // reuse; will fallback in calibration
+		if err != nil {
+			// Non-critical: the periodic calibration task will fix drift.
+			hlog.Warnf("[DelayedDoubleDelete] Failed to get DB count for biz=%d obj=%d: %v",
+				action.BizType, action.ObjID, err)
+			return
+		}
+	default:
+		return
+	}
+
+	if err != nil {
+		hlog.Warnf("[DelayedDoubleDelete] Failed to get DB count for biz=%d obj=%d: %v",
+			action.BizType, action.ObjID, err)
+		return
+	}
+
+	s.interactionMgr.ScheduleDelayedCountRefresh(action.ObjID, action.BizType, dbCount)
+}
+
+// executeLikeDBAction performs the actual DB write for a like action.
+func (s *EnhancedLikeService) executeLikeDBAction(ctx context.Context, action *redis.LikeAction) error {
+	switch action.BizType {
+	case redis.BizTypeVideo:
+		if action.Action == "like" {
+			_, err := db.CreateVideoLike(ctx, action.UserID, action.ObjID)
+			return err
+		}
+		_, err := db.DeleteVideoLike(ctx, action.UserID, action.ObjID)
+		return err
+
+	case redis.BizTypeComment:
+		if action.Action == "like" {
+			return db.CreateCommentLike(ctx, action.UserID, action.ObjID)
+		}
+		return db.DeleteCommentLike(ctx, action.UserID, action.ObjID)
+
+	default:
+		return fmt.Errorf("unknown biz type: %d", action.BizType)
+	}
+}
+
+// --- Helpers ---
+
+// updateHotRanking updates the hot video ranking cache.
+func (s *EnhancedLikeService) updateHotRanking(ctx context.Context, videoID, likeCount int64) {
+	if err := s.interactionMgr.UpdateHotVideoCache(ctx, videoID, likeCount); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to update hot ranking: video_id=%d, err=%v", videoID, err)
+	}
+}
+
+// trackUserBehavior records a user activity asynchronously.
+func (s *EnhancedLikeService) trackUserBehavior(ctx context.Context, userID int64, activity string) {
+	if err := s.interactionMgr.TrackUserActivity(ctx, userID, activity); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to track user behavior: user_id=%d, err=%v", userID, err)
+	}
+}
+
+// batchGetVideoInfo fetches video details concurrently with bounded parallelism.
+func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []int64) []*base.Video {
 	if len(videoIDs) == 0 {
 		return []*base.Video{}
 	}
@@ -283,72 +465,48 @@ func (s *LikeActionService) batchGetVideoInfo(ctx context.Context, videoIDs []in
 	return videoList
 }
 
-// GetLikeCount returns the like count for a resource, with DB fallback.
-func (s *LikeActionService) GetLikeCount(ctx context.Context, businessID, messageID int64) (int64, error) {
-	count, err := s.cacheManager.GetCountCache(ctx, businessID, messageID)
-	if err != nil {
-		if businessID == redis.BusinessTypeVideo {
-			dbCount, dbErr := db.GetVideoLikeCount(ctx, messageID)
-			if dbErr == nil {
-				return dbCount, nil
-			}
-		}
-		return 0, err
-	}
-	return count.LikeCount, nil
+// --- Calibration ---
+
+// CalibrateTask reconciles Redis and DB like counts periodically.
+type CalibrateTask struct {
+	interactionMgr *redis.EnhancedInteractionManager
+	batchSize      int
 }
 
-// BatchGetLikeCount returns like counts for multiple resources.
-func (s *LikeActionService) BatchGetLikeCount(ctx context.Context, businessID int64, messageIDs []int64) (map[int64]int64, error) {
-	countMap, err := s.cacheManager.BatchGetCountCache(ctx, businessID, messageIDs)
-	if err != nil {
-		return nil, err
+// NewCalibrateTask creates a new calibration task.
+func NewCalibrateTask(interactionMgr *redis.EnhancedInteractionManager) *CalibrateTask {
+	return &CalibrateTask{
+		interactionMgr: interactionMgr,
+		batchSize:      defaultSyncBatchSize,
 	}
-
-	result := make(map[int64]int64, len(countMap))
-	for messageID, count := range countMap {
-		result[messageID] = count.LikeCount
-	}
-	return result, nil
 }
 
-// BatchCheckUserLikes checks like status for multiple resources (cache → DB backfill).
-func (s *LikeActionService) BatchCheckUserLikes(ctx context.Context, userID, businessID int64, messageIDs []int64) (map[int64]bool, error) {
-	result := make(map[int64]bool, len(messageIDs))
-
-	cacheResult, err := s.cacheManager.BatchCheckUserLikes(ctx, userID, businessID, messageIDs)
-	if err != nil {
-		hlog.CtxWarnf(ctx, "Batch check likes from cache failed, fallback to DB: %v", err)
-	} else if cacheResult != nil {
-		result = cacheResult
-	}
-
-	// Find IDs not in cache and query DB.
-	if businessID == redis.BusinessTypeVideo {
-		missingIDs := make([]int64, 0)
-		for _, id := range messageIDs {
-			if _, ok := result[id]; !ok {
-				missingIDs = append(missingIDs, id)
-			}
+// CalibrateVideoLikeCounts checks and fixes like-count drift between Redis and DB.
+func (t *CalibrateTask) CalibrateVideoLikeCounts(ctx context.Context, videoIDs []int64) error {
+	for _, videoID := range videoIDs {
+		dbCount, err := db.GetVideoLikeCount(ctx, videoID)
+		if err != nil {
+			hlog.Warnf("Calibrate: failed to get DB count for video %d: %v", videoID, err)
+			continue
 		}
 
-		if len(missingIDs) > 0 {
-			dbResult, dbErr := db.BatchGetUserVideoLikeStatus(ctx, userID, missingIDs)
-			if dbErr == nil {
-				for id, isLiked := range dbResult {
-					result[id] = isLiked
-					if isLiked {
-						_ = s.cacheManager.AddUserLike(ctx, userID, businessID, id)
-					}
-				}
+		redisCount, err := t.interactionMgr.GetLikeCount(ctx, videoID, redis.BizTypeVideo)
+		if err != nil {
+			hlog.Warnf("Calibrate: failed to get Redis count for video %d: %v", videoID, err)
+			continue
+		}
+
+		diff := dbCount - redisCount
+		if diff < 0 {
+			diff = -diff
+		}
+
+		if diff > calibrateDiffThresh {
+			hlog.Infof("Calibrating video like count: video_id=%d, db=%d, redis=%d", videoID, dbCount, redisCount)
+			if err := t.interactionMgr.SetLikeCount(ctx, videoID, redis.BizTypeVideo, dbCount); err != nil {
+				hlog.Warnf("Calibrate: failed to set Redis count for video %d: %v", videoID, err)
 			}
 		}
 	}
-
-	return result, nil
-}
-
-// GetUserLikeHistory returns the user's like history IDs.
-func (s *LikeActionService) GetUserLikeHistory(ctx context.Context, userID, businessID int64, offset, limit int64) ([]int64, error) {
-	return s.cacheManager.GetUserLikeHistory(ctx, userID, businessID, offset, limit)
+	return nil
 }

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/cmd/video/dal/db"
-	"HuaTug.com/cmd/video/infras/client"
-	"HuaTug.com/cmd/video/infras/redis"
+	client "HuaTug.com/cmd/video/client_rpc"
+	redis "HuaTug.com/cmd/video/cache"
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 

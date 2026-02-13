@@ -9,10 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"HuaTug.com/cmd/interaction/common"
+	common "HuaTug.com/cmd/interaction/sync"
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/interaction/infras/redis"
+	redis "HuaTug.com/cmd/interaction/cache"
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config"
 	"HuaTug.com/pkg/mq"

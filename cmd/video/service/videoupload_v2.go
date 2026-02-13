@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/video/dal/db"
-	"HuaTug.com/cmd/video/infras/redis"
+	redis "HuaTug.com/cmd/video/cache"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"

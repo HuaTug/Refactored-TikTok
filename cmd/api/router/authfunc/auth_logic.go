@@ -3,8 +3,8 @@ package authfunc
 import (
 	"context"
 
-	handlers "HuaTug.com/cmd/api/handlers/interaction"
-	jwt "HuaTug.com/pkg"
+	handlers "HuaTug.com/cmd/api/handler/interaction"
+	jwt "HuaTug.com/pkg/auth"
 	"HuaTug.com/pkg/errno"
 
 	"github.com/cloudwego/hertz/pkg/app"

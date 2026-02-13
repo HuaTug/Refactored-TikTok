@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"HuaTug.com/cmd/user/infras/redis"
+	redis "HuaTug.com/cmd/user/cache"
 	"HuaTug.com/kitex_gen/users"
 )
 

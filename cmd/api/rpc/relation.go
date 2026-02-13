@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"HuaTug.com/config/jaeger"
+	"HuaTug.com/pkg/infra/jaeger"
 	"HuaTug.com/kitex_gen/relations"
 	"HuaTug.com/kitex_gen/relations/followservice"
 

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"HuaTug.com/cmd/video/dal"
-	"HuaTug.com/cmd/video/infras/redis"
+	redis "HuaTug.com/cmd/video/cache"
 	"HuaTug.com/config"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/oss"

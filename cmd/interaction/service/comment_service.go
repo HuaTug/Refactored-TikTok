@@ -12,12 +12,11 @@ import (
 
 	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/cmd/interaction/dal/db"
-	"HuaTug.com/cmd/interaction/infras/redis"
-	"HuaTug.com/cmd/model"
+	redis "HuaTug.com/cmd/interaction/cache"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/videos"
-	"HuaTug.com/pkg/constants"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/utils"
 
@@ -25,61 +24,77 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Comment validation constants.
+// Enhanced comment constants.
 const (
-	MaxCommentLength    = 500 // Maximum comment length in characters
-	MinCommentLength    = 1   // Minimum comment length
-	CommentRateLimit    = 10  // Max comments per minute per user
-	DuplicateTimeWindow = 300 // Seconds to check for duplicate comments
+	EnhancedMaxCommentLength    = 500
+	EnhancedMinCommentLength    = 1
+	EnhancedCommentRateLimit    = 10
+	EnhancedDuplicateTimeWindow = 300
+	EnhancedMaxReplyDepth       = 2
 
-	rateLimitKeyFmt = "comment_rate_limit:%d"
-	rateLimitTTL    = 60 // seconds
-
-	hotScoreLikeWeight   = 10.0 // Like count weight in hot score
-	hotScoreTimeMaxScore = 100.0
-	hotScoreTimeHalfLife = 24.0 // hours
-
-	maxRepetitionCount     = 5
-	minRepetitionCheckLen  = 10
-	behaviorTimeout        = 5 * time.Second
-	mentionProcessTimeout  = 10 * time.Second
-	commentBuildConcurrent = 10 // max concurrent comment builds
+	enhancedDefaultPageSize   = 20
+	enhancedHotScoreMultiply  = 3 // multiplier to over-fetch for hot sort
+	enhancedHotLikeWeight     = 10.0
+	enhancedHotReplyWeight    = 5.0
+	enhancedHotTimeMaxScore   = 100.0
+	enhancedHotTimeHalfLife   = 24.0
+	enhancedCommentConcurrent = 10
 )
 
-// spamKeywords is the basic spam detection keyword list.
-var spamKeywords = []string{"spam", "advertisement", "promotion"}
-
-// CommentService handles comment CRUD and query operations.
-type CommentService struct {
-	ctx context.Context
+// enhancedSpamKeywords extends the spam keyword list with Chinese terms.
+var enhancedSpamKeywords = []string{
+	"广告", "推广", "加微信", "加qq", "联系方式",
+	"spam", "advertisement",
 }
 
-// NewCommentService creates a comment service instance.
-func NewCommentService(ctx context.Context) *CommentService {
-	return &CommentService{ctx: ctx}
+// enhancedSensitiveWords is a basic sensitive word list for content filtering.
+var enhancedSensitiveWords = []string{"spam", "scam", "abuse"}
+
+// EnhancedCommentService provides enhanced comment operations with rate limiting and spam detection.
+type EnhancedCommentService struct {
+	ctx            context.Context
+	interactionMgr *redis.EnhancedInteractionManager
+}
+
+// NewEnhancedCommentService creates an enhanced comment service.
+func NewEnhancedCommentService(ctx context.Context) *EnhancedCommentService {
+	return &EnhancedCommentService{
+		ctx:            ctx,
+		interactionMgr: redis.NewEnhancedInteractionManager(redis.RedisDBInteraction),
+	}
 }
 
 // --- Comment Creation ---
 
-// CreateComment creates a comment with validation, rate limiting, and anti-spam checks.
-func (s *CommentService) CreateComment(ctx context.Context, req *interactions.CreateCommentRequest) error {
-	uid := req.UserId
+// CreateComment creates a comment with enhanced validation, rate limiting, and spam detection.
+func (s *EnhancedCommentService) CreateComment(ctx context.Context, req *interactions.CreateCommentRequest) error {
+	userID := req.UserId
 
-	if err := s.validateCommentContent(req.Content); err != nil {
+	if err := s.validateContent(req.Content); err != nil {
 		return err
 	}
 	if req.CommentId == 0 && req.VideoId == 0 {
 		return errno.RequestErr.WithMessage("Either VideoId or CommentId must be provided")
 	}
-	if err := s.checkRateLimit(uid); err != nil {
-		return err
+
+	// Rate limit check.
+	result, err := s.interactionMgr.CheckUserCommentRateLimit(ctx, userID)
+	if err != nil {
+		hlog.CtxWarnf(ctx, "Rate limit check failed: %v", err)
+	} else if !result.Allowed {
+		waitSec := (result.RetryAt - time.Now().UnixMilli()) / 1000
+		return errno.RequestErr.WithMessage(fmt.Sprintf("评论太频繁，请稍后再试 (剩余等待时间: %ds)", waitSec))
 	}
-	if err := s.checkDuplicateComment(uid, req.Content); err != nil {
+
+	if err := s.checkDuplicate(userID, req.Content); err != nil {
 		return err
 	}
 
-	// Resolve comment hierarchy.
-	parentID, videoID, replyToCommentID, err := s.resolveCommentHierarchy(ctx, req)
+	// Filter sensitive words.
+	content := s.filterSensitiveWords(req.Content)
+
+	// Resolve hierarchy.
+	parentID, videoID, replyToCommentID, err := s.resolveHierarchy(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -87,7 +102,7 @@ func (s *CommentService) CreateComment(ctx context.Context, req *interactions.Cr
 	// Verify video exists.
 	if videoID != 0 {
 		if _, err := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID}); err != nil {
-			return errors.WithMessage(err, "Video not found or inaccessible")
+			return errors.WithMessage(err, "Video not found")
 		}
 	}
 
@@ -96,122 +111,101 @@ func (s *CommentService) CreateComment(ctx context.Context, req *interactions.Cr
 		CommentId:        commentID,
 		VideoId:          videoID,
 		ParentId:         parentID,
-		UserId:           uid,
-		Content:          strings.TrimSpace(req.Content),
+		UserId:           userID,
+		Content:          strings.TrimSpace(content),
 		CreatedAt:        time.Now(),
 		UpdatedAt:        time.Now(),
-		DeletedAt:        nil,
 		ReplyToCommentId: replyToCommentID,
 	}
 
-	if err := db.CreateCommentWithTransaction(s.ctx, comment); err != nil {
+	if err := db.CreateCommentWithTransaction(ctx, comment); err != nil {
 		return errors.WithMessage(err, "Failed to create comment")
 	}
 
-	// Async post-create actions.
-	go s.postCommentActions(uid, videoID, commentID, req.Content)
+	go s.enhancedPostCommentActions(ctx, userID, videoID, commentID, req.Content)
 
+	hlog.CtxInfof(ctx, "Comment created: user_id=%d, video_id=%d, comment_id=%d", userID, videoID, commentID)
 	return nil
 }
 
-// resolveCommentHierarchy determines parentID, videoID, and replyToCommentID for a new comment.
-func (s *CommentService) resolveCommentHierarchy(ctx context.Context, req *interactions.CreateCommentRequest) (parentID, videoID, replyToCommentID int64, err error) {
-	parentID = -1 // root comment
+// resolveHierarchy determines parentID, videoID, and replyToCommentID.
+func (s *EnhancedCommentService) resolveHierarchy(ctx context.Context, req *interactions.CreateCommentRequest) (parentID, videoID, replyToCommentID int64, err error) {
+	parentID = -1
 	videoID = req.VideoId
 
 	if req.CommentId == 0 {
 		return parentID, videoID, 0, nil
 	}
 
-	// This is a reply to another comment.
-	parentCommentID, err := db.GetParentCommentId(s.ctx, req.CommentId)
+	parentCommentID, err := db.GetParentCommentId(ctx, req.CommentId)
 	if err != nil {
-		return 0, 0, 0, errors.WithMessage(err, "Failed to get parent comment information")
+		return 0, 0, 0, errors.WithMessage(err, "Failed to get parent comment info")
 	}
 
 	replyToCommentID = req.CommentId
-
 	if req.Mode != 0 && parentCommentID != 0 {
-		parentID = parentCommentID // flatten: hang under root
+		parentID = parentCommentID
 	} else {
-		parentID = req.CommentId // traditional: direct reply
+		parentID = req.CommentId
 	}
 
 	if videoID == 0 {
-		videoID, err = db.GetCommentVideoId(s.ctx, req.CommentId)
+		videoID, err = db.GetCommentVideoId(ctx, req.CommentId)
 		if err != nil {
-			return 0, 0, 0, errors.WithMessage(err, "Failed to get video ID from comment")
+			return 0, 0, 0, errors.WithMessage(err, "Failed to get video ID")
 		}
 	}
 
 	return parentID, videoID, replyToCommentID, nil
 }
 
-// postCommentActions runs async tasks after a comment is created.
-func (s *CommentService) postCommentActions(uid, videoID, commentID int64, content string) {
-	// Rate limit counter.
-	key := fmt.Sprintf(rateLimitKeyFmt, uid)
+// enhancedPostCommentActions performs async actions after comment creation.
+func (s *EnhancedCommentService) enhancedPostCommentActions(ctx context.Context, userID, videoID, commentID int64, content string) {
+	key := fmt.Sprintf(rateLimitKeyFmt, userID)
 	if err := redis.IncrementCommentRateLimit(key, rateLimitTTL); err != nil {
-		hlog.Warnf("Failed to update rate limit for user %d: %v", uid, err)
+		hlog.CtxWarnf(ctx, "Failed to update rate limit: %v", err)
 	}
-
-	// Duplicate detection hash.
-	if err := redis.StoreCommentHash(uid, content, DuplicateTimeWindow); err != nil {
-		hlog.Warnf("Failed to store comment hash for user %d: %v", uid, err)
+	if err := redis.StoreCommentHash(userID, content, EnhancedDuplicateTimeWindow); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to store comment hash: %v", err)
 	}
-
-	// User behavior tracking.
-	behaviorCtx, cancel := context.WithTimeout(context.Background(), behaviorTimeout)
-	defer cancel()
-	userBehavior := &model.UserBehavior{
-		UserId:       uid,
-		VideoId:      videoID,
-		BehaviorType: "comment",
-		BehaviorTime: time.Now(),
+	if err := s.interactionMgr.TrackUserActivity(ctx, userID, "comment"); err != nil {
+		hlog.CtxWarnf(ctx, "Failed to track activity: %v", err)
 	}
-	if err := db.AddUserCommentBehavior(behaviorCtx, userBehavior); err != nil {
-		hlog.Warnf("Failed to record comment behavior: user_id=%d, video_id=%d, err=%v", uid, videoID, err)
-	}
-
-	// @mention notifications.
-	mentionCtx, mentionCancel := context.WithTimeout(context.Background(), mentionProcessTimeout)
-	defer mentionCancel()
-	NewMentionNotificationService().ProcessMentions(mentionCtx, uid, videoID, commentID, content)
 }
 
-// --- Validation ---
+// --- Content Validation & Filtering ---
 
-// validateCommentContent checks content length and spam patterns.
-func (s *CommentService) validateCommentContent(content string) error {
+// validateContent validates comment content with length and spam checks.
+func (s *EnhancedCommentService) validateContent(content string) error {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
-		return errno.RequestErr.WithMessage("Comment content cannot be empty")
+		return errno.RequestErr.WithMessage("评论内容不能为空")
 	}
 
 	length := utf8.RuneCountInString(trimmed)
-	if length < MinCommentLength {
-		return errno.RequestErr.WithMessage("Comment too short")
+	if length < EnhancedMinCommentLength {
+		return errno.RequestErr.WithMessage("评论内容太短")
 	}
-	if length > MaxCommentLength {
-		return errno.RequestErr.WithMessage("Comment too long, maximum 500 characters allowed")
+	if length > EnhancedMaxCommentLength {
+		return errno.RequestErr.WithMessage(fmt.Sprintf("评论内容不能超过%d个字符", EnhancedMaxCommentLength))
 	}
 
 	if s.isSpamContent(trimmed) {
-		return errno.RequestErr.WithMessage("Comment contains inappropriate content")
+		return errno.RequestErr.WithMessage("评论内容包含不当内容")
 	}
 
 	return nil
 }
 
-// isSpamContent performs basic spam detection.
-func (s *CommentService) isSpamContent(content string) bool {
+// isSpamContent detects spam content by repetition and keywords.
+func (s *EnhancedCommentService) isSpamContent(content string) bool {
 	lower := strings.ToLower(content)
 
 	if hasExcessiveRepetition(lower) {
 		return true
 	}
 
-	for _, kw := range spamKeywords {
+	for _, kw := range enhancedSpamKeywords {
 		if strings.Contains(lower, kw) {
 			return true
 		}
@@ -219,216 +213,144 @@ func (s *CommentService) isSpamContent(content string) bool {
 	return false
 }
 
-// hasExcessiveRepetition checks for more than maxRepetitionCount consecutive identical characters.
-func hasExcessiveRepetition(content string) bool {
-	if len(content) < minRepetitionCheckLen {
-		return false
-	}
+// filterSensitiveWords replaces sensitive words with asterisks (case-insensitive).
+func (s *EnhancedCommentService) filterSensitiveWords(content string) string {
+	filtered := content
+	for _, word := range enhancedSensitiveWords {
+		if word == "" {
+			continue
+		}
+		replacement := strings.Repeat("*", len(word))
+		lowerFiltered := strings.ToLower(filtered)
+		lowerWord := strings.ToLower(word)
 
-	var prev rune
-	count := 0
-	for _, ch := range content {
-		if ch == prev {
-			count++
-			if count > maxRepetitionCount {
-				return true
+		for {
+			idx := strings.Index(lowerFiltered, lowerWord)
+			if idx == -1 {
+				break
 			}
-		} else {
-			count = 1
-			prev = ch
+			filtered = filtered[:idx] + replacement + filtered[idx+len(word):]
+			lowerFiltered = lowerFiltered[:idx] + replacement + lowerFiltered[idx+len(word):]
 		}
 	}
-	return false
+	return filtered
 }
 
-// checkRateLimit validates user comment frequency via Redis.
-func (s *CommentService) checkRateLimit(userID int64) error {
-	key := fmt.Sprintf(rateLimitKeyFmt, userID)
-	count, err := redis.GetCommentRateLimit(key)
+// checkDuplicate checks for duplicate comments in the recent time window.
+func (s *EnhancedCommentService) checkDuplicate(userID int64, content string) error {
+	isDuplicate, err := redis.CheckDuplicateComment(userID, content, EnhancedDuplicateTimeWindow)
 	if err != nil {
-		hlog.Warnf("Rate limit check failed for user %d: %v", userID, err)
-		return nil // do not block on Redis failure
-	}
-	if count >= CommentRateLimit {
-		return errno.RequestErr.WithMessage("Comment rate limit exceeded, please try again later")
-	}
-	return nil
-}
-
-// checkDuplicateComment prevents duplicate comments in a time window.
-func (s *CommentService) checkDuplicateComment(userID int64, content string) error {
-	isDuplicate, err := redis.CheckDuplicateComment(userID, content, DuplicateTimeWindow)
-	if err != nil {
-		hlog.Warnf("Duplicate check failed for user %d: %v", userID, err)
+		hlog.Warnf("Duplicate check failed: %v", err)
 		return nil
 	}
 	if isDuplicate {
-		return errno.RequestErr.WithMessage("Duplicate comment detected, please wait before posting similar content")
+		return errno.RequestErr.WithMessage("请勿重复发送相同内容")
 	}
 	return nil
 }
 
 // --- Comment Listing ---
 
-// ListComment returns paginated comments for a video or comment thread.
-func (s *CommentService) ListComment(ctx context.Context, req *interactions.ListCommentRequest) (*interactions.ListCommentResponse, error) {
-	resp := &interactions.ListCommentResponse{Base: &base.Status{}}
-
+// ListComment returns paginated comments with sorting support.
+func (s *EnhancedCommentService) ListComment(ctx context.Context, req *interactions.ListCommentRequest) (*interactions.ListCommentResponse, error) {
 	if req.PageNum <= 0 {
 		req.PageNum = 1
 	}
 	if req.PageSize <= 0 {
-		req.PageSize = constants.DefaultLimit
+		req.PageSize = enhancedDefaultPageSize
 	}
 	if req.SortType == "" {
 		req.SortType = "hot"
 	}
 
 	var (
-		data *[]*base.Comment
-		err  error
+		comments []*base.Comment
+		err      error
 	)
 
 	switch {
 	case req.VideoId != 0:
-		data, err = s.GetVideoCommentWithSort(req)
+		comments, err = s.getVideoComments(ctx, req)
 	case req.CommentId != 0:
-		data, err = s.GetCommentComment(req)
+		comments, err = s.getReplyComments(ctx, req)
 	default:
-		return resp, errno.RequestErr.WithMessage("Either VideoId or CommentId must be provided")
+		return nil, errno.RequestErr.WithMessage("VideoId or CommentId required")
 	}
 
 	if err != nil {
-		hlog.Errorf("ListComment failed: %v", err)
-		return resp, err
+		return nil, err
 	}
 
-	if data != nil {
-		resp.Items = *data
-	} else {
-		resp.Items = make([]*base.Comment, 0)
-	}
-
-	return resp, nil
+	return &interactions.ListCommentResponse{
+		Base:  &base.Status{Code: 0, Msg: "success"},
+		Items: comments,
+	}, nil
 }
 
-// GetVideoCommentWithSort returns video comments sorted by the requested strategy.
-func (s *CommentService) GetVideoCommentWithSort(req *interactions.ListCommentRequest) (*[]*base.Comment, error) {
-	data := make([]*base.Comment, 0)
-
+// getVideoComments returns root-level comments for a video.
+func (s *EnhancedCommentService) getVideoComments(ctx context.Context, req *interactions.ListCommentRequest) ([]*base.Comment, error) {
 	var (
-		list *[]int64
-		err  error
+		commentIDs []int64
+		err        error
 	)
 
 	switch req.SortType {
 	case "hot":
-		list, err = db.GetVideoCommentListForHotSort(s.ctx, req.VideoId, req.PageNum, req.PageSize)
-		if err != nil {
-			return nil, errno.ServiceErr
+		commentIDs, err = s.getHotComments(ctx, req.VideoId, req.PageNum, req.PageSize)
+	case "latest":
+		list, listErr := db.GetVideoCommentListByPartWithSort(ctx, req.VideoId, req.PageNum, req.PageSize, "latest")
+		if listErr != nil {
+			return nil, listErr
 		}
-		if list == nil {
-			return &data, nil
+		if list != nil {
+			commentIDs = *list
 		}
-		sortedList, sortErr := s.sortCommentsByHot(*list, req.PageNum, req.PageSize)
-		if sortErr != nil {
-			return nil, errno.ServiceErr
-		}
-		list = &sortedList
+		// No separate err needed
 	default:
-		list, err = db.GetVideoCommentListByPartWithSort(s.ctx, req.VideoId, req.PageNum, req.PageSize, req.SortType)
-		if err != nil {
-			return nil, errno.ServiceErr
-		}
+		commentIDs, err = s.getHotComments(ctx, req.VideoId, req.PageNum, req.PageSize)
 	}
 
-	if list == nil {
-		return &data, nil
+	if err != nil {
+		return nil, err
 	}
 
-	for _, commentID := range *list {
-		comment, buildErr := s.buildCommentData(commentID)
-		if buildErr != nil {
-			hlog.Warnf("Failed to build comment %d: %v", commentID, buildErr)
-			continue
-		}
-		data = append(data, comment)
-	}
-
-	return &data, nil
+	return s.batchBuildComments(ctx, commentIDs)
 }
 
-// GetVideoComment returns video comments (legacy, no sort).
-func (s *CommentService) GetVideoComment(req *interactions.ListCommentRequest) (*[]*base.Comment, error) {
-	data := make([]*base.Comment, 0)
-	list, err := db.GetVideoCommentListByPart(s.ctx, req.VideoId, req.PageNum, req.PageSize)
+// getReplyComments returns replies to a specific comment.
+func (s *EnhancedCommentService) getReplyComments(ctx context.Context, req *interactions.ListCommentRequest) ([]*base.Comment, error) {
+	list, err := db.GetCommentChildListByPart(ctx, req.CommentId, req.PageNum, req.PageSize)
 	if err != nil {
-		return nil, errno.ServiceErr
-	}
-
-	for _, commentID := range *list {
-		comment, buildErr := s.buildCommentData(commentID)
-		if buildErr != nil {
-			hlog.Warnf("Failed to build comment %d: %v", commentID, buildErr)
-			continue
-		}
-		data = append(data, comment)
-	}
-
-	return &data, nil
-}
-
-// GetCommentComment returns child comments (replies) for a given comment.
-func (s *CommentService) GetCommentComment(req *interactions.ListCommentRequest) (*[]*base.Comment, error) {
-	data := make([]*base.Comment, 0)
-	list, err := db.GetCommentChildListByPart(s.ctx, req.CommentId, req.PageNum, req.PageSize)
-	if err != nil {
-		hlog.Errorf("Failed to get comment child list: %v", err)
-		return nil, errno.ServiceErr
+		return nil, err
 	}
 	if list == nil {
-		return &data, nil
+		return []*base.Comment{}, nil
 	}
-
-	for _, commentID := range *list {
-		comment, buildErr := s.buildCommentData(commentID)
-		if buildErr != nil {
-			hlog.Warnf("Failed to build comment %d: %v", commentID, buildErr)
-			continue
-		}
-		data = append(data, comment)
-	}
-
-	return &data, nil
+	return s.batchBuildComments(ctx, *list)
 }
 
-// --- Hot Score ---
+// getHotComments fetches, scores, sorts, and paginates comments by hot score.
+func (s *EnhancedCommentService) getHotComments(ctx context.Context, videoID, pageNum, pageSize int64) ([]int64, error) {
+	list, err := db.GetVideoCommentListForHotSort(ctx, videoID, 1, pageNum*pageSize*enhancedHotScoreMultiply)
+	if err != nil {
+		return nil, err
+	}
+	if list == nil || len(*list) == 0 {
+		return []int64{}, nil
+	}
 
-// sortCommentsByHot calculates hot scores and returns paginated sorted IDs.
-func (s *CommentService) sortCommentsByHot(commentIDs []int64, pageNum, pageSize int64) ([]int64, error) {
 	type commentScore struct {
 		ID    int64
 		Score float64
 	}
 
-	scores := make([]commentScore, 0, len(commentIDs))
-
-	for _, cid := range commentIDs {
-		likeCount, err := redis.GetCommentLikeCount(cid)
-		if err != nil {
-			likeCount = 0
-		}
-
-		info, err := db.GetCommentInfo(s.ctx, cid)
-		if err != nil {
-			hlog.Warnf("Failed to get comment info %d: %v", cid, err)
+	scores := make([]commentScore, 0, len(*list))
+	for _, cid := range *list {
+		score, scoreErr := s.calcHotScore(ctx, cid)
+		if scoreErr != nil {
 			continue
 		}
-
-		timeFactor := calculateTimeFactor(info.CreatedAt)
-		hotScore := float64(likeCount)*hotScoreLikeWeight + timeFactor
-
-		scores = append(scores, commentScore{ID: cid, Score: hotScore})
+		scores = append(scores, commentScore{ID: cid, Score: score})
 	}
 
 	sort.Slice(scores, func(i, j int) bool {
@@ -451,17 +373,66 @@ func (s *CommentService) sortCommentsByHot(commentIDs []int64, pageNum, pageSize
 	return result, nil
 }
 
-// calculateTimeFactor returns an exponentially decaying time factor.
-// Max 100, halves every 24 hours.
-func calculateTimeFactor(createdAt time.Time) float64 {
-	hours := time.Since(createdAt).Hours()
-	return hotScoreTimeMaxScore * math.Pow(0.5, hours/hotScoreTimeHalfLife)
+// calcHotScore computes a hot score combining likes, replies, and time decay.
+func (s *EnhancedCommentService) calcHotScore(ctx context.Context, commentID int64) (float64, error) {
+	likeCount, _ := redis.GetCommentLikeCount(commentID)
+	replyCount, _ := db.GetChildCommentCount(ctx, commentID)
+
+	info, err := db.GetCommentInfo(ctx, commentID)
+	if err != nil {
+		return 0, err
+	}
+
+	hours := time.Since(info.CreatedAt).Hours()
+	timeFactor := enhancedHotTimeMaxScore * math.Pow(0.5, hours/enhancedHotTimeHalfLife)
+
+	return float64(likeCount)*enhancedHotLikeWeight +
+		float64(replyCount)*enhancedHotReplyWeight +
+		timeFactor, nil
 }
 
-// --- Comment Data Builder ---
+// --- Batch Comment Builder ---
 
-// buildCommentData fetches comment info, like count, and child count concurrently.
-func (s *CommentService) buildCommentData(commentID int64) (*base.Comment, error) {
+// batchBuildComments builds comment data concurrently with bounded parallelism.
+func (s *EnhancedCommentService) batchBuildComments(ctx context.Context, commentIDs []int64) ([]*base.Comment, error) {
+	if len(commentIDs) == 0 {
+		return []*base.Comment{}, nil
+	}
+
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		results = make([]*base.Comment, 0, len(commentIDs))
+	)
+
+	semaphore := make(chan struct{}, enhancedCommentConcurrent)
+
+	for _, cid := range commentIDs {
+		wg.Add(1)
+		semaphore <- struct{}{}
+
+		go func(id int64) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+
+			comment, err := s.buildComment(ctx, id)
+			if err != nil {
+				hlog.CtxWarnf(ctx, "Failed to build comment %d: %v", id, err)
+				return
+			}
+
+			mu.Lock()
+			results = append(results, comment)
+			mu.Unlock()
+		}(cid)
+	}
+
+	wg.Wait()
+	return results, nil
+}
+
+// buildComment fetches a single comment's data concurrently.
+func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int64) (*base.Comment, error) {
 	var (
 		wg         sync.WaitGroup
 		mu         sync.Mutex
@@ -475,11 +446,11 @@ func (s *CommentService) buildCommentData(commentID int64) (*base.Comment, error
 
 	go func() {
 		defer wg.Done()
-		res, err := db.GetCommentInfo(s.ctx, commentID)
+		res, err := db.GetCommentInfo(ctx, commentID)
 		mu.Lock()
 		defer mu.Unlock()
 		if err != nil {
-			errs = append(errs, errors.WithMessage(err, "GetCommentInfo"))
+			errs = append(errs, err)
 			return
 		}
 		commentRes = res
@@ -487,26 +458,18 @@ func (s *CommentService) buildCommentData(commentID int64) (*base.Comment, error
 
 	go func() {
 		defer wg.Done()
-		count, err := redis.GetCommentLikeCount(commentID)
+		count, _ := redis.GetCommentLikeCount(commentID)
 		mu.Lock()
-		defer mu.Unlock()
-		if err != nil {
-			errs = append(errs, errors.WithMessage(err, "GetCommentLikeCount"))
-			return
-		}
 		likeCount = count
+		mu.Unlock()
 	}()
 
 	go func() {
 		defer wg.Done()
-		count, err := db.GetChildCommentCount(s.ctx, commentID)
+		count, _ := db.GetChildCommentCount(ctx, commentID)
 		mu.Lock()
-		defer mu.Unlock()
-		if err != nil {
-			errs = append(errs, errors.WithMessage(err, "GetChildCommentCount"))
-			return
-		}
 		childCount = count
+		mu.Unlock()
 	}()
 
 	wg.Wait()
@@ -515,14 +478,12 @@ func (s *CommentService) buildCommentData(commentID int64) (*base.Comment, error
 		return nil, errs[0]
 	}
 	if commentRes == nil {
-		return nil, fmt.Errorf("comment %d not found", commentID)
+		return nil, fmt.Errorf("comment not found: %d", commentID)
 	}
 
-	createdAtStr := commentRes.CreatedAt.Format(constants.DataFormate)
-	updatedAtStr := commentRes.UpdatedAt.Format(constants.DataFormate)
 	var deletedAtStr string
 	if commentRes.DeletedAt != nil {
-		deletedAtStr = commentRes.DeletedAt.Format(constants.DataFormate)
+		deletedAtStr = commentRes.DeletedAt.Format("2006-01-02 15:04:05")
 	}
 
 	return &base.Comment{
@@ -533,165 +494,51 @@ func (s *CommentService) buildCommentData(commentID int64) (*base.Comment, error
 		LikeCount:        likeCount,
 		ChildCount:       childCount,
 		Content:          commentRes.Content,
-		CreatedAt:        createdAtStr,
-		UpdatedAt:        updatedAtStr,
+		CreatedAt:        commentRes.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:        commentRes.UpdatedAt.Format("2006-01-02 15:04:05"),
 		DeletedAt:        deletedAtStr,
 		ReplyToCommentId: commentRes.ReplyToCommentId,
 	}, nil
 }
 
-// GetCommentsByReplyTarget returns comments replying to a specific comment (reserved interface).
-func (s *CommentService) GetCommentsByReplyTarget(videoID, replyToCommentID, pageNum, pageSize int64) (*[]*base.Comment, error) {
-	return nil, nil
+// --- Cache ---
+
+// updateCommentCountCache updates the video comment count cache (placeholder).
+func (s *EnhancedCommentService) updateCommentCountCache(_ context.Context, _ int64) {
+	// TODO: implement atomic comment count cache update
 }
 
-// getReplyRelationInfo retrieves reply target info (user ID and content).
-func (s *CommentService) getReplyRelationInfo(commentID int64) (int64, string, error) {
-	if commentID == 0 {
-		return 0, "", nil
-	}
-	info, err := db.GetCommentInfo(s.ctx, commentID)
-	if err != nil {
-		return 0, "", err
-	}
-	return info.UserId, info.Content, nil
-}
+// --- Delete ---
 
-// --- Delete Operations ---
-
-// NewDeleteEvent handles delete requests for videos or comments with permission checks.
-func (s *CommentService) NewDeleteEvent(ctx context.Context, req *interactions.CommentDeleteRequest) error {
-	if req.VideoId != 0 {
-		return s.deleteVideoWithPermission(ctx, req)
-	}
-	if req.CommentId != 0 {
-		return s.deleteCommentWithPermission(ctx, req)
-	}
-	return errno.RequestErr
-}
-
-// deleteVideoWithPermission verifies ownership before deleting a video and its comments.
-func (s *CommentService) deleteVideoWithPermission(ctx context.Context, req *interactions.CommentDeleteRequest) error {
-	videoInfo, err := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: req.VideoId})
-	if err != nil {
-		hlog.Errorf("VideoInfo RPC call failed: %v", err)
-		return errno.RpcErr
-	}
-	if videoInfo == nil || videoInfo.Items == nil {
-		hlog.Error("VideoInfo is nil")
-		return errno.ServiceErr
-	}
-	if videoInfo.Items.UserId != req.FromUserId {
-		return errno.ServiceErr
-	}
-	return s.DeleteVideo(req)
-}
-
-// deleteCommentWithPermission verifies ownership before deleting a comment.
-func (s *CommentService) deleteCommentWithPermission(ctx context.Context, req *interactions.CommentDeleteRequest) error {
-	commentInfo, err := db.GetCommentInfo(s.ctx, req.CommentId)
+// DeleteComment deletes a comment with permission verification.
+func (s *EnhancedCommentService) DeleteComment(ctx context.Context, req *interactions.CommentDeleteRequest) error {
+	commentInfo, err := db.GetCommentInfo(ctx, req.CommentId)
 	if err != nil {
 		return errno.MysqlErr
 	}
+
+	// Check permission: comment owner or video owner.
 	if commentInfo.UserId != req.FromUserId {
-		return errno.ServiceErr
-	}
-	return s.DeleteComment(req)
-}
-
-// DeleteVideo deletes a video and all its comments.
-func (s *CommentService) DeleteVideo(req *interactions.CommentDeleteRequest) error {
-	list, err := db.GetVideoCommentList(context.Background(), req.VideoId)
-	if err != nil {
-		return errno.MysqlErr
-	}
-	if _, err := rpc.VideoClient.VideoDeleteV2(s.ctx, &videos.VideoDeleteRequestV2{
-		VideoId: req.VideoId,
-		UserId:  req.FromUserId,
-	}); err != nil {
-		return errno.ServiceErr
-	}
-
-	errChan := make(chan error, len(*list))
-	var wg sync.WaitGroup
-
-	for _, item := range *list {
-		wg.Add(1)
-		go func(commentID int64) {
-			defer wg.Done()
-			if delErr := s.DeleteComment(&interactions.CommentDeleteRequest{CommentId: commentID}); delErr != nil {
-				errChan <- delErr
+		if req.VideoId != 0 {
+			videoInfo, vErr := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: req.VideoId})
+			if vErr != nil || videoInfo == nil || videoInfo.Items.UserId != req.FromUserId {
+				return errno.ServiceErr.WithMessage("无权删除此评论")
 			}
-		}(item)
+		} else {
+			return errno.ServiceErr.WithMessage("无权删除此评论")
+		}
 	}
 
-	wg.Wait()
-	select {
-	case err := <-errChan:
-		return err
-	default:
-		return nil
-	}
-}
-
-// DeleteComment soft-deletes a comment and cleans up associated Redis data.
-func (s *CommentService) DeleteComment(req *interactions.CommentDeleteRequest) error {
-	if err := db.DeleteComment(s.ctx, req.CommentId); err != nil {
+	if err := db.DeleteComment(ctx, req.CommentId); err != nil {
 		return errno.ServiceErr
 	}
 
-	// Async cache cleanup only (no duplicate DB delete).
 	go func() {
-		if err := redis.DeleteCommentAndAllAbout(req.CommentId); err != nil {
-			hlog.Warnf("Failed to clean Redis for comment %d: %v", req.CommentId, err)
+		if delErr := redis.DeleteCommentAndAllAbout(req.CommentId); delErr != nil {
+			hlog.Warnf("Failed to clean Redis for comment %d: %v", req.CommentId, delErr)
 		}
 	}()
 
+	hlog.CtxInfof(ctx, "Comment deleted: comment_id=%d, by_user=%d", req.CommentId, req.FromUserId)
 	return nil
-}
-
-// --- Popular Videos ---
-
-// NewVideoPopularListEvent returns the popular video list from Redis.
-func (s *CommentService) NewVideoPopularListEvent(req *interactions.VideoPopularListRequest) (*[]string, error) {
-	list, err := redis.GetVideoPopularList(req.PageNum, req.PageSize)
-	if err != nil {
-		return nil, errno.RedisErr
-	}
-	return list, nil
-}
-
-// NewDeleteVideoInfoEvent deletes all comments and likes associated with a video.
-func (s *CommentService) NewDeleteVideoInfoEvent(req *interactions.DeleteVideoInfoRequest) error {
-	commentList, err := db.GetVideoCommentList(s.ctx, req.VideoId)
-	if err != nil {
-		return errors.New("Failed to get VideoCommentList")
-	}
-
-	errChan := make(chan error, 2)
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		if delErr := redis.DeleteAllComment(*commentList); delErr != nil {
-			errChan <- errors.New("Failed to delete VideoComment")
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		if delErr := redis.DeleteVideoAndAllAbout(req.VideoId); delErr != nil {
-			errChan <- errors.New("Failed to delete VideoLike")
-		}
-	}()
-
-	wg.Wait()
-
-	select {
-	case err := <-errChan:
-		return err
-	default:
-		return nil
-	}
 }

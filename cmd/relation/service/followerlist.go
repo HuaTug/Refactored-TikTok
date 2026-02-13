@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"HuaTug.com/cmd/relation/dal/db"
-	"HuaTug.com/cmd/relation/infras"
+	infras "HuaTug.com/cmd/relation/client_rpc"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/relations"
 	"HuaTug.com/kitex_gen/users"

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/video/dal/db"
-	"HuaTug.com/config/cache"
+	"HuaTug.com/pkg/infra/cache"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 

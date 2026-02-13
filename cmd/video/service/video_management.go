@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/video/dal/db"
-	videoRedis "HuaTug.com/cmd/video/infras/redis"
+	videoRedis "HuaTug.com/cmd/video/cache"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/oss"

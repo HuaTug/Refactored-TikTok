@@ -3,7 +3,7 @@
 package interactions
 
 import (
-	interactions "HuaTug.com/cmd/api/handlers/interaction"
+	interactions "HuaTug.com/cmd/api/handler/interaction"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 )

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/cmd/video/dal/db"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"

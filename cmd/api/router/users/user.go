@@ -3,7 +3,7 @@
 package users
 
 import (
-	users "HuaTug.com/cmd/api/handlers/user"
+	users "HuaTug.com/cmd/api/handler/user"
 
 	"github.com/cloudwego/hertz/pkg/app/server"
 )

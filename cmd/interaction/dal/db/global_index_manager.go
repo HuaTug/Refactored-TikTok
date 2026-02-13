@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/config/cache"
+	"HuaTug.com/pkg/infra/cache"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 	"github.com/gomodule/redigo/redis"

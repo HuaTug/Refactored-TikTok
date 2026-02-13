@@ -1,6 +1,6 @@
 package mq
 
-import "HuaTug.com/cmd/model"
+import "HuaTug.com/internal/model"
 
 // LikeEvent 点赞事件
 type LikeEvent struct {

@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 
-	"HuaTug.com/cmd/model"
+	"HuaTug.com/internal/model"
 )
 
 func Permession_assignment(ctx context.Context, permession *model.User_Role) error {
