@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"HuaTug.com/cmd/api/rpc"
+	"HuaTug.com/config"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/errno"
+	"HuaTug.com/pkg/ollama"
 	"HuaTug.com/pkg/recommendation"
 
 	"github.com/cloudwego/hertz/pkg/app"
@@ -69,6 +71,32 @@ var (
 	sessionStore = make(map[int64]map[string]*ChatSession) // userID -> sessionID -> session
 	sessionMu    sync.RWMutex
 )
+
+// Ollama client singleton
+var (
+	ollamaClient     *ollama.Client
+	ollamaClientOnce sync.Once
+)
+
+// getOllamaClient returns the singleton Ollama client
+func getOllamaClient() *ollama.Client {
+	ollamaClientOnce.Do(func() {
+		cfg := config.ConfigInfo.Ollama
+		if !cfg.Enabled {
+			hlog.Info("[AI Agent] Ollama integration is disabled, using fallback mode")
+			return
+		}
+		ollamaClient = ollama.NewClient(
+			cfg.BaseURL,
+			cfg.Model,
+			cfg.Temperature,
+			cfg.MaxTokens,
+			cfg.Timeout,
+		)
+		hlog.Infof("[AI Agent] Ollama client initialized: %s (model: %s)", cfg.BaseURL, cfg.Model)
+	})
+	return ollamaClient
+}
 
 func getUserSessions(userID int64) map[string]*ChatSession {
 	sessionMu.RLock()
@@ -144,6 +172,22 @@ func getAvailableTools() []ToolDefinition {
 	}
 }
 
+// getOllamaTools converts tool definitions to Ollama's tool format
+func getOllamaTools() []ollama.Tool {
+	var tools []ollama.Tool
+	for _, td := range getAvailableTools() {
+		tools = append(tools, ollama.Tool{
+			Type: "function",
+			Function: ollama.ToolFunction{
+				Name:        td.Name,
+				Description: td.Description,
+				Parameters:  td.Parameters,
+			},
+		})
+	}
+	return tools
+}
+
 // ========== Tool Execution ==========
 
 func executeToolCall(ctx context.Context, toolName string, arguments string) (string, error) {
@@ -159,6 +203,20 @@ func executeToolCall(ctx context.Context, toolName string, arguments string) (st
 		return executeGetHotTopics(ctx, args)
 	case "suggest_content_strategy":
 		return executeSuggestContentStrategy(ctx, args)
+	default:
+		return "", fmt.Errorf("unknown tool: %s", toolName)
+	}
+}
+
+// executeToolCallFromMap handles tool arguments as map (from Ollama)
+func executeToolCallFromMap(ctx context.Context, toolName string, arguments map[string]interface{}) (string, error) {
+	switch toolName {
+	case "search_videos":
+		return executeSearchVideos(ctx, arguments)
+	case "get_hot_topics":
+		return executeGetHotTopics(ctx, arguments)
+	case "suggest_content_strategy":
+		return executeSuggestContentStrategy(ctx, arguments)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}
@@ -256,9 +314,183 @@ func executeSuggestContentStrategy(ctx context.Context, args map[string]interfac
 	return suggestion, nil
 }
 
-// ========== AI Response Generation ==========
+// ========== Ollama-Powered AI Response Generation ==========
 
-func generateAIResponse(ctx context.Context, session *ChatSession, userMessage string) string {
+// getSystemPrompt returns the configured or default system prompt
+func getSystemPrompt() string {
+	if config.ConfigInfo.Ollama.SystemPrompt != "" {
+		return config.ConfigInfo.Ollama.SystemPrompt
+	}
+	return "你是一个TikTok短视频平台的AI智能助手。你可以帮助用户搜索视频、查看热门趋势、提供创作建议。请用中文回答，语气友好、专业。"
+}
+
+// buildOllamaMessages converts session messages to Ollama format
+func buildOllamaMessages(session *ChatSession) []ollama.ChatMessage {
+	var msgs []ollama.ChatMessage
+	for _, m := range session.Messages {
+		msgs = append(msgs, ollama.ChatMessage{
+			Role:    m.Role,
+			Content: m.Content,
+		})
+	}
+	return msgs
+}
+
+// generateAIResponseWithOllama uses Ollama LLM for response generation with tool calling
+func generateAIResponseWithOllama(ctx context.Context, session *ChatSession, userMessage string) string {
+	client := getOllamaClient()
+	if client == nil {
+		hlog.Warn("[AI Agent] Ollama client not available, using fallback")
+		return generateAIResponseFallback(ctx, session, userMessage)
+	}
+
+	// Check if Ollama service is reachable
+	if !client.IsAvailable(ctx) {
+		hlog.Warn("[AI Agent] Ollama service is not reachable, using fallback")
+		return generateAIResponseFallback(ctx, session, userMessage)
+	}
+
+	// Build messages for Ollama
+	messages := buildOllamaMessages(session)
+	tools := getOllamaTools()
+
+	// First call: let the model decide if it needs tools
+	resp, err := client.Chat(ctx, messages, tools)
+	if err != nil {
+		hlog.Errorf("[AI Agent] Ollama chat failed: %v", err)
+		return generateAIResponseFallback(ctx, session, userMessage)
+	}
+
+	// Handle tool calls (may need multiple rounds)
+	maxToolRounds := 3
+	for round := 0; round < maxToolRounds && len(resp.Message.ToolCalls) > 0; round++ {
+		hlog.Infof("[AI Agent] Ollama requested %d tool calls (round %d)", len(resp.Message.ToolCalls), round+1)
+
+		// Add assistant message with tool calls
+		messages = append(messages, ollama.ChatMessage{
+			Role:      "assistant",
+			Content:   resp.Message.Content,
+			ToolCalls: resp.Message.ToolCalls,
+		})
+
+		// Execute each tool call and add results
+		for _, tc := range resp.Message.ToolCalls {
+			toolName := tc.Function.Name
+			toolArgs := tc.Function.Arguments
+
+			hlog.Infof("[AI Agent] Executing tool: %s, args: %v", toolName, toolArgs)
+			result, err := executeToolCallFromMap(ctx, toolName, toolArgs)
+			if err != nil {
+				result = fmt.Sprintf("Error executing tool %s: %v", toolName, err)
+				hlog.Warnf("[AI Agent] Tool execution error: %v", err)
+			}
+
+			// Store tool result in session
+			session.Messages = append(session.Messages, ChatMessage{
+				Role:     "tool",
+				Content:  result,
+				ToolName: toolName,
+			})
+
+			// Add tool response to Ollama messages
+			messages = append(messages, ollama.ChatMessage{
+				Role:    "tool",
+				Content: result,
+			})
+		}
+
+		// Call Ollama again with tool results (no tools this time to force a text response)
+		resp, err = client.Chat(ctx, messages, nil)
+		if err != nil {
+			hlog.Errorf("[AI Agent] Ollama follow-up call failed: %v", err)
+			return "抱歉，处理工具结果时出现了问题。请稍后重试。"
+		}
+	}
+
+	if resp.Message.Content == "" {
+		return "抱歉，我暂时无法生成回复。请稍后再试。"
+	}
+
+	return resp.Message.Content
+}
+
+// generateAIResponseWithOllamaStream uses Ollama LLM for streaming response
+func generateAIResponseWithOllamaStream(ctx context.Context, session *ChatSession, userMessage string, onChunk func(content string)) (string, error) {
+	client := getOllamaClient()
+	if client == nil {
+		return "", fmt.Errorf("ollama client not available")
+	}
+
+	if !client.IsAvailable(ctx) {
+		return "", fmt.Errorf("ollama service not reachable")
+	}
+
+	messages := buildOllamaMessages(session)
+	tools := getOllamaTools()
+
+	// First call with tools (non-streaming to check for tool calls)
+	resp, err := client.Chat(ctx, messages, tools)
+	if err != nil {
+		return "", fmt.Errorf("ollama chat failed: %w", err)
+	}
+
+	// Handle tool calls
+	if len(resp.Message.ToolCalls) > 0 {
+		// Add assistant message with tool calls
+		messages = append(messages, ollama.ChatMessage{
+			Role:      "assistant",
+			Content:   resp.Message.Content,
+			ToolCalls: resp.Message.ToolCalls,
+		})
+
+		// Execute tool calls
+		for _, tc := range resp.Message.ToolCalls {
+			result, execErr := executeToolCallFromMap(ctx, tc.Function.Name, tc.Function.Arguments)
+			if execErr != nil {
+				result = fmt.Sprintf("Error: %v", execErr)
+			}
+
+			session.Messages = append(session.Messages, ChatMessage{
+				Role:     "tool",
+				Content:  result,
+				ToolName: tc.Function.Name,
+			})
+
+			messages = append(messages, ollama.ChatMessage{
+				Role:    "tool",
+				Content: result,
+			})
+		}
+
+		// Stream the final response with tool results
+		var fullContent strings.Builder
+		_, err = client.ChatStream(ctx, messages, nil, func(content string) {
+			fullContent.WriteString(content)
+			onChunk(content)
+		})
+		if err != nil {
+			return fullContent.String(), err
+		}
+		return fullContent.String(), nil
+	}
+
+	// No tool calls needed - stream directly
+	// Re-do the call in streaming mode (without tools to avoid tool call loop)
+	var fullContent strings.Builder
+	_, err = client.ChatStream(ctx, messages, nil, func(content string) {
+		fullContent.WriteString(content)
+		onChunk(content)
+	})
+	if err != nil {
+		return fullContent.String(), err
+	}
+	return fullContent.String(), nil
+}
+
+// ========== Fallback AI Response (when Ollama is unavailable) ==========
+
+// generateAIResponseFallback is the original rule-based response generator
+func generateAIResponseFallback(ctx context.Context, session *ChatSession, userMessage string) string {
 	// Analyze user intent and decide whether to call tools
 	toolCalls := analyzeIntent(userMessage)
 
@@ -307,7 +539,7 @@ func summarizeResult(result string) string {
 	return result
 }
 
-// analyzeIntent determines which tools to call based on user message
+// analyzeIntent determines which tools to call based on user message (fallback mode)
 func analyzeIntent(message string) []ToolCall {
 	msg := strings.ToLower(message)
 	var calls []ToolCall
@@ -492,7 +724,7 @@ func ChatHandler(ctx context.Context, c *app.RequestContext) {
 			ID:    req.SessionID,
 			Title: "新会话",
 			Messages: []ChatMessage{
-				{Role: "system", Content: "You are a helpful AI assistant for a TikTok-like video platform."},
+				{Role: "system", Content: getSystemPrompt()},
 			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
@@ -524,8 +756,8 @@ func ChatHandler(ctx context.Context, c *app.RequestContext) {
 	session.UpdatedAt = time.Now()
 	sessionMu.Unlock()
 
-	// Generate AI response
-	response := generateAIResponse(ctx, session, req.Message)
+	// Generate AI response (Ollama with fallback)
+	response := generateAIResponseWithOllama(ctx, session, req.Message)
 
 	// Store assistant message
 	sessionMu.Lock()
@@ -566,7 +798,7 @@ func ChatSSE(ctx context.Context, c *app.RequestContext) {
 			ID:    req.SessionID,
 			Title: "新会话",
 			Messages: []ChatMessage{
-				{Role: "system", Content: "You are a helpful AI assistant for a TikTok-like video platform."},
+				{Role: "system", Content: getSystemPrompt()},
 			},
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
@@ -597,17 +829,6 @@ func ChatSSE(ctx context.Context, c *app.RequestContext) {
 	session.UpdatedAt = time.Now()
 	sessionMu.Unlock()
 
-	// Generate response
-	response := generateAIResponse(ctx, session, req.Message)
-
-	// Store assistant message
-	sessionMu.Lock()
-	session.Messages = append(session.Messages, ChatMessage{
-		Role:    "assistant",
-		Content: response,
-	})
-	sessionMu.Unlock()
-
 	// Set SSE headers
 	c.Response.Header.Set("Content-Type", "text/event-stream")
 	c.Response.Header.Set("Cache-Control", "no-cache")
@@ -615,19 +836,44 @@ func ChatSSE(ctx context.Context, c *app.RequestContext) {
 	c.Response.Header.Set("Access-Control-Allow-Origin", "*")
 	c.SetStatusCode(consts.StatusOK)
 
-	// Stream response character by character
-	runes := []rune(response)
-	for i := 0; i < len(runes); {
-		chunkSize := 3 + (i % 4) // Vary chunk size for natural feel
-		if i+chunkSize > len(runes) {
-			chunkSize = len(runes) - i
+	// Try Ollama streaming first
+	var fullResponse string
+	ollamaErr := func() error {
+		var err error
+		fullResponse, err = generateAIResponseWithOllamaStream(ctx, session, req.Message, func(content string) {
+			data, _ := json.Marshal(map[string]string{"type": "content", "content": content})
+			c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+			c.Flush()
+		})
+		return err
+	}()
+
+	if ollamaErr != nil {
+		hlog.Warnf("[AI Agent] Ollama streaming failed: %v, falling back", ollamaErr)
+
+		// Fallback: generate response and stream it character by character
+		fullResponse = generateAIResponseFallback(ctx, session, req.Message)
+		runes := []rune(fullResponse)
+		for i := 0; i < len(runes); {
+			chunkSize := 3 + (i % 4) // Vary chunk size for natural feel
+			if i+chunkSize > len(runes) {
+				chunkSize = len(runes) - i
+			}
+			chunk := string(runes[i : i+chunkSize])
+			data, _ := json.Marshal(map[string]string{"type": "content", "content": chunk})
+			c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
+			c.Flush()
+			i += chunkSize
 		}
-		chunk := string(runes[i : i+chunkSize])
-		data, _ := json.Marshal(map[string]string{"type": "content", "content": chunk})
-		c.Write([]byte(fmt.Sprintf("data: %s\n\n", data)))
-		c.Flush()
-		i += chunkSize
 	}
+
+	// Store assistant message
+	sessionMu.Lock()
+	session.Messages = append(session.Messages, ChatMessage{
+		Role:    "assistant",
+		Content: fullResponse,
+	})
+	sessionMu.Unlock()
 
 	// Send done event
 	doneData, _ := json.Marshal(map[string]interface{}{
@@ -719,4 +965,24 @@ func DeleteSession(ctx context.Context, c *app.RequestContext) {
 // GetTools returns available AI tools
 func GetTools(ctx context.Context, c *app.RequestContext) {
 	sendResponse(c, nil, map[string]interface{}{"tools": getAvailableTools()})
+}
+
+// HealthCheck checks Ollama connectivity
+func HealthCheck(ctx context.Context, c *app.RequestContext) {
+	client := getOllamaClient()
+	status := map[string]interface{}{
+		"ollama_enabled": config.ConfigInfo.Ollama.Enabled,
+		"model":          config.ConfigInfo.Ollama.Model,
+		"base_url":       config.ConfigInfo.Ollama.BaseURL,
+	}
+
+	if client != nil && client.IsAvailable(ctx) {
+		status["ollama_status"] = "connected"
+		status["mode"] = "ollama"
+	} else {
+		status["ollama_status"] = "disconnected"
+		status["mode"] = "fallback"
+	}
+
+	sendResponse(c, nil, status)
 }

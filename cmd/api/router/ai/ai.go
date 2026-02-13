@@ -22,6 +22,7 @@ func Register(r *server.Hertz) {
 		_ai.GET("/session", append(_aiSessionMw(), aihandler.GetSession)...)
 		_ai.DELETE("/session", append(_aiSessionMw(), aihandler.DeleteSession)...)
 		_ai.GET("/tools", aihandler.GetTools)
+		_ai.GET("/health", aihandler.HealthCheck)
 	}
 }
 

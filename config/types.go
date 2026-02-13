@@ -9,6 +9,7 @@ type config struct {
 	RabbitMq        rabbitmq        `yaml:"rabbitmq" mapstructure:"rabbitmq"`
 	Kafka           kafka           `yaml:"kafka" mapstructure:"kafka"`
 	Elasticsearch   elasticsearch   `yaml:"elasticsearch" mapstructure:"elasticsearch"`
+	Ollama          ollamaConfig    `yaml:"ollama" mapstructure:"ollama"`
 }
 
 // kafka 配置
@@ -69,4 +70,15 @@ type rabbitmq struct {
 	Addr     string `yaml:"addr"`
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
+}
+
+// Ollama LLM configuration
+type ollamaConfig struct {
+	BaseURL      string  `yaml:"base_url" mapstructure:"base_url"`           // Ollama API base URL, e.g. http://localhost:11434
+	Model        string  `yaml:"model" mapstructure:"model"`                 // Model name, e.g. llama3, qwen2, your custom model
+	Temperature  float64 `yaml:"temperature" mapstructure:"temperature"`     // Sampling temperature (0.0 - 2.0)
+	MaxTokens    int     `yaml:"max_tokens" mapstructure:"max_tokens"`       // Maximum tokens for response
+	Timeout      int     `yaml:"timeout" mapstructure:"timeout"`             // Request timeout in seconds
+	SystemPrompt string  `yaml:"system_prompt" mapstructure:"system_prompt"` // Default system prompt
+	Enabled      bool    `yaml:"enabled" mapstructure:"enabled"`             // Whether Ollama integration is enabled
 }

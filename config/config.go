@@ -123,6 +123,32 @@ func Init() {
 	ConfigInfo.Elasticsearch.MaxRetries = viper.GetInt("elasticsearch.max_retries")
 	ConfigInfo.Elasticsearch.EnableSniff = viper.GetBool("elasticsearch.enable_sniff")
 
+	// Ollama LLM configuration
+	ConfigInfo.Ollama.Enabled = viper.GetBool("ollama.enabled")
+	ConfigInfo.Ollama.BaseURL = viper.GetString("ollama.base_url")
+	ConfigInfo.Ollama.Model = viper.GetString("ollama.model")
+	ConfigInfo.Ollama.Temperature = viper.GetFloat64("ollama.temperature")
+	ConfigInfo.Ollama.MaxTokens = viper.GetInt("ollama.max_tokens")
+	ConfigInfo.Ollama.Timeout = viper.GetInt("ollama.timeout")
+	ConfigInfo.Ollama.SystemPrompt = viper.GetString("ollama.system_prompt")
+
+	// Set Ollama defaults
+	if ConfigInfo.Ollama.BaseURL == "" {
+		ConfigInfo.Ollama.BaseURL = "http://localhost:11434"
+	}
+	if ConfigInfo.Ollama.Model == "" {
+		ConfigInfo.Ollama.Model = "llama3"
+	}
+	if ConfigInfo.Ollama.Temperature == 0 {
+		ConfigInfo.Ollama.Temperature = 0.7
+	}
+	if ConfigInfo.Ollama.MaxTokens == 0 {
+		ConfigInfo.Ollama.MaxTokens = 2048
+	}
+	if ConfigInfo.Ollama.Timeout == 0 {
+		ConfigInfo.Ollama.Timeout = 120
+	}
+
 	// 设置默认值
 	if ConfigInfo.Elasticsearch.IndexPrefix == "" {
 		ConfigInfo.Elasticsearch.IndexPrefix = "tiktok"
