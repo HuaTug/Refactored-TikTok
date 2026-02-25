@@ -115,8 +115,6 @@ github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75
 github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75b93b87b8a9/go.mod h1:Hdm2ql0T4+QcZoOVmgH9xovEJaTiQowKq3bc+lAXr50=
 github.com/cloudwego/eino-ext/components/model/openai v0.1.1 h1:VRdUDcnfi/T8F0jcuovhdADU9Io/oMqiKpY2ZJTBc1o=
 github.com/cloudwego/eino-ext/components/model/openai v0.1.1/go.mod h1:VwAXEY1ik2K9KFPZvymnkfBQQKgLHbpg90yg+7hrTt8=
-github.com/cloudwego/eino-ext/components/retriever/milvus v0.0.0-20251011073417-75b93b87b8a9 h1:y+Kc6GSYSvz9FqPA5k71SQTuM+UWZEGnf6C9B52FcfA=
-github.com/cloudwego/eino-ext/components/retriever/milvus v0.0.0-20251011073417-75b93b87b8a9/go.mod h1:PYh8yoOcuFYVfSZZ4vglaeRgaXrMz5D4uKioDZxEDA0=
 github.com/cloudwego/eino-ext/libs/acl/openai v0.1.2 h1:r9Id2wzJ05PoHl+Km7jQgNMgciaZI93TVnUYso89esM=
 github.com/cloudwego/eino-ext/libs/acl/openai v0.1.2/go.mod h1:S4OkvglPY9hsm9tXeShODrf/WN1Cgu4bqu4nn/CnIic=
 github.com/cloudwego/fastpb v0.0.5 h1:vYnBPsfbAtU5TVz5+f9UTlmSCixG9F9vRwaqE0mZPZU=

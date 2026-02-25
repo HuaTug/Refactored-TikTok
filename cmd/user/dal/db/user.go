@@ -48,13 +48,18 @@ func (u *UserWithPassword) TableName() string {
 // Note: base.User is generated from thrift, has limited fields
 func (u *UserWithPassword) convertToBaseUser() *base.User {
 	user := &base.User{
-		UserId:    u.UserId,
-		UserName:  u.UserName,
-		Email:     u.Email,
-		Sex:       u.Sex,
-		AvatarUrl: u.AvatarUrl,
-		CreatedAt: u.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: u.UpdatedAt.Format(time.RFC3339),
+		UserId:         u.UserId,
+		UserName:       u.UserName,
+		Email:          u.Email,
+		Sex:            u.Sex,
+		AvatarUrl:      u.AvatarUrl,
+		FollowingCount: int64(u.FollowingCount),
+		FollowerCount:  int64(u.FollowerCount),
+		LikeCount:      int64(u.LikeCount),
+		VideoCount:     int64(u.VideoCount),
+		Status:         int64(u.Status),
+		CreatedAt:      u.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      u.UpdatedAt.Format(time.RFC3339),
 	}
 
 	if u.DeletedAt != nil {

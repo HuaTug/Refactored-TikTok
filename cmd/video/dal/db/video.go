@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/internal/model"
 	redis "HuaTug.com/cmd/video/cache"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 
@@ -169,6 +169,14 @@ func UpdateVideoVisit(ctx context.Context, vid, visitCount int64) error {
 
 func UpdateVideoCommentCount(ctx context.Context, vid, commentCount int64) error {
 	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id =?", vid).Update("comment_count", commentCount).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func IncrementVideoCommentCount(ctx context.Context, vid, delta int64) error {
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("video_id = ?", vid).
+		UpdateColumn("comment_count", gorm.Expr("GREATEST(comment_count + ?, 0)", delta)).Error; err != nil {
 		return err
 	}
 	return nil

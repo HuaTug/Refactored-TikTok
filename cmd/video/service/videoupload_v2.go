@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/cmd/video/dal/db"
 	redis "HuaTug.com/cmd/video/cache"
+	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
@@ -448,6 +448,13 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 	// 8. 更新用户存储配额
 	if err := s.updateUserStorageUsage(session.UserID, fileSize); err != nil {
 		hlog.Warnf("Failed to update user storage usage for session %s: %v", session.UUID, err)
+	}
+
+	// 9. 更新用户视频数
+	if err := db.DB.WithContext(s.ctx).Exec(
+		"UPDATE users SET video_count = video_count + 1 WHERE user_id = ?", session.UserID,
+	).Error; err != nil {
+		hlog.Warnf("Failed to update user video_count for session %s: %v", session.UUID, err)
 	}
 
 	// 8. 清理临时文件和会话

@@ -123,6 +123,20 @@ func Init() {
 	ConfigInfo.Elasticsearch.MaxRetries = viper.GetInt("elasticsearch.max_retries")
 	ConfigInfo.Elasticsearch.EnableSniff = viper.GetBool("elasticsearch.enable_sniff")
 
+	// AI Agent configuration (Eino-based RAG + ReAct agent + knowledge base)
+	ConfigInfo.AIAgent.Enabled = viper.GetBool("ai_agent.enabled")
+	ConfigInfo.AIAgent.ChatModel.APIKey = viper.GetString("ai_agent.chat_model.api_key")
+	ConfigInfo.AIAgent.ChatModel.BaseURL = viper.GetString("ai_agent.chat_model.base_url")
+	ConfigInfo.AIAgent.ChatModel.Model = viper.GetString("ai_agent.chat_model.model")
+	ConfigInfo.AIAgent.ThinkModel.APIKey = viper.GetString("ai_agent.think_model.api_key")
+	ConfigInfo.AIAgent.ThinkModel.BaseURL = viper.GetString("ai_agent.think_model.base_url")
+	ConfigInfo.AIAgent.ThinkModel.Model = viper.GetString("ai_agent.think_model.model")
+	ConfigInfo.AIAgent.Embedding.APIKey = viper.GetString("ai_agent.embedding.api_key")
+	ConfigInfo.AIAgent.Embedding.Model = viper.GetString("ai_agent.embedding.model")
+	ConfigInfo.AIAgent.Embedding.Dimensions = viper.GetInt("ai_agent.embedding.dimensions")
+	ConfigInfo.AIAgent.Milvus.Address = viper.GetString("ai_agent.milvus.address")
+	ConfigInfo.AIAgent.DocsDir = viper.GetString("ai_agent.docs_dir")
+
 	// Ollama LLM configuration
 	ConfigInfo.Ollama.Enabled = viper.GetBool("ollama.enabled")
 	ConfigInfo.Ollama.BaseURL = viper.GetString("ollama.base_url")
@@ -197,4 +211,28 @@ func GetRabbitMQURL() string {
 	}
 
 	return "amqp://" + username + ":" + password + "@" + addr + "/"
+}
+
+// ResolveProjectPath resolves a relative path against the project root directory.
+// The project root is derived from the viper config file location (always at
+// <project_root>/config/config.yml). If the path is already absolute, it is
+// returned as-is. If the config file location cannot be determined, the path
+// is returned unchanged (relative to cwd).
+func ResolveProjectPath(relPath string) string {
+	if filepath.IsAbs(relPath) {
+		return relPath
+	}
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		return relPath
+	}
+	// configFile is e.g. "../../config/config.yml" or an absolute path.
+	// Get its directory (the config/ dir), then go up one level to project root.
+	absConfig, err := filepath.Abs(configFile)
+	if err != nil {
+		return relPath
+	}
+	projectRoot := filepath.Dir(filepath.Dir(absConfig)) // config/ -> project root
+	resolved := filepath.Join(projectRoot, relPath)
+	return resolved
 }

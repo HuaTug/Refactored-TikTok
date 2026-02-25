@@ -10,12 +10,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"HuaTug.com/cmd/api/rpc"
-	"HuaTug.com/cmd/interaction/dal/db"
 	redis "HuaTug.com/cmd/interaction/cache"
+	client_rpc "HuaTug.com/cmd/interaction/client_rpc"
+	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/internal/model"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
+	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/utils"
@@ -101,7 +102,7 @@ func (s *EnhancedCommentService) CreateComment(ctx context.Context, req *interac
 
 	// Verify video exists.
 	if videoID != 0 {
-		if _, err := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID}); err != nil {
+		if _, err := client_rpc.VideoInfo(ctx, &videos.VideoInfoRequestV2{VideoId: videoID}); err != nil {
 			return errors.WithMessage(err, "Video not found")
 		}
 	}
@@ -170,6 +171,16 @@ func (s *EnhancedCommentService) enhancedPostCommentActions(ctx context.Context,
 	}
 	if err := s.interactionMgr.TrackUserActivity(ctx, userID, "comment"); err != nil {
 		hlog.CtxWarnf(ctx, "Failed to track activity: %v", err)
+	}
+	// Update video comment count
+	if videoID != 0 {
+		if _, err := client_rpc.UpdateVideoCommentCount(ctx, &videos.UpdateVideoCommentCountRequestV2{
+			VideoId:       videoID,
+			CommentCount:  1,
+			OperationType: "increment",
+		}); err != nil {
+			hlog.CtxWarnf(ctx, "Failed to update video comment count: %v", err)
+		}
 	}
 }
 
@@ -440,6 +451,8 @@ func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int
 		commentRes *model.Comment
 		likeCount  int64
 		childCount int64
+		userName   string
+		avatarURL  string
 	)
 
 	wg.Add(3)
@@ -481,6 +494,13 @@ func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int
 		return nil, fmt.Errorf("comment not found: %d", commentID)
 	}
 
+	// Fetch user info for comment display
+	userResp, err := client_rpc.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: commentRes.UserId})
+	if err == nil && userResp != nil && userResp.User != nil {
+		userName = userResp.User.UserName
+		avatarURL = userResp.User.AvatarUrl
+	}
+
 	var deletedAtStr string
 	if commentRes.DeletedAt != nil {
 		deletedAtStr = commentRes.DeletedAt.Format("2006-01-02 15:04:05")
@@ -498,6 +518,8 @@ func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int
 		UpdatedAt:        commentRes.UpdatedAt.Format("2006-01-02 15:04:05"),
 		DeletedAt:        deletedAtStr,
 		ReplyToCommentId: commentRes.ReplyToCommentId,
+		UserName:         &userName,
+		AvatarUrl:        &avatarURL,
 	}, nil
 }
 
@@ -520,7 +542,7 @@ func (s *EnhancedCommentService) DeleteComment(ctx context.Context, req *interac
 	// Check permission: comment owner or video owner.
 	if commentInfo.UserId != req.FromUserId {
 		if req.VideoId != 0 {
-			videoInfo, vErr := rpc.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: req.VideoId})
+			videoInfo, vErr := client_rpc.VideoInfo(ctx, &videos.VideoInfoRequestV2{VideoId: req.VideoId})
 			if vErr != nil || videoInfo == nil || videoInfo.Items.UserId != req.FromUserId {
 				return errno.ServiceErr.WithMessage("无权删除此评论")
 			}
@@ -536,6 +558,16 @@ func (s *EnhancedCommentService) DeleteComment(ctx context.Context, req *interac
 	go func() {
 		if delErr := redis.DeleteCommentAndAllAbout(req.CommentId); delErr != nil {
 			hlog.Warnf("Failed to clean Redis for comment %d: %v", req.CommentId, delErr)
+		}
+		// Decrement video comment count
+		if commentInfo.VideoId != 0 {
+			if _, err := client_rpc.UpdateVideoCommentCount(ctx, &videos.UpdateVideoCommentCountRequestV2{
+				VideoId:       commentInfo.VideoId,
+				CommentCount:  1,
+				OperationType: "decrement",
+			}); err != nil {
+				hlog.Warnf("Failed to decrement video comment count: %v", err)
+			}
 		}
 	}()
 

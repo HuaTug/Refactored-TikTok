@@ -73,12 +73,6 @@ func buildChatAgentInternal(ctx context.Context) (compose.Runnable[*UserMessage,
 
 	g := compose.NewGraph[*UserMessage, *schema.Message]()
 
-	// Node: InputToRag - Extracts query string for RAG retrieval
-	_ = g.AddLambdaNode(InputToRag,
-		compose.InvokableLambdaWithOption(inputToRagLambda),
-		compose.WithNodeName("UserMessageToRag"),
-	)
-
 	// Node: ChatTemplate - Prompt template with RAG context
 	chatTemplate, err := NewChatTemplate(ctx)
 	if err != nil {
@@ -93,30 +87,54 @@ func buildChatAgentInternal(ctx context.Context) (compose.Runnable[*UserMessage,
 	}
 	_ = g.AddLambdaNode(ReactAgent, reactAgentLambda, compose.WithNodeName("ReActAgent"))
 
-	// Node: MilvusRetriever - RAG knowledge retrieval from vector store
-	retriever, err := NewMilvusRetriever(ctx)
-	if err != nil {
-		hlog.Warnf("[AI Agent] Milvus retriever unavailable, RAG will be disabled: %v", err)
-		// If retriever is unavailable, we can still proceed without RAG
-		// by using a no-op retriever or skipping the retrieval branch
-		// For now, return error to signal the issue
-		return nil, fmt.Errorf("failed to create Milvus retriever: %w", err)
-	}
-	// Output key "documents" matches the {documents} placeholder in the prompt template
-	_ = g.AddRetrieverNode(MilvusRetriever, retriever, compose.WithOutputKey("documents"))
-
 	// Node: InputToChat - Extracts chat context (history, date, etc.)
 	_ = g.AddLambdaNode(InputToChat,
 		compose.InvokableLambdaWithOption(inputToChatLambda),
 		compose.WithNodeName("UserMessageToChat"),
 	)
 
-	// Wire the edges
-	_ = g.AddEdge(compose.START, InputToRag)
-	_ = g.AddEdge(compose.START, InputToChat)
-	_ = g.AddEdge(InputToRag, MilvusRetriever)
-	_ = g.AddEdge(MilvusRetriever, ChatTemplate)
-	_ = g.AddEdge(InputToChat, ChatTemplate)
+	// Try to add Milvus RAG branch (optional - pipeline works without it)
+	ret, milvusErr := NewMilvusRetriever(ctx)
+	ragEnabled := milvusErr == nil
+	if milvusErr != nil {
+		hlog.Warnf("[AI Agent] Milvus retriever unavailable, RAG will be disabled (tools still active): %v", milvusErr)
+	}
+
+	if ragEnabled {
+		// Full pipeline with RAG:
+		// START → InputToRag → RagRetriever (query→formatted docs string) ──┐
+		// START → InputToChat ─────────────────────────────────────────────┤
+		//                                                                  ▼
+		//                                                           ChatTemplate → ReactAgent → END
+		_ = g.AddLambdaNode(InputToRag,
+			compose.InvokableLambdaWithOption(inputToRagLambda),
+			compose.WithNodeName("UserMessageToRag"),
+		)
+		// RagRetriever: calls retriever and formats []*schema.Document → string for {documents} template var
+		_ = g.AddLambdaNode(MilvusRetriever,
+			compose.InvokableLambdaWithOption(makeRagLambda(ret)),
+			compose.WithNodeName("MilvusRetriever"),
+		)
+
+		_ = g.AddEdge(compose.START, InputToRag)
+		_ = g.AddEdge(compose.START, InputToChat)
+		_ = g.AddEdge(InputToRag, MilvusRetriever)
+		_ = g.AddEdge(MilvusRetriever, ChatTemplate)
+		_ = g.AddEdge(InputToChat, ChatTemplate)
+	} else {
+		// Simplified pipeline without RAG:
+		// START → [InputToChat, EmptyDocs] → ChatTemplate → ReactAgent → END
+		const EmptyDocs = "EmptyDocs"
+		_ = g.AddLambdaNode(EmptyDocs,
+			compose.InvokableLambdaWithOption(emptyDocsLambda),
+			compose.WithNodeName("EmptyDocs"),
+		)
+		_ = g.AddEdge(compose.START, InputToChat)
+		_ = g.AddEdge(compose.START, EmptyDocs)
+		_ = g.AddEdge(InputToChat, ChatTemplate)
+		_ = g.AddEdge(EmptyDocs, ChatTemplate)
+	}
+
 	_ = g.AddEdge(ChatTemplate, ReactAgent)
 	_ = g.AddEdge(ReactAgent, compose.END)
 

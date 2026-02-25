@@ -6,6 +6,7 @@ import (
 
 	"HuaTug.com/config"
 
+	"github.com/cloudwego/hertz/pkg/common/hlog"
 	cli "github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 )
@@ -103,11 +104,44 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 		}
 	}
 
+	// If the collection exists but was created without EnableDynamicField,
+	// the milvus-sdk-go will reject OutputFields in search results with:
+	//   "extra output fields found and result does not dynamic field"
+	// Drop and recreate the collection with the correct schema.
+	//
+	// Also drop and recreate if the collection description doesn't match the
+	// current schema version. This cleans up duplicate chunks that accumulated
+	// from server restarts before the dedup-on-index fix was added.
+	const collectionDescription = "TikTok platform knowledge base v2"
+	if collectionExists {
+		col, err := agentClient.DescribeCollection(ctx, MilvusCollectionName)
+		needsRecreate := false
+		if err == nil && !col.Schema.EnableDynamicField {
+			hlog.Warnf("[Milvus] Collection '%s' missing EnableDynamicField, dropping and recreating...", MilvusCollectionName)
+			needsRecreate = true
+		}
+		if err == nil && col.Schema.Description != collectionDescription {
+			hlog.Warnf("[Milvus] Collection '%s' schema version mismatch (have=%q, want=%q), dropping and recreating to clean duplicates...",
+				MilvusCollectionName, col.Schema.Description, collectionDescription)
+			needsRecreate = true
+		}
+		if needsRecreate {
+			if dropErr := agentClient.DropCollection(ctx, MilvusCollectionName); dropErr != nil {
+				hlog.Errorf("[Milvus] Failed to drop collection '%s': %v", MilvusCollectionName, dropErr)
+			} else {
+				collectionExists = false
+				// Clear indexed files tracker so all docs get re-indexed
+				ResetIndexedFiles()
+			}
+		}
+	}
+
 	if !collectionExists {
 		schema := &entity.Schema{
-			CollectionName: MilvusCollectionName,
-			Description:    "TikTok platform knowledge base collection",
-			Fields:         milvusFields,
+			CollectionName:     MilvusCollectionName,
+			Description:        collectionDescription,
+			Fields:             milvusFields,
+			EnableDynamicField: true,
 		}
 		if err := agentClient.CreateCollection(ctx, schema, entity.DefaultShardNumber); err != nil {
 			defaultClient.Close()
@@ -126,6 +160,52 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 		_ = agentClient.CreateIndex(ctx, MilvusCollectionName, "vector", vectorIndex, false)
 	}
 
+	// 5. Ensure the collection is loaded into memory (required before search)
+	if err := agentClient.LoadCollection(ctx, MilvusCollectionName, false); err != nil {
+		// Log but don't fail - collection may be empty (no segments to load)
+		fmt.Printf("[Milvus] LoadCollection warning (may be empty): %v\n", err)
+	}
+
 	defaultClient.Close()
 	return agentClient, nil
+}
+
+// deleteChunksBySource deletes all document chunks from Milvus that originated
+// from a specific source file. This is called before re-indexing a file to
+// prevent duplicate chunks from accumulating across server restarts.
+func deleteChunksBySource(ctx context.Context, sourceFile string) error {
+	client, err := NewMilvusClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create Milvus client for deletion: %w", err)
+	}
+	defer client.Close()
+
+	// Milvus JSON field query: metadata["source"] == "filename.md"
+	expr := fmt.Sprintf(`metadata["source"] == "%s"`, sourceFile)
+	if err := client.Delete(ctx, MilvusCollectionName, "", expr); err != nil {
+		return fmt.Errorf("failed to delete chunks for source '%s': %w", sourceFile, err)
+	}
+	hlog.Infof("[Knowledge Base] Deleted old chunks for source: %s", sourceFile)
+	return nil
+}
+
+// flushMilvusCollection flushes the knowledge base collection so that
+// GetCollectionStatistics returns accurate row counts. Without an explicit
+// flush, newly inserted data sits in growing (unsealed) segments and the
+// stats report row_count=0, causing SafeRetriever to skip searches.
+func flushMilvusCollection(ctx context.Context) error {
+	client, err := NewMilvusClient(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to create Milvus client for flush: %w", err)
+	}
+	defer client.Close()
+	if err := client.Flush(ctx, MilvusCollectionName, false); err != nil {
+		return fmt.Errorf("failed to flush collection '%s': %w", MilvusCollectionName, err)
+	}
+	// Reload collection so newly flushed (sealed) segments are available for search.
+	// Without this, queries may miss recently indexed data.
+	if err := client.LoadCollection(ctx, MilvusCollectionName, false); err != nil {
+		hlog.Warnf("[Knowledge Base] LoadCollection after flush warning: %v", err)
+	}
+	return nil
 }

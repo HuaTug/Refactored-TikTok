@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/cmd/interaction/dal/db"
-	client "HuaTug.com/cmd/interaction/client_rpc"
 	redis "HuaTug.com/cmd/interaction/cache"
+	client "HuaTug.com/cmd/interaction/client_rpc"
+	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
 	"HuaTug.com/kitex_gen/videos"
@@ -137,6 +137,7 @@ func (s *EnhancedLikeService) likeVideoEnhanced(ctx context.Context, userID, vid
 	if isNewLike {
 		go s.updateHotRanking(ctx, videoID, likeCount)
 		go s.trackUserBehavior(ctx, userID, "like")
+		go s.updateVideoAuthorLikeCount(ctx, videoID, 1)
 		hlog.CtxInfof(ctx, "Video like: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
@@ -155,6 +156,7 @@ func (s *EnhancedLikeService) unlikeVideoEnhanced(ctx context.Context, userID, v
 
 	if wasLiked {
 		go s.updateHotRanking(ctx, videoID, likeCount)
+		go s.updateVideoAuthorLikeCount(ctx, videoID, -1)
 		hlog.CtxInfof(ctx, "Video unlike: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
@@ -423,6 +425,31 @@ func (s *EnhancedLikeService) updateHotRanking(ctx context.Context, videoID, lik
 func (s *EnhancedLikeService) trackUserBehavior(ctx context.Context, userID int64, activity string) {
 	if err := s.interactionMgr.TrackUserActivity(ctx, userID, activity); err != nil {
 		hlog.CtxWarnf(ctx, "Failed to track user behavior: user_id=%d, err=%v", userID, err)
+	}
+}
+
+// updateVideoAuthorLikeCount updates the video author's like_count in the users table.
+// delta should be +1 for like, -1 for unlike.
+func (s *EnhancedLikeService) updateVideoAuthorLikeCount(ctx context.Context, videoID int64, delta int) {
+	// Get the video author's user ID
+	resp, err := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID})
+	if err != nil || resp == nil || resp.Items == nil {
+		hlog.CtxWarnf(ctx, "Failed to get video author for like count update: video_id=%d, err=%v", videoID, err)
+		return
+	}
+
+	authorID := resp.Items.UserId
+	if authorID <= 0 {
+		return
+	}
+
+	// Update the author's like_count directly in the shared database
+	result := db.DB.WithContext(ctx).Exec(
+		"UPDATE users SET like_count = GREATEST(0, CAST(like_count AS SIGNED) + ?) WHERE user_id = ?",
+		delta, authorID,
+	)
+	if result.Error != nil {
+		hlog.CtxWarnf(ctx, "Failed to update author like count: author_id=%d, delta=%d, err=%v", authorID, delta, result.Error)
 	}
 }
 

@@ -71,6 +71,11 @@ func EinoChatHandler(ctx context.Context, c *app.RequestContext) {
 	out, err := runner.Invoke(agentCtx, userMessage)
 	if err != nil {
 		hlog.Errorf("[Eino Agent] Chat invocation failed: %v", err)
+		// Reset cached pipeline on Milvus errors so next request rebuilds with LoadCollection
+		if strings.Contains(err.Error(), "collection not loaded") || strings.Contains(err.Error(), "milvus") {
+			hlog.Info("[Eino Agent] Milvus-related error detected, resetting agent cache for next request")
+			aiagent.ResetChatAgent()
+		}
 		fallbackOllamaChat(ctx, c, req, sessionID)
 		return
 	}
@@ -103,16 +108,43 @@ func fallbackOllamaChat(ctx context.Context, c *app.RequestContext, req ChatRequ
 		return
 	}
 
-	// Simple Ollama chat without session management
+	// Ollama chat with tool support
 	messages := []ollamapkg.ChatMessage{
 		{Role: "system", Content: getSystemPrompt()},
 		{Role: "user", Content: req.Message},
 	}
-	resp, err := client.Chat(ctx, messages, nil)
+	tools := getOllamaTools()
+
+	resp, err := client.Chat(ctx, messages, tools)
 	if err != nil {
 		hlog.Errorf("[Eino Fallback] Ollama chat failed: %v", err)
 		sendResponse(c, errno.ServiceErr.WithMessage("AI service failed"), nil)
 		return
+	}
+
+	// Handle tool calls (multi-round)
+	maxToolRounds := 3
+	for round := 0; round < maxToolRounds && len(resp.Message.ToolCalls) > 0; round++ {
+		hlog.Infof("[Eino Fallback] Ollama requested %d tool calls (round %d)", len(resp.Message.ToolCalls), round+1)
+		messages = append(messages, ollamapkg.ChatMessage{
+			Role:      "assistant",
+			Content:   resp.Message.Content,
+			ToolCalls: resp.Message.ToolCalls,
+		})
+		for _, tc := range resp.Message.ToolCalls {
+			hlog.Infof("[Eino Fallback] Executing tool: %s", tc.Function.Name)
+			result, toolErr := executeToolCallFromMap(ctx, tc.Function.Name, tc.Function.Arguments)
+			if toolErr != nil {
+				result = fmt.Sprintf("Error: %v", toolErr)
+			}
+			messages = append(messages, ollamapkg.ChatMessage{Role: "tool", Content: result})
+		}
+		resp, err = client.Chat(ctx, messages, nil)
+		if err != nil {
+			hlog.Errorf("[Eino Fallback] Ollama follow-up failed: %v", err)
+			sendResponse(c, errno.ServiceErr.WithMessage("AI service failed processing tools"), nil)
+			return
+		}
 	}
 
 	title := req.Message
@@ -172,6 +204,20 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 
 	// Build the agent
 	buildStart := time.Now()
+
+	// Wait briefly for knowledge base indexing to complete if it's still in progress
+	// This prevents serving queries with stale/empty RAG results during startup
+	if !aiagent.IsKnowledgeBaseReady() {
+		hlog.Info("[Eino Agent] Waiting for knowledge base initial indexing to complete...")
+		waitCtx, waitCancel := context.WithTimeout(agentCtx, 30*time.Second)
+		if aiagent.WaitForKnowledgeBase(waitCtx) {
+			hlog.Info("[Eino Agent] Knowledge base ready, proceeding with query")
+		} else {
+			hlog.Warn("[Eino Agent] Knowledge base not ready after 30s, proceeding anyway")
+		}
+		waitCancel()
+	}
+
 	runner, err := aiagent.BuildChatAgent(agentCtx)
 	hlog.Infof("[Eino Agent] BuildChatAgent took %v", time.Since(buildStart))
 	useEinoAgent := err == nil
@@ -199,6 +245,11 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 			sr, err := runner.Stream(agentCtx, userMessage)
 			if err != nil {
 				hlog.Errorf("[Eino Agent] Stream failed: %v, falling back to Ollama", err)
+				// Reset cached pipeline so it will be rebuilt (with LoadCollection) on next request
+				if strings.Contains(err.Error(), "collection not loaded") || strings.Contains(err.Error(), "milvus") {
+					hlog.Info("[Eino Agent] Milvus-related error detected, resetting agent cache for next request")
+					aiagent.ResetChatAgent()
+				}
 				useEinoAgent = false
 			} else {
 				defer sr.Close()
@@ -232,13 +283,41 @@ func EinoChatSSE(ctx context.Context, c *app.RequestContext) {
 			client := getOllamaClient()
 			if client != nil && client.IsAvailable(ctx) {
 				messages := buildSimpleOllamaMessages(message)
-				_, ollamaErr := client.ChatStream(ctx, messages, nil, func(content string) {
-					fullResponse.WriteString(content)
-					writeSSE(map[string]string{"type": "content", "content": content})
-				})
-				if ollamaErr != nil {
-					hlog.Errorf("[Eino Fallback] Ollama stream also failed: %v", ollamaErr)
-					writeSSE(map[string]string{"type": "error", "content": "AI service temporarily unavailable, please try again later."})
+				tools := getOllamaTools()
+
+				// Tool-calling loop: Ollama may return tool calls instead of content
+				maxToolRounds := 3
+				for round := 0; round <= maxToolRounds; round++ {
+					resp, ollamaErr := client.ChatStream(ctx, messages, tools, func(content string) {
+						fullResponse.WriteString(content)
+						writeSSE(map[string]string{"type": "content", "content": content})
+					})
+					if ollamaErr != nil {
+						hlog.Errorf("[Eino Fallback] Ollama stream failed: %v", ollamaErr)
+						writeSSE(map[string]string{"type": "error", "content": "AI service temporarily unavailable, please try again later."})
+						break
+					}
+					if resp == nil || len(resp.Message.ToolCalls) == 0 {
+						break // No tool calls, streaming is done
+					}
+
+					// Process tool calls
+					hlog.Infof("[Eino Fallback] Ollama requested %d tool calls (round %d)", len(resp.Message.ToolCalls), round+1)
+					messages = append(messages, ollamapkg.ChatMessage{
+						Role:      "assistant",
+						Content:   resp.Message.Content,
+						ToolCalls: resp.Message.ToolCalls,
+					})
+					for _, tc := range resp.Message.ToolCalls {
+						hlog.Infof("[Eino Fallback] Executing tool: %s", tc.Function.Name)
+						result, err := executeToolCallFromMap(ctx, tc.Function.Name, tc.Function.Arguments)
+						if err != nil {
+							result = fmt.Sprintf("Error: %v", err)
+						}
+						messages = append(messages, ollamapkg.ChatMessage{Role: "tool", Content: result})
+					}
+					// Next round: no tools, force text response
+					tools = nil
 				}
 			} else {
 				hlog.Warn("[Eino Fallback] Ollama client not available")
@@ -370,6 +449,8 @@ func KnowledgeUploadHandler(ctx context.Context, c *app.RequestContext) {
 	if docsDir == "" {
 		docsDir = aiagent.DefaultDocsDir
 	}
+	// Resolve relative path against project root (cwd may be cmd/api/)
+	docsDir = config.ResolveProjectPath(docsDir)
 
 	// Ensure docs directory exists
 	if err := os.MkdirAll(docsDir, 0755); err != nil {
@@ -431,8 +512,8 @@ func KnowledgeReindexHandler(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
-	// Reset the cached agent so it picks up new knowledge on next request
-	aiagent.ResetChatAgent()
+	// Reset indexed file tracking so all files get re-indexed
+	aiagent.ResetIndexedFiles()
 
 	// Run the auto-indexing process (this re-scans and indexes all docs)
 	go func() {

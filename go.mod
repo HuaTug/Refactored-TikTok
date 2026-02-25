@@ -12,11 +12,11 @@ require (
 	github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260109062358-b9080dbc7bed
 	github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75b93b87b8a9
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.1
-	github.com/cloudwego/eino-ext/components/retriever/milvus v0.0.0-20251011073417-75b93b87b8a9
 	github.com/cloudwego/gopkg v0.1.5
 	github.com/cloudwego/hertz v0.10.0
 	github.com/cloudwego/kitex v0.14.1
 	github.com/elastic/go-elasticsearch/v8 v8.19.1
+	github.com/fsnotify/fsnotify v1.8.0
 	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-redsync/redsync/v4 v4.13.0
@@ -85,7 +85,6 @@ require (
 	github.com/elastic/pkcs8 v1.0.0 // indirect
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/fatih/structtag v1.2.0 // indirect
-	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect

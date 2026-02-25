@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"HuaTug.com/cmd/video/dal/db"
 	videoRedis "HuaTug.com/cmd/video/cache"
+	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/oss"
@@ -89,6 +89,13 @@ func (s *VideoDeleteService) DeleteVideo(req *videos.VideoDeleteRequestV2) (*vid
 			if err := db.UpdateUserStorageUsage(bgCtx, req.UserId, -recoveredBytes, -1); err != nil {
 				hlog.Warnf("Failed to update user storage after delete: %v", err)
 			}
+		}
+
+		// 更新用户视频数
+		if err := db.DB.WithContext(bgCtx).Exec(
+			"UPDATE users SET video_count = GREATEST(0, CAST(video_count AS SIGNED) - 1) WHERE user_id = ?", req.UserId,
+		).Error; err != nil {
+			hlog.Warnf("Failed to update user video_count after delete: %v", err)
 		}
 
 		hlog.Infof("Completed cleanup for deleted video %d", req.VideoId)
@@ -689,8 +696,19 @@ func (s *UpdateCountService) UpdateCommentCount(req *videos.UpdateVideoCommentCo
 		Base: &base.Status{},
 	}
 
-	if err := db.UpdateVideoCommentCount(s.ctx, req.VideoId, req.CommentCount); err != nil {
-		return nil, errors.WithMessage(err, "failed to update comment count")
+	switch req.OperationType {
+	case "increment":
+		if err := db.IncrementVideoCommentCount(s.ctx, req.VideoId, req.CommentCount); err != nil {
+			return nil, errors.WithMessage(err, "failed to increment comment count")
+		}
+	case "decrement":
+		if err := db.IncrementVideoCommentCount(s.ctx, req.VideoId, -req.CommentCount); err != nil {
+			return nil, errors.WithMessage(err, "failed to decrement comment count")
+		}
+	default:
+		if err := db.UpdateVideoCommentCount(s.ctx, req.VideoId, req.CommentCount); err != nil {
+			return nil, errors.WithMessage(err, "failed to update comment count")
+		}
 	}
 
 	// Get updated total

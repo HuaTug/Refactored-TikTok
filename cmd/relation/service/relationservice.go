@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"HuaTug.com/internal/model"
 	"HuaTug.com/cmd/relation/dal/db"
+	"HuaTug.com/internal/model"
 	"HuaTug.com/kitex_gen/relations"
 	"HuaTug.com/pkg/errno"
 	"HuaTug.com/pkg/mq"
@@ -81,6 +81,20 @@ func (s *RelationService) CreateFollow(ctx context.Context, req *relations.Relat
 		return fmt.Errorf("failed to create follow: %w", errno.ServiceErr)
 	}
 
+	// 更新关注数和粉丝数
+	go func() {
+		if err := db.DB.WithContext(ctx).Exec(
+			"UPDATE users SET following_count = following_count + 1 WHERE user_id = ?", req.FromUserId,
+		).Error; err != nil {
+			hlog.Warnf("Failed to update following_count for user %d: %v", req.FromUserId, err)
+		}
+		if err := db.DB.WithContext(ctx).Exec(
+			"UPDATE users SET follower_count = follower_count + 1 WHERE user_id = ?", req.ToUserId,
+		).Error; err != nil {
+			hlog.Warnf("Failed to update follower_count for user %d: %v", req.ToUserId, err)
+		}
+	}()
+
 	// Send follow notification asynchronously
 	go s.sendFollowNotification(ctx, req.FromUserId, req.ToUserId)
 
@@ -100,6 +114,21 @@ func (s *RelationService) CancelFollow(ctx context.Context, req *relations.Relat
 	if err := s.shardeDB.DeleteFollow(ctx, req.FromUserId, req.ToUserId); err != nil {
 		return fmt.Errorf("failed to delete follow: %w", errno.ServiceErr)
 	}
+
+	// 更新关注数和粉丝数
+	go func() {
+		if err := db.DB.WithContext(ctx).Exec(
+			"UPDATE users SET following_count = GREATEST(0, CAST(following_count AS SIGNED) - 1) WHERE user_id = ?", req.FromUserId,
+		).Error; err != nil {
+			hlog.Warnf("Failed to update following_count for user %d: %v", req.FromUserId, err)
+		}
+		if err := db.DB.WithContext(ctx).Exec(
+			"UPDATE users SET follower_count = GREATEST(0, CAST(follower_count AS SIGNED) - 1) WHERE user_id = ?", req.ToUserId,
+		).Error; err != nil {
+			hlog.Warnf("Failed to update follower_count for user %d: %v", req.ToUserId, err)
+		}
+	}()
+
 	return nil
 }
 

@@ -3,9 +3,9 @@ services:
     image: mysql:8.0.35
     container_name: kitex_mysql
     volumes:
-      - ./config/mysql/init.sql:/docker-entrypoint-initdb.d/01_init.sql
-      - ./config/mysql/recommendation_init.sql:/docker-entrypoint-initdb.d/02_recommendation_init.sql
-      - ./config/mysql/my.cnf:/etc/mysql/my.cnf
+      - ../config/mysql/init.sql:/docker-entrypoint-initdb.d/01_init.sql
+      - ../config/mysql/recommendation_init.sql:/docker-entrypoint-initdb.d/02_recommendation_init.sql
+      - ../config/mysql/my.cnf:/etc/mysql/my.cnf
     environment:
       - MYSQL_DATABASE=TikTok
       - MYSQL_ROOT_PASSWORD=TikTok@MySQL#2025!Secure
@@ -23,9 +23,9 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./config/cache/redis/redis.conf:/usr/local/etc/redis/redis.conf
-      - ./data/redis:/data  # 数据持久化
-      - ./logs/redis:/logs  # 日志目录
+      - ../config/cache/redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ../config/cache/redis/data:/data  # 数据持久化
+      - ../config/cache/redis/logs:/logs  # 日志目录
     command: redis-server /usr/local/etc/redis/redis.conf
     environment:
       - REDIS_PASSWORD=Redis@TikTok2025_SecurePass
@@ -54,7 +54,7 @@ services:
         soft: -1
         hard: -1
     volumes:
-      - ./config/Es:/usr/share/elasticsearch/data
+      - ../config/elasticsearch/data:/usr/share/elasticsearch/data
     ports:
       - "9200:9200"
       - "9300:9300"
@@ -106,7 +106,7 @@ services:
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
     command: server /data --console-address ":9001"
     volumes:
-      - ./config/minio/data:/data
+      - ../config/minio/data:/data
     networks:
       - docker_net
 
@@ -122,8 +122,8 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
       RABBITMQ_DEFAULT_VHOST: /
     volumes:
-      - ./data/rabbitmq:/var/lib/rabbitmq
-      - ./logs/rabbitmq:/var/log/rabbitmq
+      - ../config/rabbitmq/data:/var/lib/rabbitmq
+      - ../config/rabbitmq/logs:/var/log/rabbitmq
     # 健康检查
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
@@ -188,7 +188,7 @@ services:
       - ETCD_QUOTA_BACKEND_BYTES=4294967296
       - ETCD_SNAPSHOT_COUNT=50000
     volumes:
-      - ./data/milvus/etcd:/etcd
+      - ../config/milvus/etcd:/etcd
     command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
@@ -210,7 +210,7 @@ services:
       - "9010:9000"    # Milvus-dedicated MinIO API port (avoid conflict with business MinIO)
       - "9011:9001"    # Milvus-dedicated MinIO Console port
     volumes:
-      - ./data/milvus/minio:/minio_data
+      - ../config/milvus/minio:/minio_data
     command: minio server /minio_data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -232,7 +232,7 @@ services:
       ETCD_ENDPOINTS: milvus-etcd:2379
       MINIO_ADDRESS: milvus-minio:9000
     volumes:
-      - ./data/milvus/data:/var/lib/milvus
+      - ../config/milvus/data:/var/lib/milvus
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
       interval: 30s
@@ -289,13 +289,13 @@ services:
         -Dzookeeper.skipACL=false
     volumes:
       # 配置文件挂载 - 移除log4j.properties挂载避免权限问题
-      - ./config/zookeeper/zoo.cfg:/etc/kafka/zoo.cfg
-      - ./config/zookeeper/zookeeper_jaas.conf:/etc/kafka/secrets/zookeeper_jaas.conf
-      - ./config/zookeeper/init-acl.sh:/opt/kafka/bin/init-acl.sh
+      - ../config/zookeeper/zoo.cfg:/etc/kafka/zoo.cfg
+      - ../config/zookeeper/zookeeper_jaas.conf:/etc/kafka/secrets/zookeeper_jaas.conf
+      - ../config/zookeeper/init-acl.sh:/opt/kafka/bin/init-acl.sh
       # 数据持久化
-      - ./data/zookeeper/data:/var/lib/zookeeper/data
-      - ./data/zookeeper/logs:/var/lib/zookeeper/log
-      - ./logs/zookeeper:/logs
+      - ../config/zookeeper/data:/var/lib/zookeeper/data
+      - ../config/zookeeper/logs:/var/lib/zookeeper/log
+      - ../config/zookeeper/runtime_logs:/logs
     # 安全限制
     security_opt:
       - no-new-privileges:true
