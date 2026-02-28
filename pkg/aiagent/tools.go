@@ -251,3 +251,168 @@ func NewGetCurrentTimeTool() tool.InvokableTool {
 	}
 	return t
 }
+
+// =====================================================
+// Recommendation-Specific Tools (Agent × Rec Integration)
+// =====================================================
+
+// ===== Get User Recommendation Tool =====
+
+// GetUserRecommendationInput defines the input schema for the get_user_recommendation tool.
+type GetUserRecommendationInput struct {
+	UserID int64 `json:"user_id" jsonschema:"description=The user ID to generate recommendations for"`
+	Limit  int   `json:"limit" jsonschema:"description=Maximum number of recommended videos (default 10)"`
+}
+
+// NewGetUserRecommendationTool creates an Eino-compatible tool that invokes
+// RecommendationAgent.Recommend() and returns a formatted video list.
+func NewGetUserRecommendationTool() tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"get_user_recommendation",
+		"Generate personalized video recommendations for a user. The system uses an intelligent Agent "+
+			"that dynamically selects the best recommendation strategy based on the user's current browsing state.",
+		func(ctx context.Context, input *GetUserRecommendationInput, opts ...tool.Option) (string, error) {
+			agent := recommendation.GetRecommendationAgent()
+			if agent == nil {
+				return "Recommendation service is not available.", nil
+			}
+
+			limit := input.Limit
+			if limit <= 0 {
+				limit = 10
+			}
+
+			req := &recommendation.RecommendRequest{
+				UserID:      input.UserID,
+				Limit:       limit,
+				RequestID:   fmt.Sprintf("agent_tool_%d_%d", input.UserID, time.Now().UnixNano()),
+				RequestType: "feed",
+			}
+
+			resp, err := agent.Recommend(ctx, req)
+			if err != nil {
+				return fmt.Sprintf("Failed to generate recommendations: %v", err), nil
+			}
+
+			if len(resp.Videos) == 0 {
+				return "No recommendations available for this user at the moment.", nil
+			}
+
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("Recommended %d videos for user %d:\n\n", len(resp.Videos), input.UserID))
+			for i, v := range resp.Videos {
+				sb.WriteString(fmt.Sprintf("%d. Video ID: %d (score: %.3f", i+1, v.VideoID, v.Score))
+				if v.RecallSource != "" {
+					sb.WriteString(fmt.Sprintf(", source: %s", v.RecallSource))
+				}
+				sb.WriteString(")")
+				if len(v.Reasons) > 0 {
+					sb.WriteString(fmt.Sprintf(" — %s", strings.Join(v.Reasons, ", ")))
+				}
+				sb.WriteString("\n")
+			}
+
+			if resp.RecallStats != nil {
+				sb.WriteString(fmt.Sprintf("\nRecall stats: %v\n", resp.RecallStats))
+			}
+
+			return sb.String(), nil
+		},
+	)
+	if err != nil {
+		hlog.Fatalf("[AI Agent] Failed to create get_user_recommendation tool: %v", err)
+	}
+	return t
+}
+
+// ===== Get User State Tool =====
+
+// GetUserStateInput defines the input schema for the get_user_state tool.
+type GetUserStateInput struct {
+	UserID int64 `json:"user_id" jsonschema:"description=The user ID to query realtime state for"`
+}
+
+// NewGetUserStateTool creates an Eino-compatible tool that retrieves a user's
+// realtime behavioral state for diagnostic or conversational use.
+func NewGetUserStateTool() tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"get_user_state",
+		"Get a user's real-time behavioral state including engagement level, browsing speed, "+
+			"exploration diversity, focused topic, and skip patterns. Useful for understanding user behavior.",
+		func(ctx context.Context, input *GetUserStateInput, opts ...tool.Option) (string, error) {
+			svc := recommendation.GetRealtimeStateServiceInstance()
+			if svc == nil {
+				return "Realtime state service is not available.", nil
+			}
+
+			state, err := svc.GetUserRealtimeState(ctx, input.UserID)
+			if err != nil {
+				return fmt.Sprintf("Failed to get user state: %v", err), nil
+			}
+
+			data, err := json.Marshal(state)
+			if err != nil {
+				return fmt.Sprintf("Failed to serialize state: %v", err), nil
+			}
+
+			return fmt.Sprintf("User %d realtime state:\n%s", input.UserID, string(data)), nil
+		},
+	)
+	if err != nil {
+		hlog.Fatalf("[AI Agent] Failed to create get_user_state tool: %v", err)
+	}
+	return t
+}
+
+// ===== Get Video Hot Ranking Tool =====
+
+// GetVideoHotRankingInput defines the input schema for the get_video_hot_ranking tool.
+type GetVideoHotRankingInput struct {
+	TimeWindow string `json:"time_window" jsonschema:"description=Time window for the ranking: 1h, 6h, 24h, or 7d (default 24h)"`
+	Limit      int    `json:"limit" jsonschema:"description=Number of top videos to return (default 10)"`
+}
+
+// NewGetVideoHotRankingTool creates an Eino-compatible tool for fetching the hot video ranking.
+func NewGetVideoHotRankingTool() tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"get_video_hot_ranking",
+		"Get the current hot video ranking by time window. Shows the most popular videos "+
+			"based on real-time interaction data (views, likes, comments, shares).",
+		func(ctx context.Context, input *GetVideoHotRankingInput, opts ...tool.Option) (string, error) {
+			service := recommendation.GetHotScoreService()
+			if service == nil {
+				return "Hot score service is not available.", nil
+			}
+
+			timeWindow := input.TimeWindow
+			if timeWindow == "" {
+				timeWindow = "24h"
+			}
+			limit := input.Limit
+			if limit <= 0 {
+				limit = 10
+			}
+
+			videoIDs, err := service.GetTopHotVideos(ctx, timeWindow, limit)
+			if err != nil {
+				return fmt.Sprintf("Failed to get hot ranking: %v", err), nil
+			}
+
+			if len(videoIDs) == 0 {
+				return fmt.Sprintf("No hot videos found for time window '%s'.", timeWindow), nil
+			}
+
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf("Top %d hot videos (window: %s):\n\n", len(videoIDs), timeWindow))
+			for i, vid := range videoIDs {
+				sb.WriteString(fmt.Sprintf("%d. Video ID: %d\n", i+1, vid))
+			}
+
+			return sb.String(), nil
+		},
+	)
+	if err != nil {
+		hlog.Fatalf("[AI Agent] Failed to create get_video_hot_ranking tool: %v", err)
+	}
+	return t
+}

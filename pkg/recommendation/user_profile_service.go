@@ -19,60 +19,61 @@ import (
 
 // UserProfileService 用户画像服务
 type UserProfileService struct {
-	redis       *redis.Client
-	db          *gorm.DB
-	config      *ProfileServiceConfig
-	updateQueue chan *ProfileUpdateEvent
-	wg          sync.WaitGroup
-	stopCh      chan struct{}
+	redis            *redis.Client
+	db               *gorm.DB
+	config           *ProfileServiceConfig
+	updateQueue      chan *ProfileUpdateEvent
+	wg               sync.WaitGroup
+	stopCh           chan struct{}
+	realtimeStateSvc *RealtimeStateService // Optional: feeds the Agent's realtime perception layer
 }
 
 // ProfileServiceConfig 画像服务配置
 type ProfileServiceConfig struct {
 	// 实时更新配置
-	QueueSize          int           `json:"queue_size"`
-	BatchSize          int           `json:"batch_size"`
-	FlushInterval      time.Duration `json:"flush_interval"`
-	WorkerCount        int           `json:"worker_count"`
+	QueueSize     int           `json:"queue_size"`
+	BatchSize     int           `json:"batch_size"`
+	FlushInterval time.Duration `json:"flush_interval"`
+	WorkerCount   int           `json:"worker_count"`
 
 	// 衰减配置
-	InterestDecayDays  int     `json:"interest_decay_days"`  // 兴趣衰减天数
-	DecayFactor        float64 `json:"decay_factor"`         // 衰减因子
+	InterestDecayDays int     `json:"interest_decay_days"` // 兴趣衰减天数
+	DecayFactor       float64 `json:"decay_factor"`        // 衰减因子
 
 	// 画像配置
-	MaxInterestTags    int `json:"max_interest_tags"`    // 最大兴趣标签数
-	MaxCategoryPrefer  int `json:"max_category_prefer"`  // 最大分类偏好数
-	MaxAuthorPrefer    int `json:"max_author_prefer"`    // 最大作者偏好数
+	MaxInterestTags   int `json:"max_interest_tags"`   // 最大兴趣标签数
+	MaxCategoryPrefer int `json:"max_category_prefer"` // 最大分类偏好数
+	MaxAuthorPrefer   int `json:"max_author_prefer"`   // 最大作者偏好数
 
 	// Redis 过期配置
-	RedisExpireDays    int `json:"redis_expire_days"`
+	RedisExpireDays int `json:"redis_expire_days"`
 }
 
 // DefaultProfileServiceConfig 默认配置
 func DefaultProfileServiceConfig() *ProfileServiceConfig {
 	return &ProfileServiceConfig{
-		QueueSize:          10000,
-		BatchSize:          100,
-		FlushInterval:      5 * time.Second,
-		WorkerCount:        4,
-		InterestDecayDays:  30,
-		DecayFactor:        0.95,
-		MaxInterestTags:    50,
-		MaxCategoryPrefer:  20,
-		MaxAuthorPrefer:    100,
-		RedisExpireDays:    30,
+		QueueSize:         10000,
+		BatchSize:         100,
+		FlushInterval:     5 * time.Second,
+		WorkerCount:       4,
+		InterestDecayDays: 30,
+		DecayFactor:       0.95,
+		MaxInterestTags:   50,
+		MaxCategoryPrefer: 20,
+		MaxAuthorPrefer:   100,
+		RedisExpireDays:   30,
 	}
 }
 
 // ProfileUpdateEvent 画像更新事件
 type ProfileUpdateEvent struct {
-	UserID      int64             `json:"user_id"`
-	VideoID     int64             `json:"video_id"`
-	ActionType  string            `json:"action_type"`  // view/like/comment/share/finish/favorite/dislike
-	ActionTime  time.Time         `json:"action_time"`
-	Duration    int               `json:"duration"`     // 观看时长（秒）
-	Progress    float64           `json:"progress"`     // 观看进度 0-1
-	ExtraData   map[string]string `json:"extra_data"`
+	UserID     int64             `json:"user_id"`
+	VideoID    int64             `json:"video_id"`
+	ActionType string            `json:"action_type"` // view/like/comment/share/finish/favorite/dislike
+	ActionTime time.Time         `json:"action_time"`
+	Duration   int               `json:"duration"` // 观看时长（秒）
+	Progress   float64           `json:"progress"` // 观看进度 0-1
+	ExtraData  map[string]string `json:"extra_data"`
 }
 
 // NewUserProfileService 创建用户画像服务
@@ -151,6 +152,23 @@ func (ups *UserProfileService) RecordAction(event *ProfileUpdateEvent) {
 		// 队列已满，丢弃或降级处理
 		hlog.Warnf("Profile update queue is full, dropping event for user %d", event.UserID)
 	}
+
+	// Non-blocking: also record to the realtime action stream for Agent perception.
+	// This never blocks the main RecordAction flow.
+	if ups.realtimeStateSvc != nil {
+		go ups.realtimeStateSvc.RecordRealtimeAction(context.Background(), event.UserID, UserAction{
+			VideoID:    event.VideoID,
+			ActionType: event.ActionType,
+			Timestamp:  event.ActionTime.UnixMilli(),
+			Duration:   event.Duration,
+			Progress:   event.Progress,
+		})
+	}
+}
+
+// SetRealtimeStateService attaches the realtime state service for Agent integration.
+func (ups *UserProfileService) SetRealtimeStateService(svc *RealtimeStateService) {
+	ups.realtimeStateSvc = svc
 }
 
 // RecordActionSync 记录用户行为（同步）
@@ -225,11 +243,11 @@ func (ups *UserProfileService) processEvent(ctx context.Context, event *ProfileU
 
 // VideoInfo 视频信息
 type VideoInfo struct {
-	VideoID   int64
-	AuthorID  int64
-	Category  string
-	Tags      []string
-	Duration  int
+	VideoID  int64
+	AuthorID int64
+	Category string
+	Tags     []string
+	Duration int
 }
 
 // getVideoInfo 获取视频信息

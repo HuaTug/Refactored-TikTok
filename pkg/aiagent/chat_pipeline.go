@@ -170,6 +170,10 @@ func newReactAgentLambda(ctx context.Context) (*compose.Lambda, error) {
 	toolList = append(toolList, NewSuggestContentStrategyTool())
 	toolList = append(toolList, NewQueryKnowledgeTool())
 	toolList = append(toolList, NewGetCurrentTimeTool())
+	// Recommendation-specific tools (Agent × Rec integration)
+	toolList = append(toolList, NewGetUserRecommendationTool())
+	toolList = append(toolList, NewGetUserStateTool())
+	toolList = append(toolList, NewGetVideoHotRankingTool())
 	agentConfig.ToolsConfig.Tools = toolList
 
 	agent, err := react.NewAgent(ctx, agentConfig)

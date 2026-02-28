@@ -137,6 +137,39 @@ func Init() {
 	ConfigInfo.AIAgent.Milvus.Address = viper.GetString("ai_agent.milvus.address")
 	ConfigInfo.AIAgent.DocsDir = viper.GetString("ai_agent.docs_dir")
 
+	// Recommendation Agent configuration
+	ConfigInfo.RecAgent.Enabled = viper.GetBool("recommendation_agent.enabled")
+	ConfigInfo.RecAgent.ConsecutiveSkipThreshold = viper.GetInt("recommendation_agent.consecutive_skip_threshold")
+	ConfigInfo.RecAgent.DeepInteractionThreshold = viper.GetInt("recommendation_agent.deep_interaction_threshold")
+	ConfigInfo.RecAgent.EngagementThreshold = viper.GetFloat64("recommendation_agent.engagement_threshold")
+	ConfigInfo.RecAgent.ColdStartActionThreshold = viper.GetInt("recommendation_agent.cold_start_action_threshold")
+	ConfigInfo.RecAgent.MaxNonStandardRatio = viper.GetFloat64("recommendation_agent.max_non_standard_ratio")
+	ConfigInfo.RecAgent.HotExploreTimeoutMs = viper.GetInt("recommendation_agent.hot_explore_timeout_ms")
+	ConfigInfo.RecAgent.TopicDeepDiveMinCandidates = viper.GetInt("recommendation_agent.topic_deep_dive_min_candidates")
+
+	// Set recommendation agent defaults
+	if ConfigInfo.RecAgent.ConsecutiveSkipThreshold == 0 {
+		ConfigInfo.RecAgent.ConsecutiveSkipThreshold = 5
+	}
+	if ConfigInfo.RecAgent.DeepInteractionThreshold == 0 {
+		ConfigInfo.RecAgent.DeepInteractionThreshold = 3
+	}
+	if ConfigInfo.RecAgent.EngagementThreshold == 0 {
+		ConfigInfo.RecAgent.EngagementThreshold = 0.15
+	}
+	if ConfigInfo.RecAgent.ColdStartActionThreshold == 0 {
+		ConfigInfo.RecAgent.ColdStartActionThreshold = 10
+	}
+	if ConfigInfo.RecAgent.MaxNonStandardRatio == 0 {
+		ConfigInfo.RecAgent.MaxNonStandardRatio = 0.3
+	}
+	if ConfigInfo.RecAgent.HotExploreTimeoutMs == 0 {
+		ConfigInfo.RecAgent.HotExploreTimeoutMs = 300
+	}
+	if ConfigInfo.RecAgent.TopicDeepDiveMinCandidates == 0 {
+		ConfigInfo.RecAgent.TopicDeepDiveMinCandidates = 5
+	}
+
 	// Ollama LLM configuration
 	ConfigInfo.Ollama.Enabled = viper.GetBool("ollama.enabled")
 	ConfigInfo.Ollama.BaseURL = viper.GetString("ollama.base_url")

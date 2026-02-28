@@ -11,6 +11,7 @@ type config struct {
 	Elasticsearch   elasticsearch   `yaml:"elasticsearch" mapstructure:"elasticsearch"`
 	Ollama          ollamaConfig    `yaml:"ollama" mapstructure:"ollama"`
 	AIAgent         aiAgentConfig   `yaml:"ai_agent" mapstructure:"ai_agent"`
+	RecAgent        recAgentConfig  `yaml:"recommendation_agent" mapstructure:"recommendation_agent"`
 }
 
 // kafka 配置
@@ -115,4 +116,16 @@ type aiEmbeddingConfig struct {
 // aiMilvusConfig holds Milvus vector database connection settings.
 type aiMilvusConfig struct {
 	Address string `yaml:"address" mapstructure:"address"` // Milvus server address (e.g. localhost:19530)
+}
+
+// recAgentConfig holds configuration for the Recommendation Agent.
+type recAgentConfig struct {
+	Enabled                    bool    `yaml:"enabled" mapstructure:"enabled"`
+	ConsecutiveSkipThreshold   int     `yaml:"consecutive_skip_threshold" mapstructure:"consecutive_skip_threshold"`
+	DeepInteractionThreshold   int     `yaml:"deep_interaction_threshold" mapstructure:"deep_interaction_threshold"`
+	EngagementThreshold        float64 `yaml:"engagement_threshold" mapstructure:"engagement_threshold"`
+	ColdStartActionThreshold   int     `yaml:"cold_start_action_threshold" mapstructure:"cold_start_action_threshold"`
+	MaxNonStandardRatio        float64 `yaml:"max_non_standard_ratio" mapstructure:"max_non_standard_ratio"`
+	HotExploreTimeoutMs        int     `yaml:"hot_explore_timeout_ms" mapstructure:"hot_explore_timeout_ms"`
+	TopicDeepDiveMinCandidates int     `yaml:"topic_deep_dive_min_candidates" mapstructure:"topic_deep_dive_min_candidates"`
 }
