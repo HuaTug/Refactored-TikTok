@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net"
 
 	"HuaTug.com/cmd/api/rpc"
@@ -9,6 +10,7 @@ import (
 	redis "HuaTug.com/cmd/interaction/cache"
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config"
+	infraCache "HuaTug.com/pkg/infra/cache"
 	"HuaTug.com/pkg/infra/jaeger"
 	interaction "HuaTug.com/kitex_gen/interactions/interactionservice"
 	"HuaTug.com/pkg/bound"
@@ -26,12 +28,16 @@ func Init() {
 	dal.Init()
 	redis.Load()
 	client.Init()
+	infraCache.Init()
 
 	// 初始化RPC客户端，确保VideoClient被正确初始化
 	rpc.InitVideoRpc()
 
-	// Initialize MQ Manager for mention notifications
+	// Initialize MQ Manager for mention notifications and event publishing
 	service.InitMentionNotificationFromConfig()
+
+	// 启动 MQ 消费者 goroutine，消费通知事件并写入 Redis
+	startNotificationConsumer()
 
 	hlog.Info("Interaction service initialized successfully")
 }
@@ -67,4 +73,23 @@ func main() {
 	if err != nil {
 		hlog.Info(err)
 	}
+}
+
+// startNotificationConsumer 在 interaction 主服务中启动通知事件消费者
+func startNotificationConsumer() {
+	mqManager := service.GetInteractionMQManager()
+	if mqManager == nil {
+		hlog.Warn("MQ manager not available, notification consumer will not start")
+		return
+	}
+
+	ctx := context.Background()
+	notificationHandler := service.NewNotificationEventHandler()
+
+	if err := mqManager.ConsumeNotificationEvents(ctx, notificationHandler); err != nil {
+		hlog.Errorf("Failed to start notification event consumer: %v", err)
+		return
+	}
+
+	hlog.Info("Notification event consumer started in interaction service")
 }

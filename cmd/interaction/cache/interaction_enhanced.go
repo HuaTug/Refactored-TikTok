@@ -465,13 +465,28 @@ func (m *EnhancedInteractionManager) ScheduleDelayedCountRefresh(objID int64, bi
 	}()
 }
 
-// pushToSyncQueue 推送到异步同步队列
+// pushToSyncQueue 推送到异步同步队列，带错误处理和重试
 func (m *EnhancedInteractionManager) pushToSyncQueue(ctx context.Context, action *LikeAction) {
 	data, err := json.Marshal(action)
 	if err != nil {
+		fmt.Printf("[pushToSyncQueue] Failed to marshal action: %+v, err=%v\n", action, err)
 		return
 	}
-	m.client.LPush(LikeSyncQueueKey, string(data))
+
+	// 最多重试 3 次
+	const maxRetries = 3
+	for i := 0; i < maxRetries; i++ {
+		if err := m.client.LPush(LikeSyncQueueKey, string(data)).Err(); err != nil {
+			fmt.Printf("[pushToSyncQueue] LPush failed (attempt %d/%d): biz=%d obj=%d action=%s, err=%v\n",
+				i+1, maxRetries, action.BizType, action.ObjID, action.Action, err)
+			if i < maxRetries-1 {
+				time.Sleep(time.Duration(i+1) * 100 * time.Millisecond)
+			}
+			continue
+		}
+		return // 成功
+	}
+	fmt.Printf("[pushToSyncQueue] Permanently failed after %d retries: %+v\n", maxRetries, action)
 }
 
 // =============================================================================

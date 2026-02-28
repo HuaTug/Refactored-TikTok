@@ -13,6 +13,7 @@ import (
 	"HuaTug.com/cmd/interaction/dal"
 	"HuaTug.com/cmd/interaction/dal/db"
 	redis "HuaTug.com/cmd/interaction/cache"
+	client "HuaTug.com/cmd/interaction/client_rpc"
 	"HuaTug.com/cmd/interaction/service"
 	"HuaTug.com/config"
 	"HuaTug.com/pkg/mq"
@@ -64,6 +65,7 @@ func Init() {
 	initConfig()
 	dal.Init()
 	redis.Load()
+	client.Init()
 	hlog.Info("Dependencies initialized successfully")
 
 	// RabbitMQ连接URL，可以从配置文件或环境变量读取
@@ -97,6 +99,13 @@ func Init() {
 		log.Fatalf("Failed to start like event consumer: %v", err)
 	}
 	hlog.Info("Like event consumer started")
+
+	// 启动通知事件消费者
+	notificationHandler := service.NewNotificationEventHandler()
+	if err := mqManager.ConsumeNotificationEvents(ctx, notificationHandler); err != nil {
+		log.Fatalf("Failed to start notification event consumer: %v", err)
+	}
+	hlog.Info("Notification event consumer started")
 
 	// 启动评论事件消费者 (如果需要的话)
 	// commentHandler := service.NewCommentEventHandler()

@@ -103,8 +103,17 @@ func generateContentHash(content string) string {
 }
 
 // GetCommentLikeCount 获取评论点赞数
+// 优先从 EnhancedInteractionManager 的 like:count:2 Hash 读取（新版写入路径），
+// 如果为 0 则回退到旧版 LikeCacheManager 的 count:2:{id} Hash。
 func GetCommentLikeCount(commentId int64) (int64, error) {
-	// 使用现有的LikeCacheManager实现
+	// 1. 优先从新版 key 读取: like:count:{BizTypeComment} -> field=commentId
+	enhancedMgr := NewEnhancedInteractionManager(RedisDBInteraction)
+	count, err := enhancedMgr.GetLikeCount(context.Background(), commentId, BizTypeComment)
+	if err == nil && count > 0 {
+		return count, nil
+	}
+
+	// 2. 回退到旧版 key: count:{BusinessTypeComment}:{commentId} -> field=like_count
 	manager := NewLikeCacheManager(RedisDBInteraction)
 	return manager.GetCommentLikeCount(context.Background(), commentId)
 }

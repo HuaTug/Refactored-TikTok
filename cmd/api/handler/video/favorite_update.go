@@ -15,12 +15,12 @@ import (
 
 // UpdateFavoriteParam 更新收藏夹的请求参数
 type UpdateFavoriteParam struct {
-	FavoriteId  int64  `form:"favorite_id" json:"favoriteId"`
+	FavoriteId  int64  `form:"favorite_id" json:"favorite_id"`
 	Title       string `form:"title" json:"title"`
 	Name        string `form:"name" json:"name"`
 	Description string `form:"description" json:"description"`
-	CoverUrl    string `form:"cover_url" json:"coverUrl"`
-	ShowStatus  string `form:"show_status" json:"showStatus"` // "0" = public, "1" = private
+	CoverUrl    string `form:"cover_url" json:"cover_url"`
+	ShowStatus  string `form:"show_status" json:"show_status"` // "0" = public, "1" = private
 }
 
 // UpdateFavorite 更新收藏夹信息（V1 API）

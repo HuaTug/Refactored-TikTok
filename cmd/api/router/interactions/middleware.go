@@ -44,8 +44,8 @@ func _deletecommentMw() []app.HandlerFunc {
 }
 
 func _listcommentMw() []app.HandlerFunc {
-	// your code...
-	return nil
+	// 可选认证：不强制登录，但如果有 token 则解析 userID 用于查询评论点赞状态
+	return authfunc.OptionalAuth()
 }
 
 func _createcommentMw() []app.HandlerFunc {

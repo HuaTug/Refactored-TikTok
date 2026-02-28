@@ -50,6 +50,17 @@ func (s *VideoFavoritesService) GetFavoriteList(req *videos.GetFavoriteListReque
 	if err != nil {
 		return favList, errors.WithMessage(err, "Failed to get FavoriteList")
 	}
+
+	// 为没有封面的收藏夹自动抽取第一个收藏视频的封面
+	for _, fav := range favList {
+		if fav.CoverUrl == "" && fav.VideoCount > 0 {
+			coverUrl, err := db.GetFirstVideoCoverByFavoriteId(s.ctx, fav.FavoriteId)
+			if err == nil && coverUrl != "" {
+				fav.CoverUrl = coverUrl
+			}
+		}
+	}
+
 	return favList, nil
 }
 

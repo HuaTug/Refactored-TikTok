@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/go-redis/redis/v8"
 	"gorm.io/gorm"
 )
 
@@ -70,6 +71,14 @@ func GetHotScoreService() *VideoHotScoreService {
 // GetHotScoreScheduler 获取调度器实例
 func GetHotScoreScheduler() *HotScoreScheduler {
 	return hotScoreScheduler
+}
+
+// SetHotScoreRedis sets the Redis client on the hot score service for cache sync.
+func SetHotScoreRedis(redisClient *redis.Client) {
+	if hotScoreService != nil && redisClient != nil {
+		hotScoreService.SetRedisClient(redisClient)
+		hlog.Info("[HotScore] Redis client set for hot score cache sync")
+	}
 }
 
 // =====================================================

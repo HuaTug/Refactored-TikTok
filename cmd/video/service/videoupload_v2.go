@@ -457,6 +457,9 @@ func (s *VideoUploadServiceV2) CompleteUpload(req *videos.VideoPublishCompleteRe
 		hlog.Warnf("Failed to update user video_count for session %s: %v", session.UUID, err)
 	}
 
+	// 10. 接入推荐系统：初始化视频特征、标签映射、分类统计、作者评分
+	OnVideoPublished(s.ctx, session.VideoID, session.UserID, session.Title, session.Description, session.Tags, session.Category)
+
 	// 8. 清理临时文件和会话
 	session.Status = "completed"
 	s.saveUploadSession(session)

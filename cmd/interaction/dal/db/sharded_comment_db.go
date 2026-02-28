@@ -388,6 +388,14 @@ func CreateCommentWithTransaction(ctx context.Context, comment *model.Comment) e
 			if err := tx.Table(tableName).Create(comment).Error; err != nil {
 				return fmt.Errorf("failed to create comment in transaction: %w", err)
 			}
+			// 如果是子评论，递增父评论的 child_count
+			if comment.ParentId > 0 {
+				if err := tx.Table(tableName).
+					Where("comment_id = ?", comment.ParentId).
+					UpdateColumn("child_count", gorm.Expr("child_count + 1")).Error; err != nil {
+					hlog.Warnf("Failed to increment parent comment child_count: %v", err)
+				}
+			}
 			return nil
 		})
 	})
@@ -473,7 +481,7 @@ func GetVideoCommentListForHotSort(ctx context.Context, videoID int64, pageNum, 
 	err := shardingManager.ExecuteInShard(ctx, videoID, false, func(db *gorm.DB, tableName string) error {
 		return db.WithContext(ctx).Table(tableName).
 			Select("comment_id").
-			Where("video_id = ?", videoID).
+			Where("video_id = ? AND parent_id = -1", videoID).
 			Order("like_count DESC, created_at DESC").
 			Limit(int(pageSize)).
 			Offset(int(offset)).
@@ -498,7 +506,7 @@ func GetVideoCommentListByPartWithSort(ctx context.Context, videoID int64, pageN
 	offset := (pageNum - 1) * pageSize
 
 	err := shardingManager.ExecuteInShard(ctx, videoID, false, func(db *gorm.DB, tableName string) error {
-		query := db.WithContext(ctx).Table(tableName).Select("comment_id").Where("video_id = ?", videoID)
+		query := db.WithContext(ctx).Table(tableName).Select("comment_id").Where("video_id = ? AND parent_id = -1", videoID)
 
 		switch sortType {
 		case "hot":
@@ -532,7 +540,7 @@ func GetVideoCommentListByPart(ctx context.Context, videoID int64, pageNum, page
 	err := shardingManager.ExecuteInShard(ctx, videoID, false, func(db *gorm.DB, tableName string) error {
 		return db.WithContext(ctx).Table(tableName).
 			Select("comment_id").
-			Where("video_id = ?", videoID).
+			Where("video_id = ? AND parent_id = -1", videoID).
 			Order("created_at DESC").
 			Limit(int(pageSize)).
 			Offset(int(offset)).

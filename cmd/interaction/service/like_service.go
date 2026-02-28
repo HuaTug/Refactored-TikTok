@@ -11,10 +11,13 @@ import (
 	"HuaTug.com/cmd/interaction/dal/db"
 	"HuaTug.com/kitex_gen/base"
 	"HuaTug.com/kitex_gen/interactions"
+	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/constants"
+	"HuaTug.com/pkg/mq"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/google/uuid"
 )
 
 // EnhancedLikeService configuration constants.
@@ -137,7 +140,10 @@ func (s *EnhancedLikeService) likeVideoEnhanced(ctx context.Context, userID, vid
 	if isNewLike {
 		go s.updateHotRanking(ctx, videoID, likeCount)
 		go s.trackUserBehavior(ctx, userID, "like")
-		go s.updateVideoAuthorLikeCount(ctx, videoID, 1)
+		// users.like_count 已在 DB 事务中原子更新（updateAuthorLikeCountInTx），不再通过异步 goroutine 更新
+		go s.sendVideoLikeNotification(ctx, userID, videoID)
+		// 接入推荐系统：更新视频互动分和用户画像
+		OnVideoLikedFromInteraction(ctx, videoID, userID)
 		hlog.CtxInfof(ctx, "Video like: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
@@ -156,7 +162,7 @@ func (s *EnhancedLikeService) unlikeVideoEnhanced(ctx context.Context, userID, v
 
 	if wasLiked {
 		go s.updateHotRanking(ctx, videoID, likeCount)
-		go s.updateVideoAuthorLikeCount(ctx, videoID, -1)
+		// users.like_count 已在 DB 事务中原子更新（updateAuthorLikeCountInTx），不再通过异步 goroutine 更新
 		hlog.CtxInfof(ctx, "Video unlike: user_id=%d, video_id=%d, count=%d", userID, videoID, likeCount)
 	}
 
@@ -188,6 +194,7 @@ func (s *EnhancedLikeService) likeCommentEnhanced(ctx context.Context, userID, c
 	likeCount, _ := s.interactionMgr.GetLikeCount(ctx, commentID, redis.BizTypeComment)
 
 	if isNewLike {
+		go s.sendCommentLikeNotification(ctx, userID, commentID)
 		hlog.CtxInfof(ctx, "Comment like: user_id=%d, comment_id=%d", userID, commentID)
 	}
 
@@ -369,10 +376,8 @@ func (s *EnhancedLikeService) delayedRefreshCount(ctx context.Context, action *r
 	case redis.BizTypeVideo:
 		dbCount, err = db.GetVideoLikeCount(ctx, action.ObjID)
 	case redis.BizTypeComment:
-		// For comments, count from comment_likes table.
-		dbCount, err = db.GetVideoLikeCount(ctx, action.ObjID) // reuse; will fallback in calibration
+		dbCount, err = db.GetCommentLikeCount(ctx, action.ObjID)
 		if err != nil {
-			// Non-critical: the periodic calibration task will fix drift.
 			hlog.Warnf("[DelayedDoubleDelete] Failed to get DB count for biz=%d obj=%d: %v",
 				action.BizType, action.ObjID, err)
 			return
@@ -425,31 +430,6 @@ func (s *EnhancedLikeService) updateHotRanking(ctx context.Context, videoID, lik
 func (s *EnhancedLikeService) trackUserBehavior(ctx context.Context, userID int64, activity string) {
 	if err := s.interactionMgr.TrackUserActivity(ctx, userID, activity); err != nil {
 		hlog.CtxWarnf(ctx, "Failed to track user behavior: user_id=%d, err=%v", userID, err)
-	}
-}
-
-// updateVideoAuthorLikeCount updates the video author's like_count in the users table.
-// delta should be +1 for like, -1 for unlike.
-func (s *EnhancedLikeService) updateVideoAuthorLikeCount(ctx context.Context, videoID int64, delta int) {
-	// Get the video author's user ID
-	resp, err := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID})
-	if err != nil || resp == nil || resp.Items == nil {
-		hlog.CtxWarnf(ctx, "Failed to get video author for like count update: video_id=%d, err=%v", videoID, err)
-		return
-	}
-
-	authorID := resp.Items.UserId
-	if authorID <= 0 {
-		return
-	}
-
-	// Update the author's like_count directly in the shared database
-	result := db.DB.WithContext(ctx).Exec(
-		"UPDATE users SET like_count = GREATEST(0, CAST(like_count AS SIGNED) + ?) WHERE user_id = ?",
-		delta, authorID,
-	)
-	if result.Error != nil {
-		hlog.CtxWarnf(ctx, "Failed to update author like count: author_id=%d, delta=%d, err=%v", authorID, delta, result.Error)
 	}
 }
 
@@ -536,4 +516,152 @@ func (t *CalibrateTask) CalibrateVideoLikeCounts(ctx context.Context, videoIDs [
 		}
 	}
 	return nil
+}
+
+// CalibrateUserLikeCounts 校准所有用户的 like_count（获赞总数）
+// 将 users.like_count 重置为该用户所有视频的实际点赞数之和
+func (t *CalibrateTask) CalibrateUserLikeCounts(ctx context.Context) error {
+	result := db.DB.WithContext(ctx).Exec(`
+		UPDATE users u
+		SET like_count = (
+			SELECT COALESCE(SUM(likes_count), 0)
+			FROM videos
+			WHERE user_id = u.user_id AND deleted_at IS NULL
+		)
+	`)
+	if result.Error != nil {
+		hlog.Warnf("CalibrateUserLikeCounts failed: %v", result.Error)
+		return result.Error
+	}
+	hlog.Infof("CalibrateUserLikeCounts: updated %d rows", result.RowsAffected)
+	return nil
+}
+
+// sendVideoLikeNotification 通过 RabbitMQ 发布点赞通知事件
+func (s *EnhancedLikeService) sendVideoLikeNotification(ctx context.Context, userID, videoID int64) {
+	// 获取视频信息以确定接收者（视频作者）
+	resp, err := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID})
+	if err != nil || resp == nil || resp.Items == nil {
+		hlog.CtxWarnf(ctx, "Failed to get video info for like notification: video_id=%d, err=%v", videoID, err)
+		return
+	}
+
+	authorID := resp.Items.UserId
+	if authorID <= 0 {
+		return
+	}
+	// TODO: 测试完成后恢复自我过滤: authorID == userID
+
+	mqManager := GetInteractionMQManager()
+	if mqManager == nil {
+		hlog.CtxWarnf(ctx, "MQ manager not initialized, skip like notification")
+		return
+	}
+
+	// 在生产端预填充视频和用户信息到 Extra，消费端可直接使用
+	extra := map[string]interface{}{
+		"video_id":    videoID,
+		"video_cover": resp.Items.CoverUrl,
+		"title":       resp.Items.Title,
+	}
+
+	// 获取点赞者的用户信息
+	userResp, uErr := client.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: userID})
+	if uErr == nil && userResp != nil && userResp.User != nil {
+		extra["avatar_url"] = userResp.User.AvatarUrl
+		extra["from_user_name"] = userResp.User.UserName
+	}
+
+	event := &mq.NotificationEvent{
+		Type:       "video_like",
+		ReceiverID: authorID,
+		SenderID:   userID,
+		Content:    "点赞了你的视频",
+		Extra:      extra,
+		Timestamp:  time.Now().Unix(),
+		EventID:    uuid.New().String(),
+
+		// 兼容字段
+		UserID:           authorID,
+		FromUserID:       userID,
+		NotificationType: "video_like",
+		TargetID:         videoID,
+		VideoID:          videoID,
+	}
+
+	if err := mqManager.PublishNotificationEvent(context.Background(), event); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to publish like notification event: %v", err)
+		return
+	}
+
+	hlog.CtxInfof(ctx, "Published video like notification event: user %d liked video %d by user %d", userID, videoID, authorID)
+}
+
+// sendCommentLikeNotification 通过 RabbitMQ 发布评论点赞通知事件
+func (s *EnhancedLikeService) sendCommentLikeNotification(ctx context.Context, userID, commentID int64) {
+	// 获取评论信息以确定接收者（评论作者）
+	comment, err := db.GetCommentInfo(ctx, commentID)
+	if err != nil || comment == nil {
+		hlog.CtxWarnf(ctx, "Failed to get comment info for like notification: comment_id=%d, err=%v", commentID, err)
+		return
+	}
+
+	authorID := comment.UserId
+	if authorID <= 0 {
+		return
+	}
+	// TODO: 测试完成后恢复自我过滤: authorID == userID
+
+	mqManager := GetInteractionMQManager()
+	if mqManager == nil {
+		hlog.CtxWarnf(ctx, "MQ manager not initialized, skip comment like notification")
+		return
+	}
+
+	extra := map[string]interface{}{
+		"comment_id":      commentID,
+		"comment_content": comment.Content,
+		"video_id":        comment.VideoId,
+	}
+
+	// 获取视频封面信息
+	if comment.VideoId > 0 {
+		videoResp, vErr := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: comment.VideoId})
+		if vErr == nil && videoResp != nil && videoResp.Items != nil {
+			extra["video_cover"] = videoResp.Items.CoverUrl
+			extra["title"] = videoResp.Items.Title
+		}
+	}
+
+	// 获取点赞者的用户信息
+	userResp, uErr := client.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: userID})
+	if uErr == nil && userResp != nil && userResp.User != nil {
+		extra["avatar_url"] = userResp.User.AvatarUrl
+		extra["from_user_name"] = userResp.User.UserName
+	}
+
+	event := &mq.NotificationEvent{
+		Type:       "comment_like",
+		ReceiverID: authorID,
+		SenderID:   userID,
+		Content:    "点赞了你的评论",
+		Extra:      extra,
+		Timestamp:  time.Now().Unix(),
+		EventID:    uuid.New().String(),
+
+		// 兼容字段
+		UserID:           authorID,
+		FromUserID:       userID,
+		NotificationType: "comment_like",
+		TargetID:         commentID,
+		CommentID:        commentID,
+		VideoID:          comment.VideoId,
+	}
+
+	if err := mqManager.PublishNotificationEvent(context.Background(), event); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to publish comment like notification event: %v", err)
+		return
+	}
+
+	hlog.CtxInfof(ctx, "Published comment like notification event: user %d liked comment %d by user %d", userID, commentID, authorID)
 }

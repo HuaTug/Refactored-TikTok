@@ -49,6 +49,12 @@ func Init() {
 
 	// 启动热度计算定时任务
 	service.StartHotScoreService()
+
+	// 启动推荐 Agent（依赖 DB + Redis + HotScoreService，须在它们之后初始化）
+	service.StartRecommendationAgent()
+
+	// 补建已有视频的推荐特征数据（异步执行，不阻塞启动）
+	service.BackfillVideoFeatures()
 }
 
 func main() {

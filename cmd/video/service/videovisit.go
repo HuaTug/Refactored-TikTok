@@ -52,6 +52,9 @@ func (s *VideoVisitService) VideoVisit(req *videos.VideoVisitRequestV2) (*videos
 		}
 	}
 
+	// 接入推荐系统：更新视频曝光/点击、用户画像
+	OnVideoViewed(s.ctx, req.VideoId, req.FromId)
+
 	// Get related videos by same author or category
 	relatedVideos, err := getRelatedVideos(s.ctx, video)
 	if err == nil && len(relatedVideos) > 0 {

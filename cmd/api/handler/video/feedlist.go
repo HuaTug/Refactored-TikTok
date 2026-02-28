@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strconv"
 
 	"HuaTug.com/cmd/api/rpc"
 	"HuaTug.com/kitex_gen/videos"
@@ -18,9 +19,25 @@ func FeedService(ctx context.Context, c *app.RequestContext) {
 		hlog.Info(err)
 		SendResponse(c, errno.ConvertErr(err), nil)
 	}
+
+	// 从查询参数获取分页信息，有默认值兜底
+	var pageSize int64 = 10
+	var pageNum int64 = 1
+
+	if ps := c.Query("page_size"); ps != "" {
+		if v, e := strconv.ParseInt(ps, 10, 64); e == nil && v > 0 {
+			pageSize = v
+		}
+	}
+	if pn := c.Query("page_num"); pn != "" {
+		if v, e := strconv.ParseInt(pn, 10, 64); e == nil && v > 0 {
+			pageNum = v
+		}
+	}
+
 	resp, err := rpc.FeedList(ctx, &videos.VideoFeedListRequestV2{
-		PageNum:        1,
-		PageSize:       20,
+		PageNum:        pageNum,
+		PageSize:       pageSize,
 		CategoryFilter: "",
 		PrivacyFilter:  "public",
 		TagFilters:     []string{},

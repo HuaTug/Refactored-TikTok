@@ -53,6 +53,11 @@ func (u *UserWithPassword) convertToBaseUser() *base.User {
 		Email:          u.Email,
 		Sex:            u.Sex,
 		AvatarUrl:      u.AvatarUrl,
+		Phone:          u.Phone,
+		BackgroundUrl:  u.BackgroundUrl,
+		Bio:            u.Bio,
+		Location:       u.Location,
+		SchoolId:       u.SchoolId,
 		FollowingCount: int64(u.FollowingCount),
 		FollowerCount:  int64(u.FollowerCount),
 		LikeCount:      int64(u.LikeCount),
@@ -60,6 +65,11 @@ func (u *UserWithPassword) convertToBaseUser() *base.User {
 		Status:         int64(u.Status),
 		CreatedAt:      u.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      u.UpdatedAt.Format(time.RFC3339),
+	}
+
+	if u.Birthday != nil {
+		bd := u.Birthday.Format("2006-01-02")
+		user.Birthday = &bd
 	}
 
 	if u.DeletedAt != nil {

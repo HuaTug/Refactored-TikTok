@@ -42,14 +42,13 @@ func NewProducer(rabbitmqURL string) (*Producer, error) {
 }
 
 func (p *Producer) setupTopology() error {
-	// 声明交换机
-	exchanges := []string{
+	// 声明 direct 类型交换机（点赞、评论）
+	directExchanges := []string{
 		LikeEventExchange,
 		CommentEventExchange,
-		NotificationEventExchange,
 	}
 
-	for _, exchange := range exchanges {
+	for _, exchange := range directExchanges {
 		err := p.channel.ExchangeDeclare(
 			exchange,
 			"direct",
@@ -64,14 +63,26 @@ func (p *Producer) setupTopology() error {
 		}
 	}
 
-	// 声明队列
-	queues := []string{
-		LikeEventQueue,
-		CommentEventQueue,
-		NotificationEventQueue,
+	// 声明 topic 类型交换机（通知）—— 支持按 routing key 路由到不同类型队列
+	err := p.channel.ExchangeDeclare(
+		NotificationEventExchange,
+		"topic", // Topic 类型，支持通配符路由
+		true,    // durable
+		false,   // auto-delete
+		false,   // internal
+		false,   // no-wait
+		nil,     // arguments
+	)
+	if err != nil {
+		return fmt.Errorf("failed to declare topic exchange %s: %w", NotificationEventExchange, err)
 	}
 
-	for _, queue := range queues {
+	// 声明点赞和评论队列
+	basicQueues := []string{
+		LikeEventQueue,
+		CommentEventQueue,
+	}
+	for _, queue := range basicQueues {
 		_, err := p.channel.QueueDeclare(
 			queue,
 			true,  // durable
@@ -85,26 +96,64 @@ func (p *Producer) setupTopology() error {
 		}
 	}
 
-	// 绑定队列到交换机
-	bindings := map[string]string{
-		LikeEventQueue:         LikeEventExchange,
-		CommentEventQueue:      CommentEventExchange,
-		NotificationEventQueue: NotificationEventExchange,
+	// 声明通知全量队列（接收所有类型通知，绑定 notification.#）
+	if _, err := p.channel.QueueDeclare(
+		NotificationEventQueue,
+		true, false, false, false, nil,
+	); err != nil {
+		return fmt.Errorf("failed to declare queue %s: %w", NotificationEventQueue, err)
 	}
 
-	for queue, exchange := range bindings {
-		err := p.channel.QueueBind(
+	// 声明各通知类型独立队列
+	typeQueues := map[string]string{
+		NotificationVideoLikeQueue:    "notification.video_like",
+		NotificationCommentQueue:      "notification.comment",
+		NotificationCommentLikeQueue:  "notification.comment_like",
+		NotificationCommentReplyQueue: "notification.comment_reply",
+		NotificationFollowQueue:       "notification.follow",
+		NotificationMentionQueue:      "notification.mention",
+		NotificationSystemQueue:       "notification.system",
+	}
+
+	for queue, routingKey := range typeQueues {
+		if _, err := p.channel.QueueDeclare(
+			queue, true, false, false, false, nil,
+		); err != nil {
+			return fmt.Errorf("failed to declare queue %s: %w", queue, err)
+		}
+		// 绑定类型队列到 topic exchange，精确匹配 routing key
+		if err := p.channel.QueueBind(
 			queue,
-			"",
-			exchange,
-			false,
-			nil,
-		)
-		if err != nil {
+			routingKey,
+			NotificationEventExchange,
+			false, nil,
+		); err != nil {
+			return fmt.Errorf("failed to bind queue %s with key %s: %w", queue, routingKey, err)
+		}
+	}
+
+	// 绑定全量队列，使用 # 通配符接收所有 notification.* 消息
+	if err := p.channel.QueueBind(
+		NotificationEventQueue,
+		"notification.#",
+		NotificationEventExchange,
+		false, nil,
+	); err != nil {
+		return fmt.Errorf("failed to bind all-notification queue: %w", err)
+	}
+
+	// 绑定点赞和评论队列到 direct exchange
+	basicBindings := map[string]string{
+		LikeEventQueue:    LikeEventExchange,
+		CommentEventQueue: CommentEventExchange,
+	}
+	for queue, exchange := range basicBindings {
+		if err := p.channel.QueueBind(queue, "", exchange, false, nil); err != nil {
 			return fmt.Errorf("failed to bind queue %s to exchange %s: %w", queue, exchange, err)
 		}
 	}
 
+	hlog.Info("MQ topology setup completed: topic exchange for notifications with type-based routing")
 	return nil
 }
 
@@ -168,10 +217,13 @@ func (p *Producer) PublishNotificationEvent(ctx context.Context, event *Notifica
 		return fmt.Errorf("failed to marshal notification event: %w", err)
 	}
 
+	// 根据事件类型生成 routing key: notification.video_like, notification.comment 等
+	routingKey := NotificationRoutingKeyPrefix + event.Type
+
 	err = p.channel.PublishWithContext(
 		ctx,
 		NotificationEventExchange,
-		"",
+		routingKey,
 		false,
 		false,
 		amqp091.Publishing{
@@ -185,7 +237,7 @@ func (p *Producer) PublishNotificationEvent(ctx context.Context, event *Notifica
 		return fmt.Errorf("failed to publish notification event: %w", err)
 	}
 
-	hlog.CtxInfof(ctx, "Published notification event: %+v", event)
+	hlog.CtxInfof(ctx, "Published notification event [routing_key=%s]: type=%s, receiver=%d", routingKey, event.Type, event.ReceiverID)
 	return nil
 }
 

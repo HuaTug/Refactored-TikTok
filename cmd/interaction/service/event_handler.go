@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	client "HuaTug.com/cmd/interaction/client_rpc"
 	common "HuaTug.com/cmd/interaction/sync"
 	"HuaTug.com/cmd/interaction/dal/db"
 	redis "HuaTug.com/cmd/interaction/cache"
+	"HuaTug.com/kitex_gen/users"
+	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/infra/cache"
 	"HuaTug.com/pkg/mq"
 
@@ -58,9 +61,29 @@ func NewLikeEventHandlerWithSync(syncService *common.EventDrivenSyncService) *Li
 	}
 }
 
-// HandleLikeEvent processes a like event (used for async notification, not for counting).
+// HandleLikeEvent processes a like event: dispatches DB sync and triggers notifications.
 func (h *LikeEventHandler) HandleLikeEvent(ctx context.Context, event *mq.LikeEvent) error {
 	hlog.CtxInfof(ctx, "Processing like event: %+v", event)
+
+	if h.syncService != nil && event.ActionType == "like" {
+		// 构造同步事件，触发 DB 持久化 + 通知发送
+		syncEvent := &common.SyncEvent{
+			EventType:    event.EventType,
+			ResourceType: "video",
+			ResourceID:   event.VideoID,
+			UserID:       event.UserID,
+			ActionType:   event.ActionType,
+			Timestamp:    event.Timestamp,
+		}
+		if event.EventType == "comment_like" {
+			syncEvent.ResourceType = "comment"
+			syncEvent.ResourceID = event.CommentID
+		}
+
+		if err := h.syncService.PublishSyncEvent(ctx, syncEvent); err != nil {
+			hlog.CtxErrorf(ctx, "Failed to dispatch sync event for like: %v", err)
+		}
+	}
 
 	switch event.EventType {
 	case "video_like":
@@ -160,18 +183,79 @@ func (h *NotificationEventHandler) writeToCache(ctx context.Context, event *mq.N
 	conn := cache.GetRedis()
 	defer conn.Close()
 
+	// 合并 extra 信息
+	extra := event.Extra
+	if extra == nil {
+		extra = make(map[string]interface{})
+	}
+
+	// 优先使用 Extra 中生产端预填充的用户信息，缺失时通过 RPC 补充
+	fromUserName, _ := extra["from_user_name"].(string)
+	fromAvatarUrl, _ := extra["avatar_url"].(string)
+	if (fromUserName == "" || fromAvatarUrl == "") && event.SenderID > 0 {
+		userResp, uErr := client.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: event.SenderID})
+		if uErr == nil && userResp != nil && userResp.User != nil {
+			if fromUserName == "" {
+				fromUserName = userResp.User.UserName
+			}
+			if fromAvatarUrl == "" {
+				fromAvatarUrl = userResp.User.AvatarUrl
+			}
+		} else {
+			hlog.CtxWarnf(ctx, "Failed to get sender info for notification: sender_id=%d, err=%v", event.SenderID, uErr)
+		}
+	}
+	extra["avatar_url"] = fromAvatarUrl
+	extra["from_user_name"] = fromUserName
+
+	// 优先使用 Extra 中生产端预填充的视频信息，缺失时通过 RPC 补充
+	videoCover, _ := extra["video_cover"].(string)
+	videoTitle, _ := extra["title"].(string)
+	if (videoCover == "" || videoTitle == "") {
+		videoID := event.VideoID
+		if videoID <= 0 {
+			if vid, ok := extra["video_id"]; ok {
+				switch v := vid.(type) {
+				case float64:
+					videoID = int64(v)
+				case int64:
+					videoID = v
+				}
+			}
+		}
+		if videoID > 0 {
+			videoResp, vErr := client.VideoClient.VideoInfoV2(ctx, &videos.VideoInfoRequestV2{VideoId: videoID})
+			if vErr == nil && videoResp != nil && videoResp.Items != nil {
+				if videoCover == "" {
+					videoCover = videoResp.Items.CoverUrl
+				}
+				if videoTitle == "" {
+					videoTitle = videoResp.Items.Title
+				}
+			} else {
+				hlog.CtxWarnf(ctx, "Failed to get video info for notification: video_id=%d, err=%v", videoID, vErr)
+			}
+		}
+	}
+	if videoCover != "" {
+		extra["video_cover"] = videoCover
+	}
+	if videoTitle != "" {
+		extra["title"] = videoTitle
+	}
+
 	item := map[string]interface{}{
 		"id":           notificationID,
 		"type":         event.Type,
 		"title":        h.getTitle(event.Type),
 		"content":      event.Content,
 		"from_user_id": event.SenderID,
-		"from_user":    "",
+		"from_user":    fromUserName,
 		"target_id":    event.TargetID,
 		"target_type":  h.getTargetType(event.Type),
 		"is_read":      false,
 		"created_at":   createdAt,
-		"extra":        event.Extra,
+		"extra":        extra,
 	}
 
 	data, err := json.Marshal(item)

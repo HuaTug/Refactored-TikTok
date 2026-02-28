@@ -8,10 +8,12 @@ import (
 	"HuaTug.com/cmd/api/rpc"
 	videodb "HuaTug.com/cmd/video/dal/db"
 	redis "HuaTug.com/cmd/video/cache"
+	interactionCache "HuaTug.com/cmd/interaction/cache"
 	"HuaTug.com/config"
 	jwt "HuaTug.com/pkg/auth"
 	"HuaTug.com/pkg/aiagent"
 	"HuaTug.com/pkg/errno"
+	infraCache "HuaTug.com/pkg/infra/cache"
 	"HuaTug.com/pkg/logger"
 	"HuaTug.com/pkg/logsystem"
 	"HuaTug.com/pkg/oss"
@@ -27,6 +29,8 @@ import (
 func Init() {
 	rpc.InitRPC()
 	redis.Load()
+	interactionCache.Load() // 初始化 interaction Redis（评论点赞状态查询使用）
+	infraCache.Init() // 初始化 infra Redis（通知系统使用）
 	dal.InitDB()   // 初始化 API 服务数据库连接
 	videodb.Init() // 初始化 video 模块数据库连接（用于收藏同步等功能）
 

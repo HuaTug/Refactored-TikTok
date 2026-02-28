@@ -362,9 +362,11 @@ func EinoHealthCheck(ctx context.Context, c *app.RequestContext) {
 		"ollama_enabled":     config.ConfigInfo.Ollama.Enabled,
 	}
 
-	// Check Eino agent
+	// Check Eino agent with timeout protection to avoid blocking when services are unavailable
 	if config.ConfigInfo.AIAgent.Enabled {
-		_, err := aiagent.BuildChatAgent(ctx)
+		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		_, err := aiagent.BuildChatAgent(checkCtx)
+		cancel()
 		if err != nil {
 			status["eino_agent_status"] = "error"
 			status["eino_agent_error"] = err.Error()
@@ -387,13 +389,15 @@ func EinoHealthCheck(ctx context.Context, c *app.RequestContext) {
 		status["eino_backend"] = "ollama (OpenAI-compatible)"
 	}
 
-	// Check Ollama
+	// Check Ollama with timeout protection
+	ollamaCtx, ollamaCancel := context.WithTimeout(ctx, 5*time.Second)
 	client := getOllamaClient()
-	if client != nil && client.IsAvailable(ctx) {
+	if client != nil && client.IsAvailable(ollamaCtx) {
 		status["ollama_status"] = "connected"
 	} else {
 		status["ollama_status"] = "disconnected"
 	}
+	ollamaCancel()
 	status["ollama_model"] = config.ConfigInfo.Ollama.Model
 
 	// Determine active mode

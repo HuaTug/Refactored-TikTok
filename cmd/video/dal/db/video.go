@@ -41,7 +41,28 @@ func Feedlist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.
 
 func GetAllFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, error) {
 	var video []*base.Video
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Find(&video).Error; err != nil {
+
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 10 // 默认每次拉取10条
+	}
+	if pageSize > 50 {
+		pageSize = 50 // 最多50条，防止一次拉太多
+	}
+
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	offset := int((pageNum - 1) * pageSize)
+
+	query := DB.WithContext(ctx).Model(&base.Video{}).
+		Order("created_at DESC").
+		Limit(int(pageSize)).
+		Offset(offset)
+
+	if err := query.Find(&video).Error; err != nil {
 		return video, errors.Wrapf(err, "GetAllFeedList failed,err:%v", err)
 	}
 	return video, nil
@@ -764,6 +785,22 @@ func UpdateFavoriteVideoCount(ctx context.Context, favoriteId int64, delta int) 
 		return errors.WithMessage(err, "Failed to update favorite video count")
 	}
 	return nil
+}
+
+// GetFirstVideoCoverByFavoriteId 获取收藏夹中第一个视频的封面URL
+func GetFirstVideoCoverByFavoriteId(ctx context.Context, favoriteId int64) (string, error) {
+	var coverUrl string
+	err := DB.WithContext(ctx).
+		Table("favorites_videos fv").
+		Joins("JOIN videos v ON fv.video_id = v.video_id").
+		Where("fv.favorite_id = ? AND v.deleted_at IS NULL", favoriteId).
+		Order("fv.created_at ASC").
+		Limit(1).
+		Pluck("v.cover_url", &coverUrl).Error
+	if err != nil {
+		return "", err
+	}
+	return coverUrl, nil
 }
 
 // SyncVideoFavoritesCount 同步视频的收藏数量（根据实际收藏记录计算）

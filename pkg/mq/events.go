@@ -45,10 +45,22 @@ const (
 	// 交换机名称
 	LikeEventExchange         = "like_events"
 	CommentEventExchange      = "comment_events"
-	NotificationEventExchange = "notification_events"
+	NotificationEventExchange = "notification_events_topic" // Topic 类型 Exchange
 
 	// 队列名称
 	LikeEventQueue         = "like_event_queue"
 	CommentEventQueue      = "comment_event_queue"
-	NotificationEventQueue = "notification_event_queue"
+	NotificationEventQueue = "notification_event_queue" // 通配队列，接收所有通知
+
+	// 通知类型队列 —— 按类型独立消费
+	NotificationVideoLikeQueue   = "notification_queue.video_like"
+	NotificationCommentQueue     = "notification_queue.comment"
+	NotificationCommentLikeQueue = "notification_queue.comment_like"
+	NotificationCommentReplyQueue = "notification_queue.comment_reply"
+	NotificationFollowQueue      = "notification_queue.follow"
+	NotificationMentionQueue     = "notification_queue.mention"
+	NotificationSystemQueue      = "notification_queue.system"
+
+	// Routing Key 前缀
+	NotificationRoutingKeyPrefix = "notification."
 )

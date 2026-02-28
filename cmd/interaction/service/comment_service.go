@@ -19,9 +19,11 @@ import (
 	"HuaTug.com/kitex_gen/users"
 	"HuaTug.com/kitex_gen/videos"
 	"HuaTug.com/pkg/errno"
+	"HuaTug.com/pkg/mq"
 	"HuaTug.com/pkg/utils"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/google/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -123,6 +125,9 @@ func (s *EnhancedCommentService) CreateComment(ctx context.Context, req *interac
 		return errors.WithMessage(err, "Failed to create comment")
 	}
 
+	// 接入推荐系统：更新视频互动分和用户画像
+	OnVideoCommentedFromInteraction(ctx, videoID, userID)
+
 	go s.enhancedPostCommentActions(ctx, userID, videoID, commentID, req.Content)
 
 	hlog.CtxInfof(ctx, "Comment created: user_id=%d, video_id=%d, comment_id=%d", userID, videoID, commentID)
@@ -144,9 +149,11 @@ func (s *EnhancedCommentService) resolveHierarchy(ctx context.Context, req *inte
 	}
 
 	replyToCommentID = req.CommentId
-	if req.Mode != 0 && parentCommentID != 0 {
+	if parentCommentID > 0 {
+		// 被回复的评论本身是子评论，使用它的 parent_id 保持两级结构
 		parentID = parentCommentID
 	} else {
+		// 被回复的评论是根评论（parent_id=-1），新评论的 parent_id 指向该根评论
 		parentID = req.CommentId
 	}
 
@@ -182,6 +189,8 @@ func (s *EnhancedCommentService) enhancedPostCommentActions(ctx context.Context,
 			hlog.CtxWarnf(ctx, "Failed to update video comment count: %v", err)
 		}
 	}
+	// 发送评论通知给视频作者
+	go s.sendCommentNotification(ctx, userID, videoID, commentID, content)
 }
 
 // --- Content Validation & Filtering ---
@@ -506,6 +515,20 @@ func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int
 		deletedAtStr = commentRes.DeletedAt.Format("2006-01-02 15:04:05")
 	}
 
+	// Fetch reply-to user info if this is a reply
+	var replyToUserId *int64
+	var replyToUserName *string
+	if commentRes.ReplyToCommentId != 0 {
+		replyComment, replyErr := db.GetCommentInfo(ctx, commentRes.ReplyToCommentId)
+		if replyErr == nil && replyComment != nil {
+			replyToUserId = &replyComment.UserId
+			replyUserResp, ruErr := client_rpc.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: replyComment.UserId})
+			if ruErr == nil && replyUserResp != nil && replyUserResp.User != nil {
+				replyToUserName = &replyUserResp.User.UserName
+			}
+		}
+	}
+
 	return &base.Comment{
 		CommentId:        commentRes.CommentId,
 		VideoId:          commentRes.VideoId,
@@ -520,6 +543,8 @@ func (s *EnhancedCommentService) buildComment(ctx context.Context, commentID int
 		ReplyToCommentId: commentRes.ReplyToCommentId,
 		UserName:         &userName,
 		AvatarUrl:        &avatarURL,
+		ReplyToUserId:    replyToUserId,
+		ReplyToUserName:  replyToUserName,
 	}, nil
 }
 
@@ -573,4 +598,69 @@ func (s *EnhancedCommentService) DeleteComment(ctx context.Context, req *interac
 
 	hlog.CtxInfof(ctx, "Comment deleted: comment_id=%d, by_user=%d", req.CommentId, req.FromUserId)
 	return nil
+}
+
+// sendCommentNotification 通过 RabbitMQ 发布评论通知事件
+func (s *EnhancedCommentService) sendCommentNotification(ctx context.Context, userID, videoID, commentID int64, content string) {
+	// 获取视频信息以确定接收者（视频作者）
+	resp, err := client_rpc.VideoInfo(ctx, &videos.VideoInfoRequestV2{VideoId: videoID})
+	if err != nil || resp == nil || resp.Items == nil {
+		hlog.CtxWarnf(ctx, "Failed to get video info for comment notification: video_id=%d, err=%v", videoID, err)
+		return
+	}
+
+	authorID := resp.Items.UserId
+	if authorID <= 0 {
+		return
+	}
+	// TODO: 测试完成后恢复自我过滤: authorID == userID
+
+	mqManager := GetInteractionMQManager()
+	if mqManager == nil {
+		hlog.CtxWarnf(ctx, "MQ manager not initialized, skip comment notification")
+		return
+	}
+
+	// 截断内容
+	displayContent := truncateContentForNotification(content, 50)
+
+	// 在生产端预填充视频和用户信息到 Extra
+	extra := map[string]interface{}{
+		"video_id":    videoID,
+		"comment_id":  commentID,
+		"video_cover": resp.Items.CoverUrl,
+		"title":       resp.Items.Title,
+	}
+
+	// 获取评论者的用户信息
+	userResp, uErr := client_rpc.GetUserInfo(ctx, &users.GetUserInfoRequest{UserId: userID})
+	if uErr == nil && userResp != nil && userResp.User != nil {
+		extra["avatar_url"] = userResp.User.AvatarUrl
+		extra["from_user_name"] = userResp.User.UserName
+	}
+
+	event := &mq.NotificationEvent{
+		Type:       "comment",
+		ReceiverID: authorID,
+		SenderID:   userID,
+		Content:    "评论了你的视频: " + displayContent,
+		Extra:      extra,
+		Timestamp:  time.Now().Unix(),
+		EventID:    uuid.New().String(),
+
+		// 兼容字段
+		UserID:           authorID,
+		FromUserID:       userID,
+		NotificationType: "comment",
+		TargetID:         videoID,
+		VideoID:          videoID,
+		CommentID:        commentID,
+	}
+
+	if err := mqManager.PublishNotificationEvent(context.Background(), event); err != nil {
+		hlog.CtxErrorf(ctx, "Failed to publish comment notification event: %v", err)
+		return
+	}
+
+	hlog.CtxInfof(ctx, "Published comment notification event: user %d commented on video %d by user %d", userID, videoID, authorID)
 }

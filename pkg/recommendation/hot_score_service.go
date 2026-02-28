@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"HuaTug.com/cmd/video/dal/db"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/go-redis/redis/v8"
 	"gorm.io/gorm"
 )
 
@@ -143,6 +145,7 @@ func DefaultHotScoreConfig() *HotScoreConfig {
 type VideoHotScoreService struct {
 	config    *HotScoreConfig
 	db        *gorm.DB
+	redis     *redis.Client
 	stopCh    chan struct{}
 	isRunning bool
 	mu        sync.RWMutex
@@ -158,6 +161,11 @@ func NewVideoHotScoreService(config *HotScoreConfig, database *gorm.DB) *VideoHo
 		db:     database,
 		stopCh: make(chan struct{}),
 	}
+}
+
+// SetRedisClient sets the Redis client for syncing hot scores to Redis cache.
+func (s *VideoHotScoreService) SetRedisClient(redisClient *redis.Client) {
+	s.redis = redisClient
 }
 
 // Start launches the periodic hot score calculation.
@@ -243,6 +251,9 @@ func (s *VideoHotScoreService) CalculateAllHotScores(ctx context.Context) {
 			hlog.Errorf("[HotScoreService] Failed to update ranks for %s: %v", tw.Name, rankErr)
 		}
 	}
+
+	// Sync hot scores to Redis for recall layer
+	s.syncHotScoresToRedis(ctx)
 
 	hlog.Infof("[HotScoreService] Hot score calculation completed. Processed: %d videos, Time: %v",
 		totalProcessed, time.Since(startTime))
@@ -792,6 +803,133 @@ func (s *HotScoreScheduler) updateCategoryStats(ctx context.Context) {
 	}
 
 	hlog.Infof("[HotScoreScheduler] Updated %d category stats", len(stats))
+}
+
+// =====================================================
+// Redis Sync: Hot Scores & Video Timeline
+// =====================================================
+
+// syncHotScoresToRedis syncs MySQL hot scores to Redis sorted sets
+// so that the EnhancedHotRecall and EnhancedNewVideoRecall can read them.
+func (s *VideoHotScoreService) syncHotScoresToRedis(ctx context.Context) {
+	if s.redis == nil {
+		return
+	}
+
+	now := time.Now()
+	windowKeyMap := map[string]string{
+		"1h":  fmt.Sprintf("hot:video:hour:%s", now.Format("2006010215")),
+		"6h":  fmt.Sprintf("hot:video:day:%s", now.Format("20060102")),
+		"24h": "hot:video:week",
+	}
+
+	totalSynced := 0
+	for twName, redisKey := range windowKeyMap {
+		hotScores, err := db.GetHotVideosByWindow(ctx, twName, 200)
+		if err != nil {
+			hlog.Warnf("[HotScoreService/Redis] Failed to get hot scores for %s: %v", twName, err)
+			continue
+		}
+		if len(hotScores) == 0 {
+			continue
+		}
+
+		members := make([]*redis.Z, 0, len(hotScores))
+		for _, hs := range hotScores {
+			members = append(members, &redis.Z{
+				Score:  hs.HotScore,
+				Member: strconv.FormatInt(hs.VideoID, 10),
+			})
+		}
+
+		pipe := s.redis.Pipeline()
+		pipe.Del(ctx, redisKey)
+		pipe.ZAdd(ctx, redisKey, members...)
+		pipe.Expire(ctx, redisKey, 2*time.Hour)
+		if _, err := pipe.Exec(ctx); err != nil {
+			hlog.Warnf("[HotScoreService/Redis] Failed to sync %s to %s: %v", twName, redisKey, err)
+			continue
+		}
+		totalSynced += len(hotScores)
+	}
+
+	// Also sync to realtime key using global window
+	globalScores, err := db.GetHotVideosByWindow(ctx, "global", 100)
+	if err == nil && len(globalScores) > 0 {
+		realtimeKey := "hot:video:realtime"
+		members := make([]*redis.Z, 0, len(globalScores))
+		for _, hs := range globalScores {
+			members = append(members, &redis.Z{
+				Score:  hs.HotScore,
+				Member: strconv.FormatInt(hs.VideoID, 10),
+			})
+		}
+		pipe := s.redis.Pipeline()
+		pipe.Del(ctx, realtimeKey)
+		pipe.ZAdd(ctx, realtimeKey, members...)
+		pipe.Expire(ctx, realtimeKey, 2*time.Hour)
+		if _, pipeErr := pipe.Exec(ctx); pipeErr != nil {
+			hlog.Warnf("[HotScoreService/Redis] Failed to sync global to realtime: %v", pipeErr)
+		} else {
+			totalSynced += len(globalScores)
+		}
+	}
+
+	// Sync video timeline: all active videos sorted by created_at
+	s.syncVideoTimeline(ctx)
+
+	hlog.Infof("[HotScoreService/Redis] Synced %d hot scores to Redis", totalSynced)
+}
+
+// syncVideoTimeline syncs the videos:timeline sorted set in Redis
+// so that EnhancedNewVideoRecall can find new videos.
+func (s *VideoHotScoreService) syncVideoTimeline(ctx context.Context) {
+	if s.redis == nil {
+		return
+	}
+
+	type videoTime struct {
+		VideoID   int64
+		CreatedAt time.Time
+	}
+
+	var videos []videoTime
+	err := s.db.WithContext(ctx).
+		Table("videos").
+		Select("video_id, created_at").
+		Where("deleted_at IS NULL AND audit_status = 1 AND open = 1").
+		Where("created_at > ?", time.Now().Add(-7*24*time.Hour)).
+		Order("created_at DESC").
+		Limit(500).
+		Find(&videos).Error
+	if err != nil {
+		hlog.Warnf("[HotScoreService/Redis] Failed to query videos for timeline: %v", err)
+		return
+	}
+
+	if len(videos) == 0 {
+		return
+	}
+
+	timelineKey := "videos:timeline"
+	members := make([]*redis.Z, 0, len(videos))
+	for _, v := range videos {
+		members = append(members, &redis.Z{
+			Score:  float64(v.CreatedAt.Unix()),
+			Member: strconv.FormatInt(v.VideoID, 10),
+		})
+	}
+
+	pipe := s.redis.Pipeline()
+	pipe.Del(ctx, timelineKey)
+	pipe.ZAdd(ctx, timelineKey, members...)
+	pipe.Expire(ctx, timelineKey, 8*time.Hour)
+	if _, pipeErr := pipe.Exec(ctx); pipeErr != nil {
+		hlog.Warnf("[HotScoreService/Redis] Failed to sync video timeline: %v", pipeErr)
+		return
+	}
+
+	hlog.Infof("[HotScoreService/Redis] Synced %d videos to timeline", len(videos))
 }
 
 // min returns the smaller of two ints.

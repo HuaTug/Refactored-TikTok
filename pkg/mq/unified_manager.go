@@ -139,9 +139,14 @@ func (umm *MQManager) ConsumeCommentEvents(ctx context.Context, handler CommentE
 	return nil
 }
 
-// ConsumeNotificationEvents 消费通知事件
+// ConsumeNotificationEvents 消费所有通知事件（通配队列 notification.#）
 func (umm *MQManager) ConsumeNotificationEvents(ctx context.Context, handler NotificationEventHandler) error {
 	return umm.consumer.ConsumeNotificationEvents(ctx, handler)
+}
+
+// ConsumeNotificationEventsByType 按类型消费特定通知队列
+func (umm *MQManager) ConsumeNotificationEventsByType(ctx context.Context, notificationType string, handler NotificationEventHandler) error {
+	return umm.consumer.ConsumeNotificationEventsByType(ctx, notificationType, handler)
 }
 
 // ========== 接口定义 ==========

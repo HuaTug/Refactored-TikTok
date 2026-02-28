@@ -30,13 +30,31 @@ func CreateFavoriteVideo(ctx context.Context, c *app.RequestContext) {
 		UserId = utils.Transfer(v)
 	}
 
+	// 前端发送 title，后端字段为 name，做兼容处理
+	name := CreateFavorite.Name
+	if name == "" {
+		name = CreateFavorite.Title
+	}
+
+	// 前端发送 coverImage，后端字段为 cover_url，做兼容处理
+	coverUrl := CreateFavorite.CoverUrl
+	if coverUrl == "" {
+		coverUrl = CreateFavorite.CoverImage
+	}
+
+	// 前端 showStatus: "0"=公开, "1"=私密
+	privacy := "private"
+	if CreateFavorite.ShowStatus == "0" {
+		privacy = "public"
+	}
+
 	resp, err := rpc.CreateFavorite(ctx, &videos.CreateFavoriteRequestV2{
 		UserId:      UserId,
-		Name:        CreateFavorite.Name,
+		Name:        name,
 		Description: CreateFavorite.Description,
-		CoverUrl:    CreateFavorite.CoverUrl,
-		Privacy:     "private",  // 添加默认值
-		Tags:        []string{}, // 添加默认值
+		CoverUrl:    coverUrl,
+		Privacy:     privacy,
+		Tags:        []string{},
 	})
 	if err != nil {
 		SendResponse(c, errno.ConvertErr(err), nil)

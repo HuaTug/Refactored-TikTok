@@ -75,5 +75,9 @@ func (s *SharedVideoService) SharedVideo(req *videos.SharedVideoRequestV2) error
 	}
 	go redis.IncrVideoShareInfo(fmt.Sprint(req.VideoId))
 	go db.AddUserShareBehavior(s.ctx, share)
+
+	// 接入推荐系统：更新视频互动分
+	OnVideoShared(s.ctx, req.VideoId, req.UserId)
+
 	return nil
 }

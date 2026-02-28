@@ -98,8 +98,8 @@ func (c *Consumer) ConsumeLikeEvents(ctx context.Context, handler LikeEventHandl
 
 func (c *Consumer) ConsumeNotificationEvents(ctx context.Context, handler NotificationEventHandler) error {
 	msgs, err := c.channel.Consume(
-		NotificationEventQueue,
-		"",
+		NotificationEventQueue, // 通配队列 notification.# 接收所有类型
+		"notification_all_consumer",
 		false,
 		false,
 		false,
@@ -107,7 +107,7 @@ func (c *Consumer) ConsumeNotificationEvents(ctx context.Context, handler Notifi
 		nil,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to register a consumer: %w", err)
+		return fmt.Errorf("failed to register notification consumer: %w", err)
 	}
 
 	go func() {
@@ -136,11 +136,72 @@ func (c *Consumer) ConsumeNotificationEvents(ctx context.Context, handler Notifi
 				}
 
 				d.Ack(false)
-				hlog.CtxInfof(ctx, "Successfully processed notification event: %+v", event)
+				hlog.CtxInfof(ctx, "Processed notification event: type=%s, receiver=%d", event.Type, event.ReceiverID)
 			}
 		}
 	}()
 
+	return nil
+}
+
+// ConsumeNotificationEventsByType 按通知类型消费特定队列
+// notificationType: video_like, comment, comment_like, comment_reply, follow, mention, system
+func (c *Consumer) ConsumeNotificationEventsByType(ctx context.Context, notificationType string, handler NotificationEventHandler) error {
+	queueMap := map[string]string{
+		"video_like":    NotificationVideoLikeQueue,
+		"comment":       NotificationCommentQueue,
+		"comment_like":  NotificationCommentLikeQueue,
+		"comment_reply": NotificationCommentReplyQueue,
+		"follow":        NotificationFollowQueue,
+		"mention":       NotificationMentionQueue,
+		"system":        NotificationSystemQueue,
+	}
+
+	queue, ok := queueMap[notificationType]
+	if !ok {
+		return fmt.Errorf("unknown notification type: %s", notificationType)
+	}
+
+	msgs, err := c.channel.Consume(
+		queue,
+		"notification_"+notificationType+"_consumer",
+		false, false, false, false, nil,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to register consumer for %s: %w", queue, err)
+	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				hlog.Infof("Notification %s consumer stopped", notificationType)
+				return
+			case d, ok := <-msgs:
+				if !ok {
+					hlog.Warnf("Notification %s consumer channel closed", notificationType)
+					return
+				}
+
+				var event NotificationEvent
+				if err := json.Unmarshal(d.Body, &event); err != nil {
+					hlog.Errorf("Failed to unmarshal %s notification: %v", notificationType, err)
+					d.Nack(false, false)
+					continue
+				}
+
+				if err := handler.HandleNotificationEvent(ctx, &event); err != nil {
+					hlog.Errorf("Failed to handle %s notification: %v", notificationType, err)
+					d.Nack(false, true)
+					continue
+				}
+
+				d.Ack(false)
+			}
+		}
+	}()
+
+	hlog.Infof("Notification consumer started for type: %s (queue: %s)", notificationType, queue)
 	return nil
 }
 

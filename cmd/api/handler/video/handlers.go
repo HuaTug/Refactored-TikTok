@@ -83,10 +83,13 @@ type VideoStreamParam struct {
 }
 
 type CreateFavoriteParam struct {
-	UserId      int64  `form:"user_id"`
-	Name        string `form:"name"`
-	Description string `form:"description"`
-	CoverUrl    string `form:"cover_url"`
+	UserId      int64  `form:"user_id" json:"user_id"`
+	Name        string `form:"name" json:"name"`
+	Title       string `form:"title" json:"title"`
+	Description string `form:"description" json:"description"`
+	CoverUrl    string `form:"cover_url" json:"cover_url"`
+	CoverImage  string `form:"coverImage" json:"coverImage"`
+	ShowStatus  string `form:"showStatus" json:"showStatus"`
 }
 
 type GetFavoriteListParam struct {

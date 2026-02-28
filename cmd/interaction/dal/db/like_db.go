@@ -20,7 +20,7 @@ func GetVideoLikeByUserAndVideo(ctx context.Context, userID, videoID int64) (*mo
 	return &like, nil
 }
 
-// CreateVideoLike 创建视频点赞记录（事务：插入点赞记录 + 更新视频点赞计数）
+// CreateVideoLike 创建视频点赞记录（事务：插入点赞记录 + 更新视频点赞计数 + 更新作者获赞数）
 // 返回值：created 表示是否真正创建/恢复了记录（用于判断是否需要更新缓存）
 func CreateVideoLike(ctx context.Context, userID, videoID int64) (created bool, err error) {
 	err = DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -46,6 +46,10 @@ func CreateVideoLike(ctx context.Context, userID, videoID int64) (created bool, 
 					UpdateColumn("likes_count", gorm.Expr("likes_count + ?", 1)).Error; err != nil {
 					return err
 				}
+				// 更新视频作者的获赞总数
+				if err := updateAuthorLikeCountInTx(tx, videoID, 1); err != nil {
+					return err
+				}
 				created = true
 			}
 			// 已经存在且未删除，created = false
@@ -67,13 +71,17 @@ func CreateVideoLike(ctx context.Context, userID, videoID int64) (created bool, 
 			UpdateColumn("likes_count", gorm.Expr("likes_count + ?", 1)).Error; err != nil {
 			return err
 		}
+		// 更新视频作者的获赞总数
+		if err := updateAuthorLikeCountInTx(tx, videoID, 1); err != nil {
+			return err
+		}
 		created = true
 		return nil
 	})
 	return created, err
 }
 
-// DeleteVideoLike 删除视频点赞记录（事务：软删除点赞记录 + 更新视频点赞计数）
+// DeleteVideoLike 删除视频点赞记录（事务：软删除点赞记录 + 更新视频点赞计数 + 更新作者获赞数）
 // 返回值：deleted 表示是否真正删除了记录
 func DeleteVideoLike(ctx context.Context, userID, videoID int64) (deleted bool, err error) {
 	err = DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -99,10 +107,33 @@ func DeleteVideoLike(ctx context.Context, userID, videoID int64) (deleted bool, 
 			return err
 		}
 
+		// 更新视频作者的获赞总数
+		if err := updateAuthorLikeCountInTx(tx, videoID, -1); err != nil {
+			return err
+		}
+
 		deleted = true
 		return nil
 	})
 	return deleted, err
+}
+
+// updateAuthorLikeCountInTx 在事务中更新视频作者的获赞总数
+// delta: +1 表示点赞, -1 表示取消点赞
+func updateAuthorLikeCountInTx(tx *gorm.DB, videoID int64, delta int) error {
+	// 先查询视频的作者 ID（直接从同一数据库查询，无需 RPC）
+	var video model.Video
+	if err := tx.Select("user_id").Where("video_id = ?", videoID).First(&video).Error; err != nil {
+		return err
+	}
+	if video.UserId <= 0 {
+		return nil
+	}
+	// 原子更新作者的 like_count，确保不小于 0
+	return tx.Exec(
+		"UPDATE users SET like_count = GREATEST(0, CAST(like_count AS SIGNED) + ?) WHERE user_id = ?",
+		delta, video.UserId,
+	).Error
 }
 
 // GetUserVideoLikes 获取用户点赞的视频ID列表
@@ -194,6 +225,16 @@ func GetVideoLikeCount(ctx context.Context, videoID int64) (int64, error) {
 	err := DB.WithContext(ctx).
 		Model(&model.VideoLike{}).
 		Where("video_id = ? AND deleted_at IS NULL", videoID).
+		Count(&count).Error
+	return count, err
+}
+
+// GetCommentLikeCount 获取评论的点赞数（从 comment_likes 表查询）
+func GetCommentLikeCount(ctx context.Context, commentID int64) (int64, error) {
+	var count int64
+	err := DB.WithContext(ctx).
+		Model(&model.CommentLike{}).
+		Where("comment_id = ? AND deleted_at IS NULL", commentID).
 		Count(&count).Error
 	return count, err
 }

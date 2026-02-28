@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strconv"
+	"strings"
 
 	"HuaTug.com/pkg/infra/cache"
 	jwt "HuaTug.com/pkg/auth"
@@ -185,19 +186,85 @@ func markNotificationRead(userId int64, notificationId string) error {
 	conn := cache.GetRedis()
 	defer conn.Close()
 
-	// 更新未读计数
-	key := getUnreadCountKey(userId)
-	_, err := conn.Do("DECR", key)
-	return err
+	mainKey := getNotificationKey(userId, "all")
+
+	// 扫描主 key 中所有 members，找到匹配 notificationId 的条目
+	members, err := redis.Strings(conn.Do("ZRANGE", mainKey, 0, -1))
+	if err != nil {
+		return err
+	}
+
+	var matchedMember string
+	var matchedType string
+	for _, m := range members {
+		if strings.Contains(m, `"id":"`+notificationId+`"`) {
+			matchedMember = m
+			// 解析 type 字段以构造类型 key
+			var item NotificationItem
+			if err := json.Unmarshal([]byte(m), &item); err == nil {
+				matchedType = item.Type
+			}
+			break
+		}
+	}
+
+	if matchedMember == "" {
+		return nil // 未找到该通知，可能已被删除
+	}
+
+	// 从主 key 中删除
+	if _, err := conn.Do("ZREM", mainKey, matchedMember); err != nil {
+		hlog.Errorf("Failed to ZREM from main key: %v", err)
+	}
+
+	// 从类型 key 中删除
+	if matchedType != "" {
+		typeKey := getNotificationKey(userId, matchedType)
+		if _, err := conn.Do("ZREM", typeKey, matchedMember); err != nil {
+			hlog.Errorf("Failed to ZREM from type key %s: %v", typeKey, err)
+		}
+	}
+
+	// 减少未读计数，防止小于 0
+	unreadKey := getUnreadCountKey(userId)
+	newCount, err := redis.Int64(conn.Do("DECR", unreadKey))
+	if err == nil && newCount < 0 {
+		conn.Do("SET", unreadKey, 0)
+	}
+
+	return nil
 }
 
 func markAllNotificationsRead(userId int64) error {
 	conn := cache.GetRedis()
 	defer conn.Close()
 
+	// 删除主 key 和所有类型 key
+	mainKey := getNotificationKey(userId, "all")
+	typeKeys := []string{
+		getNotificationKey(userId, "video_like"),
+		getNotificationKey(userId, "comment"),
+		getNotificationKey(userId, "comment_like"),
+		getNotificationKey(userId, "comment_reply"),
+		getNotificationKey(userId, "follow"),
+		getNotificationKey(userId, "system"),
+	}
+
+	// 删除主 key
+	if _, err := conn.Do("DEL", mainKey); err != nil {
+		hlog.Errorf("Failed to DEL main notification key: %v", err)
+	}
+
+	// 删除所有类型 key
+	for _, tk := range typeKeys {
+		if _, err := conn.Do("DEL", tk); err != nil {
+			hlog.Errorf("Failed to DEL type key %s: %v", tk, err)
+		}
+	}
+
 	// 重置未读计数，设置7天过期
-	key := getUnreadCountKey(userId)
-	_, err := conn.Do("SETEX", key, 7*24*3600, 0)
+	unreadKey := getUnreadCountKey(userId)
+	_, err := conn.Do("SETEX", unreadKey, 7*24*3600, 0)
 	return err
 }
 

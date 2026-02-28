@@ -310,6 +310,15 @@ func (na *NotificationAggregator) saveAggregatedNotification(ctx context.Context
 		hlog.Warnf("Failed to add aggregated notification to user list: %v", err)
 	}
 
+	// 写入 type-specific sorted set（使原始类型筛选可用）
+	typeKey := userKey + ":" + originalType
+	if _, err := conn.Do("ZADD", typeKey, score, string(data)); err != nil {
+		hlog.Warnf("Failed to add aggregated notification to type list: %v", err)
+	}
+	if _, err := conn.Do("EXPIRE", typeKey, 30*24*3600); err != nil {
+		hlog.Warnf("Failed to set type key expire: %v", err)
+	}
+
 	hlog.CtxInfof(ctx, "Saved aggregated notification for user %d: %s", receiverID, notification.Content)
 	return nil
 }
@@ -355,6 +364,15 @@ func (na *NotificationAggregator) updateAggregatedNotification(ctx context.Conte
 	score := float64(time.Now().Unix())
 	if _, err := conn.Do("ZADD", userKey, score, string(newData)); err != nil {
 		hlog.Warnf("Failed to add updated aggregated notification: %v", err)
+	}
+
+	// 更新 type-specific sorted set
+	typeKey := userKey + ":" + event.Type
+	if _, err := conn.Do("ZREM", typeKey, data); err != nil {
+		hlog.Warnf("Failed to remove old aggregated notification from type key: %v", err)
+	}
+	if _, err := conn.Do("ZADD", typeKey, score, string(newData)); err != nil {
+		hlog.Warnf("Failed to add updated aggregated notification to type key: %v", err)
 	}
 
 	hlog.CtxInfof(ctx, "Updated aggregated notification for user %d: count=%d", event.ReceiverID, newCount)

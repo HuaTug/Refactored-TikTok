@@ -679,6 +679,25 @@ func (a *RecommendationAgent) executeColdStart(ctx context.Context, req *Recomme
 		}
 	}
 
+	// Redis 召回为空时，fallback 到 MySQL 热度查询
+	if len(candidateSet) == 0 && a.hotScoreService != nil {
+		hlog.Infof("[Agent/ColdStart] Redis recall empty, falling back to MySQL hot videos")
+		for _, tw := range []string{"24h", "global"} {
+			hotIDs, err := a.hotScoreService.GetTopHotVideos(ctx, tw, 50)
+			if err != nil {
+				hlog.Warnf("[Agent/ColdStart] MySQL hot recall (%s) failed: %v", tw, err)
+				continue
+			}
+			for _, vid := range hotIDs {
+				candidateSet[vid] = true
+			}
+			if len(candidateSet) > 0 {
+				hlog.Infof("[Agent/ColdStart] MySQL hot recall (%s) got %d videos", tw, len(candidateSet))
+				break
+			}
+		}
+	}
+
 	if len(candidateSet) == 0 {
 		return a.executeStandard(ctx, req)
 	}

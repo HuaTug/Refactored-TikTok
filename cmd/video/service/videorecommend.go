@@ -38,7 +38,24 @@ func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoR
 	hlog.Infof("[RecommendVideo] user_id=%d, count=%d, algorithm=%s", req.UserId, count, req.AlgorithmType)
 
 	// ========================================
-	// 策略1: DB 召回 + DeepCTR 精排（完整推荐链路）
+	// 优先路径: RecommendationAgent（智能决策层）
+	// Agent 会根据用户实时状态自动选择最优策略:
+	//   COLD_START / HOT_EXPLORE / TOPIC_DEEP_DIVE / STANDARD
+	// ========================================
+	agent := recommendation.GetRecommendationAgent()
+	if agent != nil {
+		result, err := service.recommendWithAgent(agent, req.UserId, count)
+		if err == nil && len(result.VideoList) > 0 {
+			hlog.Infof("[RecommendVideo] Got %d videos from Agent (algo=%s)", len(result.VideoList), result.AlgorithmUsed)
+			return result, nil
+		}
+		if err != nil {
+			hlog.Warnf("[RecommendVideo] Agent recommendation failed: %v, falling back to legacy pipeline", err)
+		}
+	}
+
+	// ========================================
+	// Legacy 策略1: DB 召回 + DeepCTR 精排（完整推荐链路）
 	// ========================================
 	result, err := service.recommendWithCTR(req.UserId, count)
 	if err == nil && len(result.VideoList) > 0 {
@@ -50,7 +67,7 @@ func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoR
 	}
 
 	// ========================================
-	// 策略2: 降级 - 基于 video_features 热度推荐
+	// Legacy 策略2: 降级 - 基于 video_features 热度推荐
 	// ========================================
 	videoList, err := service.recommendByFeatures(count)
 	if err == nil && len(videoList) > 0 {
@@ -65,7 +82,7 @@ func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoR
 	}
 
 	// ========================================
-	// 策略3: 最终降级 - 直接从 videos 表查询
+	// Legacy 策略3: 最终降级 - 直接从 videos 表查询
 	// ========================================
 	videoList, err = service.recommendFallback(req.UserId, count)
 	if err != nil {
@@ -77,6 +94,66 @@ func (service *RecommendVideoService) RecommendVideo(req *videos.RecommendVideoR
 	return &RecommendResult{
 		VideoList:     videoList,
 		AlgorithmUsed: "fallback",
+	}, nil
+}
+
+// recommendWithAgent delegates to the RecommendationAgent, which dynamically
+// selects among COLD_START / HOT_EXPLORE / TOPIC_DEEP_DIVE / STANDARD pipelines
+// based on the user's real-time behavioral state.
+func (service *RecommendVideoService) recommendWithAgent(agent *recommendation.RecommendationAgent, userId int64, count int) (*RecommendResult, error) {
+	agentReq := &recommendation.RecommendRequest{
+		UserID:    userId,
+		Limit:     count,
+		RequestID: fmt.Sprintf("rec_%d_%d", userId, time.Now().UnixMilli()),
+	}
+
+	resp, err := agent.Recommend(service.ctx, agentReq)
+	if err != nil {
+		return nil, fmt.Errorf("agent recommend failed: %w", err)
+	}
+	if resp == nil || len(resp.Videos) == 0 {
+		return nil, fmt.Errorf("agent returned empty result")
+	}
+
+	// Convert ScoredVideo → base.Video by fetching full info from DB
+	videoIDs := make([]int64, len(resp.Videos))
+	for i, v := range resp.Videos {
+		videoIDs[i] = v.VideoID
+	}
+
+	videoList, err := db.GetVideoByVideoId(service.ctx, videoIDs)
+	if err != nil {
+		return nil, fmt.Errorf("get video details failed: %w", err)
+	}
+
+	// Preserve Agent ranking order
+	videoMap := make(map[int64]*base.Video, len(videoList))
+	for _, v := range videoList {
+		videoMap[v.VideoId] = v
+	}
+	orderedList := make([]*base.Video, 0, len(videoIDs))
+	for _, vid := range videoIDs {
+		if v, ok := videoMap[vid]; ok {
+			orderedList = append(orderedList, v)
+		}
+	}
+
+	// Determine algorithm name from recall stats
+	algorithmUsed := "agent_standard"
+	if resp.RecallStats != nil {
+		if _, ok := resp.RecallStats["cold_start"]; ok {
+			algorithmUsed = "agent_cold_start"
+		} else if _, ok := resp.RecallStats["hot_explore"]; ok {
+			algorithmUsed = "agent_hot_explore"
+		} else if _, ok := resp.RecallStats["topic_deep_dive"]; ok {
+			algorithmUsed = "agent_topic_deep_dive"
+		}
+	}
+
+	return &RecommendResult{
+		VideoList:        orderedList,
+		AlgorithmUsed:    algorithmUsed,
+		RecommendationID: resp.RequestID,
 	}, nil
 }
 
@@ -278,6 +355,19 @@ func (service *RecommendVideoService) recommendFallback(userId int64, count int)
 		return nil, err
 	}
 
+	if len(videoList) == 0 {
+		// 极端降级：去掉用户过滤，但仍保持公开+已审核条件
+		err = db.DB.WithContext(service.ctx).Model(&base.Video{}).
+			Where("open = ? AND audit_status = ?", 1, 1).
+			Order("created_at DESC").
+			Limit(count).
+			Find(&videoList).Error
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 如果仍然没有（连公开视频都没有），返回所有最新视频
 	if len(videoList) == 0 {
 		err = db.DB.WithContext(service.ctx).Model(&base.Video{}).
 			Order("created_at DESC").

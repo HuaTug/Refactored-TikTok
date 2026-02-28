@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	"github.com/go-redis/redis/v8"
+	"gorm.io/gorm"
 )
 
 // =====================================================
@@ -37,7 +39,7 @@ func DefaultIntegratedConfig() *IntegratedRecommendConfig {
 		MaxRecallCandidates: 500,
 		EnableCTRRanking:    true,
 		CTRServiceURL:       "http://localhost:8000",
-		CTRTimeout:          200,
+		CTRTimeout:          2000,
 		CTRModel:            "deepfm",
 		DiversityLambda:     0.7,
 		ExplorationRatio:    0.1,
@@ -58,6 +60,8 @@ type IntegratedRecommendationEngine struct {
 func NewIntegratedRecommendationEngine(
 	config *IntegratedRecommendConfig,
 	recallEngine *RecommendationEngine,
+	redisClient *redis.Client,
+	database *gorm.DB,
 ) *IntegratedRecommendationEngine {
 	if config == nil {
 		config = DefaultIntegratedConfig()
@@ -79,7 +83,7 @@ func NewIntegratedRecommendationEngine(
 	}
 
 	// 初始化粗排模型
-	engine.rankingModel = NewEnhancedRankingModel(nil, nil)
+	engine.rankingModel = NewEnhancedRankingModel(redisClient, database)
 
 	return engine
 }
@@ -483,7 +487,7 @@ func QuickRecommend(
 	limit int,
 	recallEngine *RecommendationEngine,
 ) ([]ScoredVideo, error) {
-	engine := NewIntegratedRecommendationEngine(nil, recallEngine)
+	engine := NewIntegratedRecommendationEngine(nil, recallEngine, nil, nil)
 
 	resp, err := engine.Recommend(ctx, &RecommendRequest{
 		UserID: userID,

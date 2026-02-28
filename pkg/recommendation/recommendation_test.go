@@ -313,7 +313,7 @@ func TestNewIntegratedRecommendationEngine(t *testing.T) {
 		DiversityLambda:     0.5,
 	}
 
-	engine := NewIntegratedRecommendationEngine(config, nil)
+	engine := NewIntegratedRecommendationEngine(config, nil, nil, nil)
 
 	if engine == nil {
 		t.Fatal("Expected non-nil engine")
@@ -330,7 +330,7 @@ func TestNewIntegratedRecommendationEngine(t *testing.T) {
 }
 
 func TestIntegratedEngine_SortByScore(t *testing.T) {
-	engine := NewIntegratedRecommendationEngine(nil, nil)
+	engine := NewIntegratedRecommendationEngine(nil, nil, nil, nil)
 
 	videos := []ScoredVideo{
 		{VideoID: 1, Score: 0.3},
@@ -350,7 +350,7 @@ func TestIntegratedEngine_SortByScore(t *testing.T) {
 }
 
 func TestIntegratedEngine_ConvertToScoredVideos(t *testing.T) {
-	engine := NewIntegratedRecommendationEngine(nil, nil)
+	engine := NewIntegratedRecommendationEngine(nil, nil, nil, nil)
 
 	videoIDs := []int64{1, 2, 3, 4, 5}
 	scored := engine.convertToScoredVideos(videoIDs)
@@ -375,7 +375,7 @@ func TestIntegratedEngine_ConvertToScoredVideos(t *testing.T) {
 func TestIntegratedEngine_RerankMMR(t *testing.T) {
 	engine := NewIntegratedRecommendationEngine(&IntegratedRecommendConfig{
 		DiversityLambda: 0.7,
-	}, nil)
+	}, nil, nil, nil)
 
 	videos := []ScoredVideo{
 		{VideoID: 1, Score: 0.9, Features: map[string]float64{"cat": 1.0}},
@@ -397,7 +397,7 @@ func TestIntegratedEngine_RerankMMR(t *testing.T) {
 }
 
 func TestIntegratedEngine_CalculateSimilarity(t *testing.T) {
-	engine := NewIntegratedRecommendationEngine(nil, nil)
+	engine := NewIntegratedRecommendationEngine(nil, nil, nil, nil)
 
 	// Test identical vectors
 	v1 := ScoredVideo{Features: map[string]float64{"a": 1.0, "b": 0.0}}
@@ -455,7 +455,7 @@ func TestSqrt(t *testing.T) {
 func TestIntegratedEngine_Recommend_NoRecallEngine(t *testing.T) {
 	engine := NewIntegratedRecommendationEngine(&IntegratedRecommendConfig{
 		EnableCTRRanking: false,
-	}, nil)
+	}, nil, nil, nil)
 
 	ctx := context.Background()
 	resp, err := engine.Recommend(ctx, &RecommendRequest{
@@ -504,7 +504,7 @@ func BenchmarkSortByScore(b *testing.B) {
 }
 
 func BenchmarkMMRReranking(b *testing.B) {
-	engine := NewIntegratedRecommendationEngine(nil, nil)
+	engine := NewIntegratedRecommendationEngine(nil, nil, nil, nil)
 
 	videos := make([]ScoredVideo, 50)
 	for i := 0; i < 50; i++ {
@@ -527,7 +527,7 @@ func BenchmarkMMRReranking(b *testing.B) {
 }
 
 func BenchmarkCalculateSimilarity(b *testing.B) {
-	engine := NewIntegratedRecommendationEngine(nil, nil)
+	engine := NewIntegratedRecommendationEngine(nil, nil, nil, nil)
 
 	v1 := ScoredVideo{Features: map[string]float64{"a": 0.5, "b": 0.3, "c": 0.8, "d": 0.1}}
 	v2 := ScoredVideo{Features: map[string]float64{"a": 0.4, "b": 0.6, "c": 0.2, "d": 0.9}}

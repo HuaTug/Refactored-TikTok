@@ -173,6 +173,9 @@ func (ltr *EnhancedRankingModel) getUserProfile(ctx context.Context, userID int6
 	}
 
 	// 从 Redis 获取用户画像
+	if ltr.redis == nil {
+		return profile
+	}
 	pipe := ltr.redis.Pipeline()
 	
 	interestsCmd := pipe.ZRevRangeWithScores(ctx, fmt.Sprintf("user:interests:%d", userID), 0, 19)
@@ -247,6 +250,13 @@ type VideoFeatureData struct {
 // batchGetVideoFeatures 批量获取视频特征
 func (ltr *EnhancedRankingModel) batchGetVideoFeatures(ctx context.Context, videoIDs []int64) map[int64]*VideoFeatureData {
 	result := make(map[int64]*VideoFeatureData)
+
+	if ltr.redis == nil {
+		for _, vid := range videoIDs {
+			result[vid] = ltr.getDefaultVideoFeature(vid)
+		}
+		return result
+	}
 
 	// 使用 Pipeline 批量获取
 	pipe := ltr.redis.Pipeline()
