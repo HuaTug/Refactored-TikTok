@@ -25,14 +25,6 @@ create table `roles`(
 ) engine = InnoDB  auto_increment=1 default  charset = utf8mb4;
 INSERT INTO `roles` (`role_id`,`role`) VALUES (1,'admin'),(2,'user'),(3,'guest');-- 完成了对角色的权限划分
 
--- Table structure of role_permission --
-drop table if exists `role_permissions`;
-create table `role_permissions`(
-    `permission_id` bigint not null auto_increment,
-    `role_id` bigint not null,
-    primary key (permission_id)
-)engine = InnoDB  auto_increment=1 default  charset = utf8mb4;
-
 -- Table structure of user --
 drop table if exists `users`;
 create table   `users`(
@@ -619,61 +611,6 @@ CREATE TABLE IF NOT EXISTS `user_relation_stats` LIKE relation_db_0.user_relatio
 -- ========================================
 USE TikTok;
 
--- 创建分片配置表
-CREATE TABLE IF NOT EXISTS `relation_shard_config` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `shard_key` varchar(50) NOT NULL COMMENT '分片键名称',
-    `shard_count` int NOT NULL COMMENT '分片数量',
-    `table_count_per_shard` int NOT NULL COMMENT '每个分片的表数量',
-    `shard_algorithm` varchar(50) NOT NULL DEFAULT 'hash' COMMENT '分片算法',
-    `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_shard_key` (`shard_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关系分片配置表';
-
--- 插入关系分片配置
-INSERT INTO `relation_shard_config` (`shard_key`, `shard_count`, `table_count_per_shard`, `shard_algorithm`) VALUES
-('relation', 4, 4, 'hash') ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
-
--- 创建分库连接配置表
-CREATE TABLE IF NOT EXISTS `relation_db_connections` (
-    `id` bigint NOT NULL AUTO_INCREMENT,
-    `db_index` int NOT NULL COMMENT '分库索引',
-    `db_name` varchar(100) NOT NULL COMMENT '数据库名称',
-    `host` varchar(255) NOT NULL DEFAULT 'localhost' COMMENT '数据库主机',
-    `port` int NOT NULL DEFAULT 3306 COMMENT '数据库端口',
-    `username` varchar(100) NOT NULL DEFAULT 'root' COMMENT '用户名',
-    `password` varchar(255) NOT NULL DEFAULT '' COMMENT '密码',
-    `max_connections` int NOT NULL DEFAULT 100 COMMENT '最大连接数',
-    `is_active` tinyint NOT NULL DEFAULT 1 COMMENT '是否激活',
-    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_db_index` (`db_index`),
-    KEY `idx_is_active` (`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关系分库连接配置表';
-
--- 插入分库连接配置
-INSERT INTO `relation_db_connections` (`db_index`, `db_name`, `host`, `port`, `username`, `password`, `max_connections`) VALUES
-(0, 'relation_db_0', 'localhost', 3306, 'root', '', 100),
-(1, 'relation_db_1', 'localhost', 3306, 'root', '', 100),
-(2, 'relation_db_2', 'localhost', 3306, 'root', '', 100),
-(3, 'relation_db_3', 'localhost', 3306, 'root', '', 100);
-
--- 创建全局关系统计表
-CREATE TABLE IF NOT EXISTS `global_relation_stats` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `total_follows` bigint NOT NULL DEFAULT 0 COMMENT '总关注数',
-    `total_mutual_follows` bigint NOT NULL DEFAULT 0 COMMENT '总互关数',
-    `active_users_today` bigint NOT NULL DEFAULT 0 COMMENT '今日活跃用户',
-    `stats_date` date NOT NULL COMMENT '统计日期',
-    `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_stats_date` (`stats_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='全局关系统计表';
-
 -- 创建全局用户关系索引表
 CREATE TABLE IF NOT EXISTS `global_user_relation_index` (
     `id` bigint NOT NULL AUTO_INCREMENT,
@@ -803,68 +740,6 @@ CREATE TABLE IF NOT EXISTS `video_access_log` (
     INDEX `idx_created_at` (`created_at`),
     INDEX `idx_device_type` (`device_type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='视频访问日志表';
-
--- 热门视频缓存表
-CREATE TABLE IF NOT EXISTS `hot_video_cache` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `video_id` BIGINT NOT NULL UNIQUE COMMENT '视频ID',
-    `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `hot_score` DECIMAL(10,2) DEFAULT 0.00 COMMENT '热度分数',
-    `cache_bucket` VARCHAR(128) DEFAULT 'tiktok-cache-hot' COMMENT '缓存桶名称',
-    `cache_path` VARCHAR(512) COMMENT '缓存路径',
-    `cache_status` ENUM('pending', 'cached', 'expired', 'failed') DEFAULT 'pending' COMMENT '缓存状态',
-    `expire_at` TIMESTAMP NULL COMMENT '过期时间',
-
-    -- 统计数据（用于计算热度）
-    `view_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内观看次数',
-    `like_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内点赞次数',
-    `share_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内分享次数',
-    `comment_count_24h` BIGINT DEFAULT 0 COMMENT '24小时内评论次数',
-
-    -- 时间戳
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-
-    -- 索引
-    INDEX `idx_hot_score` (`hot_score` DESC),
-    INDEX `idx_cache_status` (`cache_status`),
-    INDEX `idx_expire_at` (`expire_at`),
-    INDEX `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='热门视频缓存表';
-
--- 存储桶管理表
-CREATE TABLE IF NOT EXISTS `storage_bucket_config` (
-    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `bucket_name` VARCHAR(128) NOT NULL UNIQUE COMMENT '存储桶名称',
-    `bucket_type` ENUM('user_content', 'system_assets', 'cache_hot', 'cache_warm', 'cache_cold', 'analytics') NOT NULL COMMENT '存储桶类型',
-    `region` VARCHAR(32) DEFAULT 'us-east-1' COMMENT '存储区域',
-    `endpoint` VARCHAR(256) COMMENT '存储端点',
-    `access_policy` JSON COMMENT '访问策略配置',
-    `lifecycle_config` JSON COMMENT '生命周期配置',
-    `hot_retention_days` INT DEFAULT 30 COMMENT '热数据保留天数',
-    `warm_retention_days` INT DEFAULT 90 COMMENT '温数据保留天数',
-    `cold_retention_days` INT DEFAULT 365 COMMENT '冷数据保留天数',
-    `archive_after_days` INT DEFAULT 1095 COMMENT '归档天数',
-    `is_active` BOOLEAN DEFAULT TRUE COMMENT '是否激活',
-
-    -- 时间戳
-    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-
-    -- 索引
-    INDEX `idx_bucket_type` (`bucket_type`),
-    INDEX `idx_is_active` (`is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='存储桶配置表';
-
--- 插入默认存储桶配置
-INSERT INTO `storage_bucket_config` (`bucket_name`, `bucket_type`, `lifecycle_config`, `hot_retention_days`, `warm_retention_days`, `cold_retention_days`, `archive_after_days`) VALUES
-('tiktok-user-content', 'user_content', '{"hot_days": 30, "warm_days": 90, "cold_days": 365, "archive_days": 1095}', 30, 90, 365, 1095),
-('tiktok-system-assets', 'system_assets', '{"hot_days": 365, "warm_days": 0, "cold_days": 0, "archive_days": 0}', 365, 0, 0, 0),
-('tiktok-cache-hot', 'cache_hot', '{"hot_days": 7, "warm_days": 0, "cold_days": 0, "archive_days": 0}', 7, 0, 0, 0),
-('tiktok-cache-warm', 'cache_warm', '{"hot_days": 0, "warm_days": 30, "cold_days": 0, "archive_days": 0}', 0, 30, 0, 0),
-('tiktok-cache-cold', 'cache_cold', '{"hot_days": 0, "warm_days": 0, "cold_days": 90, "archive_days": 0}', 0, 0, 90, 0),
-('tiktok-analytics', 'analytics', '{"hot_days": 30, "warm_days": 90, "cold_days": 365, "archive_days": 2190}', 30, 90, 365, 2190)
-ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS `sync_events` (
     `id` VARCHAR(36) NOT NULL PRIMARY KEY,
@@ -1026,31 +901,4 @@ CREATE TABLE IF NOT EXISTS `comment_likes` LIKE comment_db_0.comment_likes;
 -- ========================================
 USE TikTok;
 
--- 创建分片路由配置表
-CREATE TABLE IF NOT EXISTS `shard_config` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `shard_key` varchar(50) NOT NULL COMMENT '分片键名称',
-    `shard_count` int NOT NULL COMMENT '分片数量',
-    `table_count_per_shard` int NOT NULL COMMENT '每个分片的表数量',
-    `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_shard_key` (`shard_key`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分片配置表';
 
--- 插入评论分片配置
-INSERT INTO `shard_config` (`shard_key`, `shard_count`, `table_count_per_shard`) VALUES
-('comment', 4, 4) ON DUPLICATE KEY UPDATE `updated_at` = CURRENT_TIMESTAMP;
-
--- 创建全局评论统计表
-CREATE TABLE IF NOT EXISTS `global_comment_stats` (
-    `id` int NOT NULL AUTO_INCREMENT,
-    `total_comments` bigint NOT NULL DEFAULT 0 COMMENT '总评论数',
-    `total_likes` bigint NOT NULL DEFAULT 0 COMMENT '总点赞数',
-    `active_comments_today` bigint NOT NULL DEFAULT 0 COMMENT '今日活跃评论数',
-    `stats_date` date NOT NULL COMMENT '统计日期',
-    `created_at` timestamp DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_stats_date` (`stats_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='全局评论统计表';

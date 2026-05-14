@@ -1,31 +1,85 @@
-golangci-lint/
-package-lock.json
-*.pem
-interaction
-!interaction/
-api
-!api/
-user
-!user/
-video
-!video/
-message
-!message/
-relation
-!relation/
-*.mp4
-data/
-# 忽略config目录中的运行时数据文件，但保留源码和配置文件
-config/es/_state/
-config/es/snapshot_cache/
-config/es/node.lock
-config/es/nodes
-config/es/write.lock
-config/milvus/etcd/member/
-config/milvus/minio/.minio.sys/
-config/minio/data/.minio.sys/
-config/minio/data/tiktok-*/
-config/minio/data/picture/
-config/minio/data/video/
-logs/
+# ============================================================
+# Refactored-TikTok .gitignore
+# ============================================================
+
+# ---------- IDE / OS ----------
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---------- Go 构建产物 ----------
+# 5 个微服务编译生成的二进制（与目录同名）
+cmd/api/api
+cmd/user/user
+cmd/video/video
+cmd/relation/relation
+cmd/interaction/interaction
+cmd/analytics/analytics
+cmd/logservice/logservice
 output/
+*.exe
+*.test
+*.out
+
+# ---------- Python 临时文件 ----------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# ---------- 证书 / 密钥 ----------
+*.pem
+*.key
+*.crt
+*.p12
+
+# ---------- 本地敏感配置（必须脱敏后再用 example 提交）----------
+config/config.yml
+
+# ---------- 媒体文件（不应入库）----------
+*.mp4
+*.mp3
+*.flv
+*.m4a
+*.ts
+*.m3u8
+*.avi
+*.mov
+
+# ---------- 日志 ----------
+logs/
+*.log
+
+# ---------- 运行时数据：MySQL / Redis / 其他 ----------
+data/
+
+# ---------- 容器卷挂载的运行时数据（在 config/ 下）----------
+# 整个忽略：milvus / minio / cache 子目录全部是容器持久化数据
+config/milvus/
+config/minio/
+config/cache/
+
+# ElasticSearch：只保留 elasticsearch.yml 等真配置（如有），忽略 data/
+config/elasticsearch/data/
+
+# RabbitMQ：保留可能的 rabbitmq.conf，忽略 data/ 和 logs/
+config/rabbitmq/data/
+config/rabbitmq/logs/
+
+# Zookeeper：保留 zoo.cfg / log4j.properties / *.conf / *.sh，忽略持久化数据和日志
+config/zookeeper/data/
+config/zookeeper/logs/
+config/zookeeper/runtime_logs/
+
+# ---------- npm / 前端杂项（如果 web 前端被合并进来）----------
+node_modules/
+package-lock.json
+
+# ---------- 其它工具 ----------
+golangci-lint/

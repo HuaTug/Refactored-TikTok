@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"HuaTug.com/cmd/interaction/service"
@@ -26,10 +27,19 @@ var (
 )
 
 // getEnhancedLikeService returns a singleton EnhancedLikeService.
+// 支持通过环境变量 LIKE_ASYNC_SYNC 控制同步/异步模式:
+//   - LIKE_ASYNC_SYNC=true  (默认) → EDA异步模式: Redis-First + Async DB Sync
+//   - LIKE_ASYNC_SYNC=false         → 同步直写模式: 直接写入MySQL
 func getEnhancedLikeService(ctx context.Context) *service.EnhancedLikeService {
 	enhancedLikeOnce.Do(func() {
-		enhancedLikeSvc = service.NewEnhancedLikeService(ctx, service.DefaultEnhancedLikeConfig())
-		hlog.Info("EnhancedLikeService initialized (singleton)")
+		config := service.DefaultEnhancedLikeConfig()
+		// 通过环境变量控制同步/异步模式 (用于性能对比测试)
+		if v := os.Getenv("LIKE_ASYNC_SYNC"); v == "false" || v == "0" {
+			config.EnableAsyncSync = false
+			hlog.Info("EnhancedLikeService: SYNC mode (EnableAsyncSync=false) via env LIKE_ASYNC_SYNC")
+		}
+		enhancedLikeSvc = service.NewEnhancedLikeService(ctx, config)
+		hlog.Infof("EnhancedLikeService initialized (singleton, async=%v)", config.EnableAsyncSync)
 	})
 	return enhancedLikeSvc
 }

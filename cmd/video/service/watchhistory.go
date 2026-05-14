@@ -67,6 +67,11 @@ func (s *WatchHistoryService) AddWatchHistory(req *videos.AddWatchHistoryRequest
 	if err != nil {
 		return false, errors.WithMessage(err, "Failed to add watch history")
 	}
+	// 推荐桥接：把带 progress 的观看行为推送给 RealtimeStateService（异步、不阻塞）
+	if req.UserId > 0 {
+		OnVideoViewedWithProgress(s.ctx, req.VideoId, req.UserId,
+			float64(req.CompletionRate), int(req.WatchDuration))
+	}
 	return isNew, nil
 }
 

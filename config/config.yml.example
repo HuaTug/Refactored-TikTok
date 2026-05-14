@@ -1,0 +1,123 @@
+mysql:
+  addr: localhost:3307
+  username: root
+  password: <YOUR_MYSQL_PASSWORD>
+  charset: utf8mb4
+  database: TikTok
+
+# Comment sharding configuration
+comment_sharding:
+  database_count: 4
+  table_count: 4
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: "3600s"
+  master_dsns:
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/comment_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/comment_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/comment_db_2?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/comment_db_3?charset=utf8mb4&parseTime=True&loc=Local"
+  slave_dsns:
+    - []  # No slaves for db_0
+    - []  # No slaves for db_1
+    - []  # No slaves for db_2
+    - []  # No slaves for db_3
+
+follows_sharding:
+  database_count: 4
+  table_count: 4
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: "3600s"
+  master_dsns:
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/relation_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/relation_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/relation_db_2?charset=utf8mb4&parseTime=True&loc=Local"
+    - "root:<YOUR_MYSQL_PASSWORD>@tcp(localhost:3307)/relation_db_3?charset=utf8mb4&parseTime=True&loc=Local"
+  slave_dsns:
+    - []
+    - []
+    - []
+    - []
+
+redis:
+  addr: localhost:6379
+  password: <YOUR_REDIS_PASSWORD>
+
+rabbitmq:
+  addr: localhost:5672
+  username: guest
+  password: <YOUR_RABBITMQ_PASSWORD>
+
+kafka:
+  brokers:
+    - localhost:9092
+  version: "2.8.0"
+  producer_retries: 3
+  consumer_offset_init: newest
+
+elasticsearch:
+  addresses:
+    - http://localhost:9200
+  username: ""
+  password: ""
+  index_prefix: "tiktok"
+  max_retries: 3
+  enable_sniff: false
+
+etcd:
+  addr: localhost:2379
+
+# Ollama LLM configuration
+ollama:
+  enabled: true
+  base_url: http://localhost:11434
+  model: qwen3:8b
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 300
+  system_prompt: |
+    你是ZhiShi短视频平台内置的AI智能助手，名叫「小知」。你既是一个知识渊博、乐于助人的通用AI助手，也拥有平台专属能力。
+
+    你的核心能力：
+    1. 💬 通用对话 - 你可以和用户聊任何话题，包括闲聊、知识问答、生活建议、学习辅导、代码编程等，不限于平台相关内容
+    2. 🔍 平台视频搜索 - 当用户想找视频时，调用 search_videos 工具
+    3. 🔥 热门趋势查询 - 当用户想看热门内容时，调用 get_hot_topics 工具
+    4. 💡 创作建议 - 当用户需要创作指导时，调用 suggest_content_strategy 工具
+
+    回复规则：
+    - 默认使用中文回答，语气友好、自然、专业
+    - 当用户的问题明确涉及平台功能（搜索视频、热门、创作建议等）时，主动调用对应的工具
+    - 当用户聊的是日常话题、知识问答等非平台内容时，正常回答即可，不要强行关联到平台
+    - 回答尽量简洁实用，避免过于冗长
+    - 不要在每次回复的开头或结尾都提到自己是平台助手
+
+# Recommendation Agent configuration
+recommendation_agent:
+  enabled: true
+  consecutive_skip_threshold: 5
+  deep_interaction_threshold: 3
+  engagement_threshold: 0.15
+  cold_start_action_threshold: 10
+  max_non_standard_ratio: 0.3
+  hot_explore_timeout_ms: 300
+  topic_deep_dive_min_candidates: 5
+
+# Eino-based AI Agent configuration
+ai_agent:
+  enabled: true
+  chat_model:
+    api_key: "ollama"
+    base_url: ""
+    model: "qwen3:8b"
+  think_model:
+    api_key: "ollama"
+    base_url: ""
+    model: "qwen3:8b"
+  embedding:
+    api_key: "ollama"
+    model: "nomic-embed-text"
+    dimensions: 768
+  milvus:
+    address: "localhost:19530"
+  docs_dir: "./docs/knowledge/"

@@ -72,8 +72,21 @@ func GetAllFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]
 func Videolist(ctx context.Context, req *videos.VideoFeedListRequestV2) ([]*base.Video, int64, error) {
 	var video []*base.Video
 	var count int64
-	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id=?", req.UserId).Count(&count).Limit(int(req.PageSize)).
-		Offset(int((req.PageNum - 1) * req.PageSize)).Find(&video).Error; err != nil {
+
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	pageNum := req.PageNum
+	if pageNum <= 0 {
+		pageNum = 1
+	}
+
+	if err := DB.WithContext(ctx).Model(&base.Video{}).Where("user_id=?", req.UserId).Count(&count).
+		Order("created_at DESC").
+		Limit(int(pageSize)).
+		Offset(int((pageNum - 1) * pageSize)).
+		Find(&video).Error; err != nil {
 		logrus.Info(err)
 		return video, count, errors.Wrapf(err, "VideoList failed,err:%v", err)
 	}

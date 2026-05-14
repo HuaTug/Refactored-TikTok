@@ -77,6 +77,11 @@ func VideoFeedList(ctx context.Context, req *videos.VideoFeedListRequestV2) (res
 }
 
 func VideoSearch(ctx context.Context, req *videos.VideoSearchRequestV2) (resp *videos.VideoSearchResponseV2, err error) {
+	// 防御：video 服务自身也会 import 这个包（通过 pkg/recommendation），
+	// 此时 VideoClient 没被 InitRPC() 初始化，直接调用会 panic。
+	if VideoClient == nil {
+		return &videos.VideoSearchResponseV2{Base: &base.Status{}}, nil
+	}
 	resp, err = VideoClient.VideoSearchV2(ctx, req)
 	if resp == nil {
 		resp = &videos.VideoSearchResponseV2{}

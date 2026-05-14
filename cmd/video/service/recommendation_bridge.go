@@ -8,6 +8,7 @@ import (
 
 	"HuaTug.com/cmd/video/dal/db"
 	"HuaTug.com/internal/model"
+	"HuaTug.com/pkg/recommendation"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
 )
@@ -117,7 +118,14 @@ func OnVideoPublished(ctx context.Context, videoID, userID int64, title, descrip
 
 // OnVideoViewed 用户观看视频时调用。
 // 更新 video_features 的曝光/点击、user_profiles 的观看计数。
+// progressRatio: 完播率 [0,1]；0 表示无播放进度数据（VideoVisit 接口拿不到）
 func OnVideoViewed(ctx context.Context, videoID, userID int64) {
+	OnVideoViewedWithProgress(ctx, videoID, userID, 0, 0)
+}
+
+// OnVideoViewedWithProgress 带完播率/时长的观看回调
+func OnVideoViewedWithProgress(ctx context.Context, videoID, userID int64,
+	progressRatio float64, watchDurationSec int) {
 	go func() {
 		bgCtx := context.Background()
 
@@ -135,6 +143,8 @@ func OnVideoViewed(ctx context.Context, videoID, userID int64) {
 			if err := db.IncrementUserProfileCounter(bgCtx, userID, "total_view_count", 1); err != nil {
 				hlog.Warnf("[RecBridge] Failed to increment view count for user %d: %v", userID, err)
 			}
+			// 写入 Redis 实时行为流（让 Agent 立即感知）
+			recordRealtime(bgCtx, userID, videoID, "view", progressRatio, watchDurationSec)
 		}
 	}()
 }
@@ -149,6 +159,8 @@ func OnVideoLiked(ctx context.Context, videoID, userID int64) {
 			if err := db.IncrementUserProfileCounter(bgCtx, userID, "total_like_count", 1); err != nil {
 				hlog.Warnf("[RecBridge] Failed to increment like count for user %d: %v", userID, err)
 			}
+			// 写入 Redis 实时行为流（progress=0.95 让 Agent 视为 deep interaction）
+			recordRealtime(bgCtx, userID, videoID, "like", 0.95, 0)
 		}
 	}()
 }
@@ -163,6 +175,7 @@ func OnVideoCommented(ctx context.Context, videoID, userID int64) {
 			if err := db.IncrementUserProfileCounter(bgCtx, userID, "total_comment_count", 1); err != nil {
 				hlog.Warnf("[RecBridge] Failed to increment comment count for user %d: %v", userID, err)
 			}
+			recordRealtime(bgCtx, userID, videoID, "comment", 0.85, 0)
 		}
 	}()
 }
@@ -177,6 +190,7 @@ func OnVideoShared(ctx context.Context, videoID, userID int64) {
 			if err := db.IncrementUserProfileCounter(bgCtx, userID, "total_share_count", 1); err != nil {
 				hlog.Warnf("[RecBridge] Failed to increment share count for user %d: %v", userID, err)
 			}
+			recordRealtime(bgCtx, userID, videoID, "share", 0.95, 0)
 		}
 	}()
 }
@@ -186,7 +200,39 @@ func OnVideoFavorited(ctx context.Context, videoID, userID int64) {
 	go func() {
 		bgCtx := context.Background()
 		updateVideoInteractScore(bgCtx, videoID)
+		if userID > 0 {
+			recordRealtime(bgCtx, userID, videoID, "favorite", 0.95, 0)
+		}
 	}()
+}
+
+// recordRealtime 将一条用户行为推送给 RealtimeStateService（写 Redis ZSET）。
+// 复用 video 服务里已经初始化好的全局单例。
+func recordRealtime(ctx context.Context, userID, videoID int64,
+	actionType string, progress float64, durationSec int) {
+	rt := recommendation.GetRealtimeStateServiceInstance()
+	if rt == nil {
+		return
+	}
+	// 取分类/标签作为 topic 维度
+	var meta struct {
+		Category   string `gorm:"column:category"`
+		LabelNames string `gorm:"column:label_names"`
+	}
+	_ = db.DB.WithContext(ctx).Table("videos").
+		Select("category, label_names").
+		Where("video_id = ?", videoID).
+		Take(&meta).Error
+
+	rt.RecordRealtimeAction(ctx, userID, recommendation.UserAction{
+		VideoID:    videoID,
+		ActionType: actionType,
+		Timestamp:  time.Now().UnixMilli(),
+		Duration:   durationSec,
+		Progress:   progress,
+		Category:   meta.Category,
+		Tags:       meta.LabelNames,
+	})
 }
 
 // ============================================================

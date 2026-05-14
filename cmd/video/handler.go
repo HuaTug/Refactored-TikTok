@@ -52,12 +52,20 @@ func (s *VideoServiceImpl) VideoFeedListV2(ctx context.Context, req *videos.Vide
 		}
 		count = int64(len(video))
 	}
-	//todo
-	fmt.Print(count)
-
 	resp.Base.Code = consts.StatusOK
 	resp.Base.Msg = "Get VideoList Success"
 	resp.VideoList = video
+	resp.Total = count
+	// 判断是否还有更多数据
+	currentPage := req.PageNum
+	if currentPage <= 0 {
+		currentPage = 1
+	}
+	pageSize := req.PageSize
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	resp.HasMore = (currentPage * pageSize) < count
 	return resp, nil
 }
 

@@ -682,8 +682,7 @@ func (s *VideoUploadServiceV2) deleteUploadSession(uuid string, userID int64) er
 }
 
 func (s *VideoUploadServiceV2) verifyChunk(data []byte, expectedMD5 string) bool {
-	if expectedMD5 == "dummy-md5" || expectedMD5 == "" {
-		// 兼容测试场景，跳过MD5验证
+	if expectedMD5 == "" {
 		return true
 	}
 

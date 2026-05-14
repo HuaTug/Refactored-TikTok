@@ -178,6 +178,14 @@ func (e *IntegratedRecommendationEngine) Recommend(
 	}
 
 	// ========================================
+	// 3.5 个性化 Boost：对 CTR 分数应用基于用户实时偏好的乘子
+	//     这一步把"用户喜欢的分类/topic"信号显式注入到最终排序，
+	//     避免 DeepCTR 仅基于全局视频热度排序而忽略个性化。
+	// ========================================
+	fineRanked = e.applyPersonalizedBoost(ctx, req.UserID, fineRanked)
+	fineRanked = e.sortByScore(fineRanked)
+
+	// ========================================
 	// 4. 重排序 (多样性、探索)
 	// ========================================
 	rerankStartTime := time.Now()
@@ -272,6 +280,83 @@ func (e *IntegratedRecommendationEngine) coarseRanking(
 
 	return result, nil
 }
+
+// applyPersonalizedBoost 给 CTR 排序后的视频应用基于用户实时偏好的乘子。
+//
+// 规则：
+//   - 视频分类命中 user.focused_topic（实时焦点）   -> Score *= 1.5
+//   - 视频分类命中 user.category_prefer 强偏好(>0.2) -> Score *= 1.3
+//   - 视频分类命中 user.category_prefer 弱偏好(<=0.2)-> Score *= 1.1
+//   - 用户有偏好但视频分类不在偏好里                  -> Score *= 0.7
+//   - 用户没偏好数据（冷启动）                         -> Score 不变
+//
+// 这样能在不重新训练 DeepCTR 的情况下，让用户实时行为立刻影响排序。
+func (e *IntegratedRecommendationEngine) applyPersonalizedBoost(
+	ctx context.Context, userID int64, videos []ScoredVideo,
+) []ScoredVideo {
+	if len(videos) == 0 || userID <= 0 || e.rankingModel == nil {
+		return videos
+	}
+
+	// 复用粗排里的 getUserProfile 逻辑（读 Redis user:category_prefer / user:interests + FocusedTopic）
+	profile := e.rankingModel.getUserProfile(ctx, userID)
+	if profile == nil {
+		return videos
+	}
+	hasPref := len(profile.CategoryPrefer) > 0 || profile.FocusedTopic != ""
+	if !hasPref {
+		hlog.Infof("[PersonalizedBoost] user_id=%d no preference data, skip", userID)
+		return videos
+	}
+
+	// 一次性查所有 video category（粗排里已经 cache 过的话不会重复查 db）
+	videoIDs := make([]int64, len(videos))
+	for i, v := range videos {
+		videoIDs[i] = v.VideoID
+	}
+	videoCats := e.rankingModel.batchLoadVideoCategoriesFromDB(ctx, videoIDs)
+
+	// 统计四种 boost 命中数，方便定位"为什么没倾斜"
+	var (
+		cntFocused, cntStrong, cntWeak, cntPenalty int
+	)
+
+	for i := range videos {
+		cat := videoCats[videos[i].VideoID]
+		mult := 1.0
+		switch {
+		case cat == "":
+			// 未知分类不动
+		case profile.FocusedTopic != "" && cat == profile.FocusedTopic:
+			mult = 1.5
+			cntFocused++
+		default:
+			if w, ok := profile.CategoryPrefer[cat]; ok && w > 0.2 {
+				mult = 1.3
+				cntStrong++
+			} else if ok && w > 0 {
+				mult = 1.1
+				cntWeak++
+			} else {
+				mult = 0.7
+				cntPenalty++
+			}
+		}
+		if mult != 1.0 {
+			videos[i].Score *= mult
+			if videos[i].Features == nil {
+				videos[i].Features = map[string]float64{}
+			}
+			videos[i].Features["personalized_boost"] = mult
+		}
+	}
+
+	hlog.Infof("[PersonalizedBoost] user_id=%d focused_topic=%q candidates=%d boost: focused=%d strong=%d weak=%d penalty=%d",
+		userID, profile.FocusedTopic, len(videos),
+		cntFocused, cntStrong, cntWeak, cntPenalty)
+	return videos
+}
+
 
 // sortByScore 按分数排序
 func (e *IntegratedRecommendationEngine) sortByScore(videos []ScoredVideo) []ScoredVideo {

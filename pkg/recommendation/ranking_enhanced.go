@@ -76,10 +76,10 @@ func DefaultFeatureWeights() FeatureWeights {
 		VideoCommentRate:  0.04,
 		VideoShareRate:    0.05,
 
-		// 交叉特征（个性化关键）
+		// 交叉特征（个性化关键）—— 调高权重让用户偏好真正主导粗排
 		UserAuthorAffinity: 0.10,
-		UserCategoryMatch:  0.08,
-		UserTagOverlap:     0.06,
+		UserCategoryMatch:  0.30, // 之前 0.08 -> 0.30
+		UserTagOverlap:     0.12, // 之前 0.06 -> 0.12
 
 		// 时效性
 		VideoFreshness:   0.07,
@@ -214,6 +214,13 @@ func (ltr *EnhancedRankingModel) getUserProfile(ctx context.Context, userID int6
 		profile.InteractRate, _ = strconv.ParseFloat(stats["interact_rate"], 64)
 	}
 
+	// 拉取实时焦点 topic（如果 RealtimeStateService 已初始化）
+	if rt := GetRealtimeStateServiceInstance(); rt != nil {
+		if state, err := rt.GetUserRealtimeState(ctx, userID); err == nil && state != nil {
+			profile.FocusedTopic = state.FocusedTopic
+		}
+	}
+
 	return profile
 }
 
@@ -226,6 +233,8 @@ type UserProfileData struct {
 	ActiveLevel    float64
 	AvgWatchTime   float64
 	InteractRate   float64
+	// 实时焦点 topic（来自 RealtimeStateService），命中此 topic 的视频额外加分
+	FocusedTopic string
 }
 
 // VideoFeatureData 视频特征数据
@@ -497,10 +506,29 @@ func (ltr *EnhancedRankingModel) calculateCategoryMatch(userProfile *UserProfile
 	if category == "" {
 		return 0.2
 	}
-	if score, ok := userProfile.CategoryPrefer[category]; ok {
-		return math.Min(score/10.0, 1.0)
+	// userProfile.CategoryPrefer 来自 Redis user:category_prefer:{uid} 的 ZSET 分数。
+	// seed 脚本里写的是占比（[0,1] 范围内的小数）。
+	// 命中映射：0.6 + score * 0.4，最高 1.0；命中"焦点 topic"再 +0.2 加成（封顶 1.0）。
+	if score, ok := userProfile.CategoryPrefer[category]; ok && score > 0 {
+		base := 0.6 + score*0.4
+		if base > 1.0 {
+			base = 1.0
+		}
+		// 命中实时焦点 topic 再加成
+		if userProfile.FocusedTopic != "" && category == userProfile.FocusedTopic {
+			base += 0.2
+			if base > 1.0 {
+				base = 1.0
+			}
+		}
+		return base
 	}
-	return 0.2 // 默认匹配度
+	// 用户有偏好数据但视频不在偏好里 -> 显著低于命中
+	if len(userProfile.CategoryPrefer) > 0 {
+		return 0.15
+	}
+	// 完全没偏好（冷启动）
+	return 0.5
 }
 
 func (ltr *EnhancedRankingModel) calculateTagOverlap(userProfile *UserProfileData, videoTags []string) float64 {
@@ -632,4 +660,31 @@ func (tsr *ThompsonSamplingRanker) sampleBeta(alpha, beta float64) float64 {
 	// 简化的 Beta 分布期望值（实际应使用随机采样）
 	// E[Beta(α, β)] = α / (α + β)
 	return alpha / (alpha + beta)
+}
+
+// batchLoadVideoCategoriesFromDB 一次性从 MySQL 查一批 video_id 的 category。
+// 给 IntegratedRecommendationEngine.applyPersonalizedBoost 用。
+func (ltr *EnhancedRankingModel) batchLoadVideoCategoriesFromDB(
+	ctx context.Context, videoIDs []int64,
+) map[int64]string {
+	out := make(map[int64]string, len(videoIDs))
+	if ltr.db == nil || len(videoIDs) == 0 {
+		return out
+	}
+	type row struct {
+		VideoID  int64  `gorm:"column:video_id"`
+		Category string `gorm:"column:category"`
+	}
+	var rows []row
+	if err := ltr.db.WithContext(ctx).
+		Table("videos").
+		Select("video_id, category").
+		Where("video_id IN ?", videoIDs).
+		Find(&rows).Error; err != nil {
+		return out
+	}
+	for _, r := range rows {
+		out[r.VideoID] = r.Category
+	}
+	return out
 }

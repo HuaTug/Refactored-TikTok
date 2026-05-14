@@ -2,19 +2,125 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"sync"
 	"time"
 
 	"HuaTug.com/cmd/interaction/dal/db"
+	"HuaTug.com/config"
 
 	"github.com/cloudwego/hertz/pkg/common/hlog"
+	goredisv8 "github.com/go-redis/redis/v8"
 )
 
 // ============================================================
 // Interaction 服务的推荐桥接
 // 直接通过共享 DB 连接更新推荐相关表（video_features / user_profiles），
-// 避免跨微服务 RPC 回调的复杂性。
+// 同时把行为打到 Redis user:recent_actions:{uid} ZSET，
+// 让 RecommendationAgent 的实时画像层能实时感知。
 // 所有方法均为异步 + best-effort，不阻塞主流程。
 // ============================================================
+
+// realtimeRedisClient 单独连一个 v8 client 到 DB=0（recommendation 包用的 DB），
+// 不复用 interaction 的 DB=1 客户端。
+var (
+	realtimeRedisOnce sync.Once
+	realtimeRedis     *goredisv8.Client
+)
+
+// realtimeRecentActionKey: 必须和 pkg/recommendation/realtime_state.go 里的
+// realtimeActionKey() 保持一致：fmt.Sprintf("user:recent_actions:%d", userID)
+func realtimeRecentActionKey(userID int64) string {
+	return fmt.Sprintf("user:recent_actions:%d", userID)
+}
+
+// realtimeMaxActions: 必须 ≥ pkg/recommendation 里的 MaxActions（默认 50）。
+const realtimeMaxActions = 50
+const realtimeActionTTL = 7 * 24 * time.Hour
+
+// realtimeUserAction 与 pkg/recommendation.UserAction 的 JSON tag 完全对齐。
+type realtimeUserAction struct {
+	VideoID    int64   `json:"video_id"`
+	ActionType string  `json:"action_type"`
+	Timestamp  int64   `json:"timestamp"`
+	Duration   int     `json:"duration"`
+	Progress   float64 `json:"progress"`
+	Category   string  `json:"category"`
+	Tags       string  `json:"tags"`
+}
+
+// getRealtimeRedis 懒加载一个 v8 client，连接 DB=0。
+func getRealtimeRedis() *goredisv8.Client {
+	realtimeRedisOnce.Do(func() {
+		realtimeRedis = goredisv8.NewClient(&goredisv8.Options{
+			Addr:     config.ConfigInfo.Redis.Addr,
+			Password: config.ConfigInfo.Redis.Password,
+			DB:       0,
+		})
+		if _, err := realtimeRedis.Ping(context.Background()).Result(); err != nil {
+			hlog.Warnf("[RecBridge-Interaction] realtime redis ping failed: %v", err)
+		} else {
+			hlog.Info("[RecBridge-Interaction] realtime redis connected (DB=0)")
+		}
+	})
+	return realtimeRedis
+}
+
+// recordRealtimeAction 把一条行为写入 user:recent_actions:{uid} ZSET，
+// 并裁剪到最近 MaxActions 条。失败仅打日志，不阻塞调用方。
+func recordRealtimeAction(ctx context.Context, userID int64, action realtimeUserAction) {
+	rdb := getRealtimeRedis()
+	if rdb == nil {
+		return
+	}
+
+	data, err := json.Marshal(action)
+	if err != nil {
+		hlog.Warnf("[RecBridge-Interaction] marshal action failed: %v", err)
+		return
+	}
+
+	key := realtimeRecentActionKey(userID)
+	pipe := rdb.Pipeline()
+	pipe.ZAdd(ctx, key, &goredisv8.Z{
+		Score:  float64(action.Timestamp),
+		Member: string(data),
+	})
+	// 只保留最新 N 条
+	pipe.ZRemRangeByRank(ctx, key, 0, int64(-realtimeMaxActions-1))
+	pipe.Expire(ctx, key, realtimeActionTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		hlog.Warnf("[RecBridge-Interaction] zadd realtime action failed: %v", err)
+	}
+}
+
+// loadVideoMeta 给一条 action 补上 category/tags（标签等查不到时容忍空）。
+func loadVideoMeta(ctx context.Context, videoID int64) (category, tags string) {
+	var v struct {
+		Category   string `gorm:"column:category"`
+		LabelNames string `gorm:"column:label_names"`
+	}
+	if err := db.DB.WithContext(ctx).Table("videos").
+		Select("category, label_names").
+		Where("video_id = ?", videoID).
+		Take(&v).Error; err != nil {
+		return "", ""
+	}
+	return v.Category, v.LabelNames
+}
+
+// writeUserBehavior 落盘行为流水（训练数据来源之一）。
+func writeUserBehavior(ctx context.Context, userID, videoID int64, behaviorType string) {
+	now := time.Now()
+	if err := db.DB.WithContext(ctx).Exec(
+		"INSERT INTO user_behaviors (user_id, video_id, behavior_type, behavior_time, created_at) VALUES (?, ?, ?, ?, ?)",
+		userID, videoID, behaviorType, now, now,
+	).Error; err != nil {
+		hlog.Warnf("[RecBridge-Interaction] insert user_behaviors failed: user=%d video=%d type=%s err=%v",
+			userID, videoID, behaviorType, err)
+	}
+}
 
 // OnVideoLikedFromInteraction 点赞视频时更新推荐数据。
 func OnVideoLikedFromInteraction(ctx context.Context, videoID, userID int64) {
@@ -29,6 +135,20 @@ func OnVideoLikedFromInteraction(ctx context.Context, videoID, userID int64) {
 			).Error; err != nil {
 				hlog.Warnf("[RecBridge-Interaction] Failed to increment like count for user %d: %v", userID, err)
 			}
+
+			// --- 新增：同步写入 user_behaviors + Redis 实时行为流 ---
+			writeUserBehavior(bgCtx, userID, videoID, "like")
+			category, tags := loadVideoMeta(bgCtx, videoID)
+			recordRealtimeAction(bgCtx, userID, realtimeUserAction{
+				VideoID:    videoID,
+				ActionType: "like",
+				Timestamp:  time.Now().UnixMilli(),
+				// like 这种动作没有显式 progress/duration，用 0.95/0 让 Agent 视为 deep interaction
+				Progress: 0.95,
+				Duration: 0,
+				Category: category,
+				Tags:     tags,
+			})
 		}
 	}()
 }
@@ -46,6 +166,19 @@ func OnVideoCommentedFromInteraction(ctx context.Context, videoID, userID int64)
 			).Error; err != nil {
 				hlog.Warnf("[RecBridge-Interaction] Failed to increment comment count for user %d: %v", userID, err)
 			}
+
+			// --- 新增：同步写入 user_behaviors + Redis 实时行为流 ---
+			writeUserBehavior(bgCtx, userID, videoID, "comment")
+			category, tags := loadVideoMeta(bgCtx, videoID)
+			recordRealtimeAction(bgCtx, userID, realtimeUserAction{
+				VideoID:    videoID,
+				ActionType: "comment",
+				Timestamp:  time.Now().UnixMilli(),
+				Progress:   0.85,
+				Duration:   0,
+				Category:   category,
+				Tags:       tags,
+			})
 		}
 	}()
 }
