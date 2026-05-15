@@ -245,6 +245,10 @@ func (s *EnhancedLikeService) GetLikeList(ctx context.Context, req *interactions
 		}
 	}
 
+	// Deduplicate videoIDs to defend against any upstream duplication
+	// (e.g. legacy duplicate rows in like table or transient cache writes).
+	videoIDs = dedupInt64Preserve(videoIDs)
+
 	videosList := s.batchGetVideoInfo(ctx, videoIDs)
 
 	return &interactions.LikeListResponse{
@@ -433,25 +437,45 @@ func (s *EnhancedLikeService) trackUserBehavior(ctx context.Context, userID int6
 	}
 }
 
+// dedupInt64Preserve removes duplicate int64 values while preserving the
+// original order. Used to defend against duplicate IDs coming from caches or
+// legacy tables before issuing fan-out RPCs.
+func dedupInt64Preserve(ids []int64) []int64 {
+	if len(ids) <= 1 {
+		return ids
+	}
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
 // batchGetVideoInfo fetches video details concurrently with bounded parallelism.
+// The returned slice preserves the order of videoIDs so that callers can rely
+// on a stable ordering (e.g. like-time DESC for the "我的喜欢" list).
 func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []int64) []*base.Video {
 	if len(videoIDs) == 0 {
 		return []*base.Video{}
 	}
 
-	var (
-		wg        sync.WaitGroup
-		mu        sync.Mutex
-		videoList = make([]*base.Video, 0, len(videoIDs))
-	)
+	var wg sync.WaitGroup
+	// Pre-allocated slot per index so we can write concurrently without a
+	// mutex and still keep the original order.
+	slots := make([]*base.Video, len(videoIDs))
 
 	semaphore := make(chan struct{}, batchVideoSemaphore)
 
-	for _, vid := range videoIDs {
+	for idx, vid := range videoIDs {
 		wg.Add(1)
 		semaphore <- struct{}{}
 
-		go func(id int64) {
+		go func(i int, id int64) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
@@ -461,14 +485,20 @@ func (s *EnhancedLikeService) batchGetVideoInfo(ctx context.Context, videoIDs []
 				return
 			}
 			if resp != nil && resp.Items != nil {
-				mu.Lock()
-				videoList = append(videoList, resp.Items)
-				mu.Unlock()
+				slots[i] = resp.Items
 			}
-		}(vid)
+		}(idx, vid)
 	}
 
 	wg.Wait()
+
+	// Compact, dropping any nil entries from failed fetches while preserving order.
+	videoList := make([]*base.Video, 0, len(slots))
+	for _, v := range slots {
+		if v != nil {
+			videoList = append(videoList, v)
+		}
+	}
 	return videoList
 }
 
