@@ -37,9 +37,36 @@ import requests
 from pathlib import Path
 
 # ===================== 配置 =====================
+# 可通过环境变量覆盖，便于换机器部署：
+#   API_BASE        后端网关地址，默认 http://localhost:8888
+#   DEMO_VIDEO_DIR  本地视频根目录，默认查找 ./bili_videos/videos_hot 或同级 ../bilibili/output/videos_hot
 
-API_BASE = "http://localhost:8888"
-VIDEO_DIR = "/Users/zhihuaxu/Desktop/go/bilibili/output/videos_hot"
+API_BASE = os.environ.get("API_BASE", "http://localhost:8888")
+
+
+def _resolve_video_dir() -> str:
+    """按优先级解析视频目录：环境变量 > 项目内 bili_videos > 同级 bilibili/output。"""
+    env = os.environ.get("DEMO_VIDEO_DIR")
+    if env:
+        return env
+
+    here = Path(__file__).resolve().parent          # scripts/
+    project_root = here.parent                       # Refactored-TikTok/
+    repo_root = project_root.parent                  # go/  (Refactored-TikTok 的同级父目录)
+
+    candidates = [
+        project_root / "bili_videos" / "videos_hot",
+        project_root / "bili_videos",
+        repo_root / "bilibili" / "output" / "videos_hot",
+    ]
+    for p in candidates:
+        if p.exists() and p.is_dir():
+            return str(p)
+    # 兜底：返回最常见的相对路径，让后续报错给出明确提示
+    return str(project_root / "bili_videos" / "videos_hot")
+
+
+VIDEO_DIR = _resolve_video_dir()
 
 USERS = [
     {"username": "test_user_01", "email": "test_user_01@example.com", "sex": 1},
@@ -252,6 +279,16 @@ def upload_one(token: str, category: str, path: Path) -> bool:
 
 def main() -> int:
     print("=" * 64)
+    print("演示数据初始化 - 注册用户 + 上传 B 站视频")
+    print("=" * 64)
+    print(f"  API_BASE  = {API_BASE}")
+    print(f"  VIDEO_DIR = {VIDEO_DIR}")
+    if not Path(VIDEO_DIR).exists():
+        print(f"\n[fatal] 视频目录不存在: {VIDEO_DIR}")
+        print("        请通过环境变量 DEMO_VIDEO_DIR 指定，或把视频拷到默认路径。")
+        return 1
+
+    print("\n" + "=" * 64)
     print("Step 1/3  注册 5 个测试用户")
     print("=" * 64)
     for u in USERS:
